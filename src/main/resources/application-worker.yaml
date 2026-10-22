@@ -1,0 +1,4 @@
+spring:
+  main:
+    web-application-type: none
+# 后续可通过独立管理端口暴露探针；当前 worker 不启动业务HTTP。

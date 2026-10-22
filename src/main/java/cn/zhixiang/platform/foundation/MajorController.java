@@ -15,10 +15,10 @@ public class MajorController {
  private final MajorService service;private final IdempotentWrites writes;
  /** @param service 用例服务 @param writes 幂等事务协调器 */
  public MajorController(MajorService service,IdempotentWrites writes) {this.service=service;this.writes=writes;}
- /** @param page 页码 @param size 页大小 @param q 搜索 @param status 启停过滤 @param sort 白名单排序 @return 分页 */
+ /** @param page 页码 @param size 页大小 @param q 搜索 @param status 启停过滤 @param sort 白名单排序 @param schoolId 院校过滤 @return 分页 */
  @PreAuthorize("hasAuthority('majors:read')")
  @GetMapping
- public PageResult<MajorDtos.View> list(@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size,@RequestParam(required=false) String q,@RequestParam(required=false) String status,@RequestParam(required=false) String sort) {return service.list(new PageQuery(page,size,q,status,sort));}
+ public PageResult<MajorDtos.View> list(@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size,@RequestParam(required=false) String q,@RequestParam(required=false) String status,@RequestParam(required=false) String sort,@RequestParam(required=false) UUID schoolId) {return service.list(new PageQuery(page,size,q,status,sort),schoolId);}
  /** @param id 标识 @return 资源和 ETag */
  @PreAuthorize("hasAuthority('majors:read')")
  @GetMapping("/{id}")

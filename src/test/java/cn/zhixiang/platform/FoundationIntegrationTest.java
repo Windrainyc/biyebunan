@@ -27,6 +27,8 @@ class FoundationIntegrationTest {
  @Autowired JdbcTemplate db;
  @Autowired TokenDigester digester;
  @Autowired JsonMapper json;
+ @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
+ @Autowired cn.zhixiang.platform.operations.OutboxMapper outbox;
  private String adminToken,partnerToken;
  private UUID adminId;
  @DynamicPropertySource
@@ -53,7 +55,75 @@ class FoundationIntegrationTest {
  }
  void seed(UUID id,String platform,String token) {
   db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,?,?,?,?,?,'ENABLED')",id,platform,"隔离测试",UUID.randomUUID().toString(),"138****0000","not-a-login-password");
-  db.update("INSERT INTO auth_session(id,user_id,access_digest,refresh_digest,csrf_digest,auth_version,expires_at,refresh_expires_at) VALUES(?,?,?,?,?,1,now()+interval '15 minutes',now()+interval '7 days')",UUID.randomUUID(),id,digester.digest("access",token),UUID.randomUUID().toString(),UUID.randomUUID().toString());
+  db.update("INSERT INTO auth_session(id,user_id,access_digest,refresh_digest,csrf_digest,auth_version,expires_at,refresh_expires_at,family_id) VALUES(?,?,?,?,?,1,now()+interval '15 minutes',now()+interval '7 days',?)",UUID.randomUUID(),id,digester.digest("access",token),UUID.randomUUID().toString(),UUID.randomUUID().toString(),UUID.randomUUID());
+ }
+ @Test void administratorRequiresMfaAndRejectsStepReplay() throws Exception {
+  UUID id=UUID.randomUUID(),ref=UUID.randomUUID();String phone="13712345678",password="admin-test-only-938!";
+  String hash=org.springframework.security.crypto.factory.PasswordEncoderFactories.createDelegatingPasswordEncoder().encode(password);
+  db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status,mfa_secret_ref) VALUES(?,'admin',?,?,?,?,'ENABLED',?)",id,"测试管理员",digester.digest("phone",phone),"137****5678",hash,ref.toString());
+  var dir=java.nio.file.Path.of("secrets/mfa");java.nio.file.Files.createDirectories(dir);var file=dir.resolve(ref.toString());
+  // RFC标准测试种子只用于测试账户，结束后删除，不为真实用户配置固定种子。
+  java.nio.file.Files.writeString(file,"GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",java.nio.file.StandardOpenOption.CREATE_NEW);
+  java.nio.file.Files.setPosixFilePermissions(file,java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+  try {
+   mvc.perform(post("/api/v1/auth/admin/login").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"password",password))))
+    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("MFA_REQUIRED"));
+   String code=cn.zhixiang.platform.identity.TotpVerifier.generate("12345678901234567890".getBytes(java.nio.charset.StandardCharsets.US_ASCII),java.time.Instant.now().getEpochSecond()/30);
+   String input=json.writeValueAsString(Map.of("phone",phone,"password",password,"mfaCode",code));
+   mvc.perform(post("/api/v1/auth/admin/login").contentType("application/json").content(input)).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/auth/admin/login").contentType("application/json").content(input)).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("MFA_INVALID"));
+  } finally {java.nio.file.Files.deleteIfExists(file);}
+ }
+ @Test void concurrentDuplicateWriteHasOneEffect() throws Exception {
+  String key=UUID.randomUUID().toString();
+  String body=json.writeValueAsString(Map.of("name","并发院校","code",key,"region","浙江","status","ENABLED"));
+  var start=new java.util.concurrent.CountDownLatch(1);
+  try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+   java.util.concurrent.Callable<String> call=()->{start.await();return mvc.perform(post("/api/v1/admin/schools").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();};
+   var one=pool.submit(call);var two=pool.submit(call);start.countDown();
+   assertEquals(one.get(10,java.util.concurrent.TimeUnit.SECONDS),two.get(10,java.util.concurrent.TimeUnit.SECONDS));
+  }
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM school WHERE code=?",Integer.class,key));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM audit_event WHERE actor_id=?",Integer.class,adminId));
+ }
+ @Test void realBrokerConfirmMarksOutboxSent() throws Exception {
+  String name="zx.test."+UUID.randomUUID();
+  var admin=new org.springframework.amqp.rabbit.core.RabbitAdmin(rabbit.getConnectionFactory());
+  var exchange=new org.springframework.amqp.core.DirectExchange(name,false,true);
+  var queue=new org.springframework.amqp.core.Queue(name,false,false,false);
+  admin.declareExchange(exchange);admin.declareQueue(queue);
+  admin.declareBinding(org.springframework.amqp.core.BindingBuilder.bind(queue).to(exchange).with("test"));
+  UUID event=UUID.randomUUID();
+  try {
+   db.update("INSERT INTO outbox_event(id,aggregate_id,event_type,payload) VALUES(?,?,?,'{}')",event,UUID.randomUUID(),"test.probe");
+   new cn.zhixiang.platform.operations.OutboxPublisher(outbox,rabbit,json,name,"test").publish();
+   assertEquals("SENT",db.queryForObject("SELECT status FROM outbox_event WHERE id=?",String.class,event));
+   boolean found=false;org.springframework.amqp.core.Message message;
+   while((message=rabbit.receive(name,500))!=null) if(event.toString().equals(message.getMessageProperties().getMessageId()))found=true;
+   assertTrue(found,"真实队列必须收到目标事件");
+  } finally {admin.deleteQueue(name);admin.deleteExchange(name);}
+ }
+ @Test void loginRefreshReplayAndCsrf() throws Exception {
+  UUID student=UUID.randomUUID();String phone="13912345678",password="test-only-password-928!";
+  String hash=org.springframework.security.crypto.factory.PasswordEncoderFactories.createDelegatingPasswordEncoder().encode(password);
+  db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,'student',?,?,?,?,'ENABLED')",student,"测试学生",digester.digest("phone",phone),"139****5678",hash);
+  String input=json.writeValueAsString(Map.of("phone",phone,"password",password));
+  var login=mvc.perform(post("/api/v1/auth/student/login").contentType("application/json").content(input))
+   .andExpect(status().isOk()).andExpect(cookie().httpOnly("zx_student_refresh",true)).andExpect(cookie().secure("zx_student_refresh",true))
+   .andExpect(jsonPath("$.user.platform").value("student")).andReturn().getResponse();
+  var data=json.readTree(login.getContentAsString());String access=data.get("accessToken").asText(),csrf=data.get("csrfToken").asText();
+  var refresh=login.getCookie("zx_student_refresh");var csrfCookie=login.getCookie("zx_student_csrf");
+  mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+access)).andExpect(status().isOk());
+  mvc.perform(get("/api/v1/admin/schools").header("Authorization","Bearer "+access)).andExpect(status().isForbidden());
+  mvc.perform(post("/api/v1/auth/student/refresh").cookie(refresh,csrfCookie).header("X-CSRF-Token",csrf).header("Origin","https://evil.invalid")).andExpect(status().isForbidden());
+  var rotated=mvc.perform(post("/api/v1/auth/student/refresh").cookie(refresh,csrfCookie).header("X-CSRF-Token",csrf).header("Origin","https://student.invalid"))
+   .andExpect(status().isOk()).andReturn().getResponse();
+  String newAccess=json.readTree(rotated.getContentAsString()).get("accessToken").asText();
+  mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+access)).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/auth/student/refresh").cookie(refresh,csrfCookie).header("X-CSRF-Token",csrf).header("Origin","https://student.invalid"))
+   .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("TOKEN_REPLAY"));
+  // 撤销必须在抛业务异常前提交，验证新令牌也失效。
+  mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+newAccess)).andExpect(status().isUnauthorized());
  }
  @Test void authorizationAndImmediateRevocation() throws Exception {
   mvc.perform(get("/api/v1/admin/schools")).andExpect(status().isUnauthorized());

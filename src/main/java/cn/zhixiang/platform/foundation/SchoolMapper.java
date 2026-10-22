@@ -17,15 +17,15 @@ public interface SchoolMapper {
  /** @param id 标识 @return 加锁资源；串行化引用创建、状态更改和删除 */
  @Select("SELECT id,version,created_at,updated_at,name,code,region,status FROM school WHERE id=#{id} FOR UPDATE")
  SchoolDtos.View lock(UUID id);
- /** @param id 新标识 @param w 已验证写入值 */
- @Insert("INSERT INTO school(id,name,code,region,status) VALUES(#{id},#{w.name},#{w.code},#{w.region},#{w.status})")
- void insert(UUID id,@Param("w") SchoolDtos.Write w);
- /** @param id 标识 @param version 期望版本 @param w 新值 @return CAS 命中数 */
- @Update("UPDATE school SET name=#{w.name},code=#{w.code},region=#{w.region},status=#{w.status},version=version+1,updated_at=now() WHERE id=#{id} AND version=#{version}")
- int update(UUID id,long version,@Param("w") SchoolDtos.Write w);
- /** @param id 标识 @param version 期望版本 @param status 目标状态 @return CAS 命中数 */
- @Update("UPDATE school SET status=#{status},version=version+1,updated_at=now() WHERE id=#{id} AND version=#{version}")
- int status(UUID id,long version,SchoolDtos.Status status);
+ /** @param id 新标识 @param w 已验证写入值 @param actor 服务端操作者 */
+ @Insert("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(#{id},#{w.name},#{w.code},#{w.region},#{w.status},#{actor},#{actor})")
+ void insert(UUID id,@Param("w") SchoolDtos.Write w,UUID actor);
+ /** @param id 标识 @param version 期望版本 @param w 新值 @param actor 服务端操作者 @return CAS 命中数 */
+ @Update("UPDATE school SET name=#{w.name},code=#{w.code},region=#{w.region},status=#{w.status},version=version+1,updated_at=now(),updated_by=#{actor} WHERE id=#{id} AND version=#{version}")
+ int update(UUID id,long version,@Param("w") SchoolDtos.Write w,UUID actor);
+ /** @param id 标识 @param version 期望版本 @param status 目标状态 @param actor 服务端操作者 @return CAS 命中数 */
+ @Update("UPDATE school SET status=#{status},version=version+1,updated_at=now(),updated_by=#{actor} WHERE id=#{id} AND version=#{version}")
+ int status(UUID id,long version,SchoolDtos.Status status,UUID actor);
  /** @param id 标识 @param version 期望版本 @return 删除数量；引用由数据库外键保护 */
  @Delete("DELETE FROM school WHERE id=#{id} AND version=#{version}")
  int delete(UUID id,long version);

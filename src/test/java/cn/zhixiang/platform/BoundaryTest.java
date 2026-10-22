@@ -16,6 +16,12 @@ class BoundaryTest {
    assertThrows(BusinessException.class,()->Versions.parse(invalid));
   assertEquals(2,Versions.parse("\"2\""));
  }
+ @Test void totpMatchesRfc6238() {
+  byte[] key="12345678901234567890".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+  assertEquals("287082",cn.zhixiang.platform.identity.TotpVerifier.generate(key,59/30));
+  assertEquals("081804",cn.zhixiang.platform.identity.TotpVerifier.generate(key,1111111109L/30));
+  assertEquals("050471",cn.zhixiang.platform.identity.TotpVerifier.generate(key,1111111111L/30));
+ }
  @Test void separatesDigestDomains() {
   var d=new TokenDigester("test-key-only-012345678901234567890123456789");
   assertNotEquals(d.digest("access","same"),d.digest("refresh","same"));

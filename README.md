@@ -1,7 +1,7 @@
 # 知项平台后端
 
-企业级项目答疑平台后端，正在开发，尚未完成。Java 21、Spring Boot 4.0.8、MyBatis、PostgreSQL；复用独立目录中的 Redis/RabbitMQ/MinIO 本地环境。
+开发中的项目答疑平台，Java21、Spring Boot4.0.8、MyBatis、PostgreSQL，复用独立Redis/RabbitMQ/MinIO环境。当前实现院校专业管理、部分认证和outbox发布，尚未完成整个后端。
 
-已实现院校/专业管理纵向流程和身份授权基础，完整状态、验证结果、启动命令及后续任务见 [开发进度](docs/开发进度.md)。本轮隔离数据库测试通过，本地正式 schema 迁移尚待处理，不能视作可交付的完整后台。
+[开发进度与接续](docs/开发进度.md) 包含启动方式、真实测试结果、已实现范围和未完成项。最新10个测试通过；实际API及readiness健康UP；V1–V4迁移已执行。测试账户仅存在于隔离schema，正式环境没有默认账户。
 
-依赖依据：[Spring Boot 4.0 系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html)、[MyBatis Spring Boot 兼容范围](https://github.com/mybatis/spring-boot-starter)。后续上线前仍需依赖漏洞扫描和补丁版本复核。
+[Spring Boot系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html) · [MyBatis兼容范围](https://github.com/mybatis/spring-boot-starter)。镜像已锁运行时digest，生产上线前仍需完整依赖扫描、权限审查和集群演练。

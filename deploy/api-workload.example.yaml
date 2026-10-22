@@ -1,0 +1,52 @@
+# 未在真实集群部署验证；Secret 需由部署系统安全创建，不在Git中存放值。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zhixiang-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: zhixiang-api
+  template:
+    metadata:
+      labels:
+        app: zhixiang-api
+    spec:
+      terminationGracePeriodSeconds: 40
+      containers:
+        - name: api
+          image: registry.example.invalid/zhixiang/platform:RELEASE_TAG
+          args: ["--spring.profiles.active=api"]
+          envFrom:
+            - secretRef:
+                name: zhixiang-api-env
+          ports:
+            - containerPort: 18080
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /actuator/health/liveness, port: 18080}
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: 18080}
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: 18080}
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

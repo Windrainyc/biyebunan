@@ -55,6 +55,9 @@ management:
       show-details: never
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis,rabbit
 mybatis:
   type-handlers-package: cn.zhixiang.platform.shared
   configuration:
