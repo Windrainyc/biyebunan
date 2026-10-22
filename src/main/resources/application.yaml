@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: zhixiang-platform
+  profiles:
+    default: api
+  datasource:
+    url: ${ZX_DB_URL}
+    username: ${ZX_DB_USER}
+    password: ${ZX_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 1
+      connection-timeout: 5000
+  flyway:
+    enabled: false # 迁移由独立 migrate profile 执行，API 启动不修改数据库。
+    default-schema: app
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  data:
+    redis:
+      host: ${ZX_REDIS_HOST}
+      port: ${ZX_REDIS_PORT}
+      username: ${ZX_REDIS_USER}
+      password: ${ZX_REDIS_PASSWORD}
+      timeout: 2s
+  rabbitmq:
+    host: ${ZX_RABBIT_HOST}
+    port: ${ZX_RABBIT_PORT}
+    username: ${ZX_RABBIT_USER}
+    password: ${ZX_RABBIT_PASSWORD}
+    virtual-host: ${ZX_RABBIT_VHOST}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+server:
+  address: ${ZX_BIND_ADDRESS:127.0.0.1}
+  port: ${ZX_PORT:18080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+mybatis:
+  type-handlers-package: cn.zhixiang.platform.shared
+  configuration:
+    map-underscore-to-camel-case: true
+    arg-name-based-constructor-auto-mapping: true

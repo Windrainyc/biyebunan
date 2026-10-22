@@ -1,0 +1,2 @@
+<!-- 独立工程只使用 Maven Central，避免继承其他项目的私有仓库与凭证。 -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><mirrors><mirror><id>zhixiang-central</id><mirrorOf>*</mirrorOf><url>https://repo.maven.apache.org/maven2</url></mirror></mirrors></settings>
