@@ -24,6 +24,11 @@ public interface IdentityMapper {
  * @return 是否仍未撤销和未过期 */
     @Select("SELECT count(*) FROM auth_session WHERE id=#{sessionId} AND revoked_at IS NULL AND expires_at>now()")
     int activeSession(UUID sessionId);
+    /** 查询是否属于启用的内置超级管理员。
+     * @param id 账户标识
+     * @return 匹配数量 */
+    @Select("SELECT count(*) FROM user_role ur JOIN role r ON r.id=ur.role_id JOIN user_account u ON u.id=ur.user_id WHERE u.id=#{id} AND u.status='ENABLED' AND u.platform='admin' AND r.code='SUPER_ADMIN' AND r.built_in=true AND r.status='ENABLED'")
+    int superAdmin(UUID id);
     /**
  * @param id 账户 ID
  * @return 仅匹配账户平台且启用角色的权限码 */

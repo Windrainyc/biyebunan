@@ -32,7 +32,7 @@ public class VerificationService {
  * @param ip 直连来源IP
  * @return 供应商确认接收的挑战，不返回验证码 */
  public VerificationDtos.Challenge challenge(VerificationDtos.ChallengeRequest input,String ip) {
-  if(input.purpose()!=VerificationDtos.Purpose.REGISTER && input.purpose()!=VerificationDtos.Purpose.RESET_PASSWORD)
+  if(input.purpose()!=VerificationDtos.Purpose.REGISTER && input.purpose()!=VerificationDtos.Purpose.RESET_PASSWORD && input.purpose()!=VerificationDtos.Purpose.ACTIVATE)
    throw new BusinessException(503,"DEPENDENCY_UNAVAILABLE","该用途的验证流程尚未就绪");
   String platform=input.platform()==null?"student":input.platform();
   if(input.purpose()==VerificationDtos.Purpose.REGISTER && !platform.equals("student"))throw invalid();
@@ -59,7 +59,7 @@ public class VerificationService {
    var row=mapper.lock(input.challengeId());
    if(!valid(row,"REGISTER","student",phone,input.code()))return null;
    UUID id=UUID.randomUUID();mapper.student(id,input.displayName().trim(),phone,input.phone().substring(0,3)+"****"+input.phone().substring(7),hash,terms);
-   mapper.consume(row.id());writes.audit(UUID.randomUUID(),id,"REGISTERED","user",id);
+   mapper.studentRole(id);mapper.consume(row.id());writes.audit(UUID.randomUUID(),id,"REGISTERED","user",id);
    writes.event(UUID.randomUUID(),id,"user.REGISTERED","{\"id\":\""+id+"\"}");
    return auth.issueVerified(accounts.lockAccount(id));
   });
@@ -91,7 +91,7 @@ public class VerificationService {
  private void rateLimit(String action,String ip) {
   if(accounts.attempt(digester.digest(action+"-ip",ip))>40)throw new BusinessException(429,"RATE_LIMITED","验证尝试过多，请十分钟后重试");
  }
- private boolean valid(VerificationMapper.Row row,String purpose,String platform,String phone,String code) {
+ boolean valid(VerificationMapper.Row row,String purpose,String platform,String phone,String code) {
   if(row==null || !row.state().equals("READY") || row.attempts()>=5 || !row.expiresAt().isAfter(OffsetDateTime.now()) || !row.purpose().equals(purpose) || !row.platform().equals(platform) || !row.phoneDigest().equals(phone))return false;
   boolean matches=MessageDigest.isEqual(row.codeDigest().getBytes(java.nio.charset.StandardCharsets.US_ASCII),digester.digest("challenge:"+row.id(),code).getBytes(java.nio.charset.StandardCharsets.US_ASCII));
   if(!matches)mapper.failedAttempt(row.id());return matches;

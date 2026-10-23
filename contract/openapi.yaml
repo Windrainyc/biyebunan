@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.1-development
+  version: 1.0.2-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -1572,7 +1572,6 @@ paths:
         schema: &id012
           type: string
           enum:
-          - student
           - partner
           - admin
       - name: parentId
@@ -14583,6 +14582,111 @@ paths:
           description: ''
           maxLength: 128
       x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+  /api/v1/admin/users/{id}/invitations:
+    post:
+      operationId: post_admin_users_id_invitations
+      summary: 重发待激活账户邀请
+      tags:
+      - admin
+      x-permission: post_admin_users
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                type: string
+                description: ''
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInvitationRequest'
 components:
   securitySchemes:
     bearerAuth:
@@ -15301,6 +15405,7 @@ components:
       - displayName
       - platform
       - roleIds
+      description: 管理员分配待激活账户；学生通过手机证明自助注册。创建不会启用账户，随后签发邀请。
     OrderWrite:
       type: object
       additionalProperties: false
@@ -17587,3 +17692,13 @@ components:
       - page
       - size
       - total
+    AccountInvitationRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - expiresInHours
+      properties:
+        expiresInHours:
+          type: integer
+          minimum: 1
+          maximum: 72

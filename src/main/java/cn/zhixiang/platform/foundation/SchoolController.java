@@ -67,7 +67,7 @@ public class SchoolController {
  * @param key 幂等键
  * @param actor 权威身份
  * @return 删除成功 204 */
- @PreAuthorize("hasAuthority('schools:write')")
+ @PreAuthorize("hasAuthority('schools:delete')")
  @DeleteMapping("/{id}")
  public ResponseEntity<String> delete(@PathVariable UUID id,@RequestHeader("If-Match") String match,@RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal Actor actor) {long v=Versions.parse(match);return writes.execute(actor.id(),"DELETE","/api/v1/admin/schools/"+id,key,v,()->{service.delete(id,v,actor.id());return ResponseEntity.noContent().build();});}
 }

@@ -39,8 +39,12 @@ public interface VerificationMapper {
  * @param masked 脱敏号
  * @param hash 密码摘要
  * @param terms 条款版本 */
- @Insert("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status,terms_version,phone_verified_at) VALUES(#{id},'student',#{name},#{phone},#{masked},#{hash},'ENABLED',#{terms},now())")
+ @Insert("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status,terms_version,phone_verified_at,activated_at) VALUES(#{id},'student',#{name},#{phone},#{masked},#{hash},'ENABLED',#{terms},now(),now())")
  void student(UUID id,String name,String phone,String masked,String hash,String terms);
+ /** 为已注册学生赋予内置SELF角色。
+  * @param id 账户标识 */
+ @Insert("INSERT INTO user_role(user_id,role_id) VALUES(#{id},'00000000-0000-4000-8000-000000000002'::uuid)")
+ void studentRole(UUID id);
  /**
  * @param id 用户
  * @param hash 新密码；权限版本递增使全部旧会话失效 */

@@ -19,9 +19,10 @@ public class AccessFilter extends OncePerRequestFilter {
         if(header!=null && header.startsWith("Bearer ") && header.length()<1024) {
             Actor actor=mapper.authenticate(digester.digest("access",header.substring(7)));
             if(actor!=null) {
-                String path=req.getServletPath();
+                // URI去除容器contextPath；MockMvc及部分Servlet映射下servletPath可能为空。
+                String path=req.getRequestURI().substring(req.getContextPath().length());
                 for(String platform:java.util.List.of("admin","student","partner")) {
-                    if(path.startsWith("/api/v1/"+platform+"/") && !actor.platform().equals(platform)) {
+                    if((path.equals("/api/v1/"+platform)||path.startsWith("/api/v1/"+platform+"/")) && !actor.platform().equals(platform)) {
                         deny(res,403,"PLATFORM_FORBIDDEN");return;
                     }
                 }

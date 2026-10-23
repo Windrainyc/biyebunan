@@ -30,4 +30,13 @@ class BoundaryTest {
   var d=new TokenDigester("test-key-only-012345678901234567890123456789");
   assertNotEquals(d.digest("access","same"),d.digest("refresh","same"));
  }
+ @org.junit.jupiter.api.Test void secretEncryptionBindsPurposeAndUsesFreshNonce() {
+  var cipher=new cn.zhixiang.platform.shared.SecretCipher("isolated-test-master-0123456789-abcdefghij");
+  String one=cipher.encrypt("one","private-test-value"),two=cipher.encrypt("one","private-test-value");
+  org.junit.jupiter.api.Assertions.assertNotEquals(one,two);
+  org.junit.jupiter.api.Assertions.assertEquals("private-test-value",cipher.decrypt("one",one));
+  org.junit.jupiter.api.Assertions.assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->cipher.decrypt("two",one));
+  org.junit.jupiter.api.Assertions.assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->cipher.decrypt("one",one.substring(0,one.length()-4)+"AAAA"));
+ }
+
 }

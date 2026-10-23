@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FoundationIntegrationTest {
  static final String SCHEMA="zx_test_"+UUID.randomUUID().toString().replace("-","");
  @Autowired MockMvc mvc;
+ @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping handlers;
  @Autowired JdbcTemplate db;
  @Autowired TokenDigester digester;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.identity.SmsGateway sms;
@@ -52,7 +53,7 @@ class FoundationIntegrationTest {
   UUID role=UUID.randomUUID();
   db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'admin','ALL','ENABLED')",role,role.toString(),"测试管理员");
   db.update("INSERT INTO user_role VALUES(?,?)",adminId,role);
-  for(String p:List.of("schools:read","schools:write","majors:read","majors:write"))db.update("INSERT INTO role_permission VALUES(?,?)",role,p);
+  for(String p:List.of("schools:read","schools:write","schools:delete","majors:read","majors:write","majors:delete"))db.update("INSERT INTO role_permission VALUES(?,?)",role,p);
  }
  void seed(UUID id,String platform,String token) {
   db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,?,?,?,?,?,'ENABLED')",id,platform,"隔离测试",UUID.randomUUID().toString(),"138****0000","not-a-login-password");
@@ -201,4 +202,100 @@ class FoundationIntegrationTest {
   assertEquals(2,db.queryForObject("SELECT count(*) FROM audit_event WHERE actor_id=?",Integer.class,adminId));
   assertEquals(2,db.queryForObject("SELECT count(*) FROM outbox_event WHERE aggregate_id IN (SELECT resource_id FROM audit_event WHERE actor_id=?)",Integer.class,adminId));
  }
+ @Test void roleScopeBuiltInAndReferenceProtection() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");
+  db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   String code="TEST_"+UUID.randomUUID().toString().replace("-","").toUpperCase();
+   String body=json.writeValueAsString(Map.of("name","资料维护员","code",code,"platform","admin","dataScope","ALL","permissionCodes",List.of("schools:read"),"status","ENABLED"));
+   var created=mvc.perform(post("/api/v1/admin/roles").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn().getResponse();
+   UUID role=UUID.fromString(json.readTree(created.getContentAsString()).get("id").asText());
+   mvc.perform(post("/api/v1/admin/roles").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body.replace("ALL","SELF"))).andExpect(status().isUnprocessableEntity());
+   mvc.perform(delete("/api/v1/admin/roles/"+superRole).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isForbidden());
+   UUID target=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(target,"admin",token);db.update("INSERT INTO user_role VALUES(?,?)",target,role);
+   mvc.perform(delete("/api/v1/admin/roles/"+role).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+   mvc.perform(get("/api/v1/admin/schools").header("Authorization","Bearer "+token)).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/admin/roles/"+role+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/admin/schools").header("Authorization","Bearer "+token)).andExpect(status().isUnauthorized());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+ @Test void adminInvitationMfaActivationAndLastAdminProtection() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");
+  db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);db.update("UPDATE user_account SET activated_at=now() WHERE id=?",adminId);
+  UUID createdUser=null;
+  try {
+   mvc.perform(post("/api/v1/admin/users/"+adminId+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("LAST_ADMIN_REQUIRED"));
+   String phone="13512345678";
+   var created=mvc.perform(post("/api/v1/admin/users").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"displayName","新管理员","platform","admin","roleIds",List.of(superRole))))).andExpect(status().isCreated()).andReturn().getResponse();
+   createdUser=UUID.fromString(json.readTree(created.getContentAsString()).get("id").asText());
+   mvc.perform(post("/api/v1/admin/users/"+createdUser+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"ENABLED\"}")).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("ACTIVATION_REQUIRED"));
+   String path="/api/v1/admin/users/"+createdUser+"/invitations",key=UUID.randomUUID().toString();
+   var invited=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content("{\"expiresInHours\":1}")).andExpect(status().isCreated()).andExpect(header().string("Cache-Control","no-store")).andReturn().getResponse();
+   String link=json.readTree(invited.getContentAsString()).get("activationUrl").asText(),token=link.substring(link.indexOf("#token=")+7);
+   mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content("{\"expiresInHours\":1}")).andExpect(status().isCreated()).andExpect(content().json(invited.getContentAsString()));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM idempotency_record WHERE response_body LIKE ?",Integer.class,"%"+token+"%"));
+   var enrolled=mvc.perform(post("/api/v1/auth/admin/mfa-enrollments").contentType("application/json").content(json.writeValueAsString(Map.of("invitationToken",token)))).andExpect(status().isCreated()).andReturn().getResponse();
+   var enrollment=json.readTree(enrolled.getContentAsString());String uri=enrollment.get("otpAuthUri").asText(),secret=uri.split("secret=")[1].split("&")[0];
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM secret_material WHERE ciphertext LIKE ?",Integer.class,"%"+secret+"%"));
+   var out=new java.io.ByteArrayOutputStream();int buffer=0,bits=0;for(char c:secret.toCharArray()){buffer=(buffer<<5)|"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(c);bits+=5;if(bits>=8){bits-=8;out.write((buffer>>bits)&255);}}
+   String otp=cn.zhixiang.platform.identity.TotpVerifier.generate(out.toByteArray(),java.time.Instant.now().getEpochSecond()/30);
+   String activation=json.writeValueAsString(Map.of("invitationToken",token,"password","admin-test-password-2026","mfaEnrollmentId",enrollment.get("enrollmentId").asText(),"mfaCode",otp));
+   var result=mvc.perform(post("/api/v1/auth/admin/activate").contentType("application/json").content(activation)).andExpect(status().isCreated()).andExpect(jsonPath("$.platform").value("admin")).andReturn().getResponse();
+   String access=json.readTree(result.getContentAsString()).get("accessToken").asText();
+   mvc.perform(get("/api/v1/admin/users").header("Authorization","Bearer "+access)).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/auth/admin/activate").contentType("application/json").content(activation)).andExpect(status().isUnauthorized());
+   mvc.perform(post("/api/v1/auth/admin/login").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"password","admin-test-password-2026","mfaCode",otp)))).andExpect(status().isUnauthorized());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);if(createdUser!=null)db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",createdUser,superRole);}
+ }
+
+ @Test void partnerInvitationRequiresPhoneProofAndRejectsReplacedToken() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  var codes=new java.util.concurrent.ConcurrentHashMap<UUID,String>();
+  org.mockito.Mockito.doAnswer(call->{codes.put(call.getArgument(0),call.getArgument(2));return null;}).when(sms).send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+  try {
+   String phone="13412345678";
+   var invited=mvc.perform(post("/api/v1/admin/partner-invitations").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"displayName","受邀中介","expiresInHours",1)))).andExpect(status().isCreated()).andReturn().getResponse();
+   String link=json.readTree(invited.getContentAsString()).get("activationUrl").asText(),old=link.split("#token=")[1];
+   UUID user=db.queryForObject("SELECT id FROM user_account WHERE platform='partner' AND phone_digest=?",UUID.class,digester.digest("phone",phone));
+   var renewed=mvc.perform(post("/api/v1/admin/users/"+user+"/invitations").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"expiresInHours\":1}")).andExpect(status().isCreated()).andReturn().getResponse();
+   String token=json.readTree(renewed.getContentAsString()).get("activationUrl").asText().split("#token=")[1];
+   var sent=mvc.perform(post("/api/v1/auth/challenges").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"purpose","ACTIVATE","platform","partner")))).andExpect(status().isAccepted()).andReturn().getResponse();
+   UUID challenge=UUID.fromString(json.readTree(sent.getContentAsString()).get("challengeId").asText());
+   Map<String,Object> input=new HashMap<>(Map.of("phone",phone,"password","partner-password-2026","displayName","中介","termsVersion","2026-10-01","invitationToken",old,"challengeId",challenge,"code",codes.get(challenge)));
+   mvc.perform(post("/api/v1/auth/partner/activate").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isUnauthorized());
+   input.put("invitationToken",token);input.put("code",codes.get(challenge).equals("000000")?"000001":"000000");
+   mvc.perform(post("/api/v1/auth/partner/activate").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isUnauthorized());
+   assertEquals(1,db.queryForObject("SELECT attempts FROM verification_challenge WHERE id=?",Integer.class,challenge));
+   input.put("code",codes.get(challenge));
+   var activated=mvc.perform(post("/api/v1/auth/partner/activate").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isCreated()).andExpect(jsonPath("$.platform").value("partner")).andReturn().getResponse();
+   String access=json.readTree(activated.getContentAsString()).get("accessToken").asText();
+   mvc.perform(get("/api/v1/admin/users").header("Authorization","Bearer "+access)).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/student/conversations").header("Authorization","Bearer "+access)).andExpect(status().isForbidden());
+   mvc.perform(post("/api/v1/auth/partner/activate").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isUnauthorized());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+ @Test void delegatedRoleWriterCannotEscalateOrEditHigherRole() throws Exception {
+  UUID ownRole=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
+  db.update("INSERT INTO role_permission VALUES(?,'roles:write')",ownRole);
+  String body=json.writeValueAsString(Map.of("name","越权角色","code","ESC_"+UUID.randomUUID().toString().replace("-","").toUpperCase(),"platform","admin","dataScope","ALL","permissionCodes",List.of("post_admin_users"),"status","ENABLED"));
+  mvc.perform(post("/api/v1/admin/roles").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isForbidden());
+  UUID higher=UUID.randomUUID();db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'admin','ALL','ENABLED')",higher,higher.toString(),"高权限");db.update("INSERT INTO role_permission VALUES(?,'post_admin_users')",higher);
+  String lower=body.replace("post_admin_users","schools:read");
+  mvc.perform(put("/api/v1/admin/roles/"+higher).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(lower)).andExpect(status().isForbidden());
+ }
+
+ @Test void exportImplementedRoutesForContractReview() throws Exception {
+  var rows=new java.util.ArrayList<Map<String,String>>();
+  handlers.getHandlerMethods().forEach((mapping,method)->{
+   var permission=method.getMethodAnnotation(org.springframework.security.access.prepost.PreAuthorize.class);
+   for(String path:mapping.getPatternValues())if(path.startsWith("/api/v1/"))for(var verb:mapping.getMethodsCondition().getMethods()) {
+    List<String> paths=path.contains("{platform:")?List.of(path.replaceAll("\\{platform:[^}]+}","student"),path.replaceAll("\\{platform:[^}]+}","partner"),path.replaceAll("\\{platform:[^}]+}","admin")):List.of(path);
+    for(String concrete:paths)rows.add(Map.of("method",verb.name(),"path",concrete,"permission",permission==null?"":permission.value()));
+   }
+  });
+  rows.sort(java.util.Comparator.comparing(r->r.get("path")+r.get("method")));
+  java.nio.file.Files.writeString(java.nio.file.Path.of("target/implemented-routes.json"),json.writeValueAsString(rows));
+  assertTrue(rows.size()>30);
+ }
+
 }

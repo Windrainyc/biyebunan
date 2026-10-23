@@ -4,6 +4,14 @@ import org.apache.ibatis.annotations.*;
 /** 事务内审计、事件与幂等记录；不允许业务服务提前单独提交。 */
 @Mapper
 public interface WriteMapper {
+    /** @param id 审计ID
+     * @param actor 操作者
+     * @param action 动作
+     * @param type 资源类型
+     * @param target 目标
+     * @param reason 业务理由，禁止传秘密 */
+    @Insert("INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,detail) VALUES(#{id},#{actor},#{action},#{type},#{target},jsonb_build_object('reason',CAST(#{reason} AS text)))")
+    void auditReason(UUID id,UUID actor,String action,String type,UUID target,String reason);
     /**
  * @param actor 操作者
  * @param method 方法

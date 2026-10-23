@@ -78,7 +78,7 @@ public class AuthController {
    throw new BusinessException(403,"PERMISSION_DENIED","来源或 CSRF 校验失败");
   return header;
  }
- private ResponseEntity<AuthDtos.Session> issued(String p,AuthDtos.Issued i){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.SET_COOKIE,refreshCookie(p,i.refreshToken(),604800),csrfCookie(p,i.session().csrfToken(),604800)).body(i.session());}
+ ResponseEntity<AuthDtos.Session> issued(String p,AuthDtos.Issued i){return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.SET_COOKIE,refreshCookie(p,i.refreshToken(),604800),csrfCookie(p,i.session().csrfToken(),604800)).body(i.session());}
  private String refreshCookie(String p,String v,long age){return ResponseCookie.from("zx_"+p+"_refresh",v).httpOnly(true).secure(true).sameSite("Lax").path("/api/v1/auth/"+p).maxAge(age).build().toString();}
  private String csrfCookie(String p,String v,long age){return ResponseCookie.from("zx_"+p+"_csrf",v).httpOnly(false).secure(true).sameSite("Lax").path("/").maxAge(age).build().toString();}
  private String cookie(HttpServletRequest req,String name){if(req.getCookies()==null)return null;return Arrays.stream(req.getCookies()).filter(c->c.getName().equals(name)).map(Cookie::getValue).findFirst().orElse(null);}

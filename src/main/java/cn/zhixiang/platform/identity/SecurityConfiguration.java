@@ -8,7 +8,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 /** API 为无状态 Bearer；刷新 Cookie 的 CSRF 将由专用端点进行双提交及 Origin 校验。 */
 @Configuration
 @EnableMethodSecurity
-@Profile("!migrate & !worker")
+@Profile("!migrate & !worker & !bootstrap")
 public class SecurityConfiguration {
     /**
  * @return 禁用默认用户名密码账户；本工程只使用数据库不透明会话认证 */
@@ -25,7 +25,7 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain apiSecurity(HttpSecurity http,IdentityMapper mapper,TokenDigester digester) throws Exception {
         return http.csrf(c->c.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-          .authorizeHttpRequests(a->a.requestMatchers("/actuator/health","/actuator/health/**").permitAll().requestMatchers("/api/v1/auth/challenges","/api/v1/auth/student/register","/api/v1/auth/password-reset","/api/v1/auth/student/login","/api/v1/auth/partner/login","/api/v1/auth/admin/login","/api/v1/auth/student/refresh","/api/v1/auth/partner/refresh","/api/v1/auth/admin/refresh","/api/v1/auth/student/logout","/api/v1/auth/partner/logout","/api/v1/auth/admin/logout").permitAll().anyRequest().authenticated())
+          .authorizeHttpRequests(a->a.requestMatchers("/actuator/health","/actuator/health/**").permitAll().requestMatchers("/api/v1/auth/partner/activate","/api/v1/auth/admin/activate","/api/v1/auth/admin/mfa-enrollments","/api/v1/auth/challenges","/api/v1/auth/student/register","/api/v1/auth/password-reset","/api/v1/auth/student/login","/api/v1/auth/partner/login","/api/v1/auth/admin/login","/api/v1/auth/student/refresh","/api/v1/auth/partner/refresh","/api/v1/auth/admin/refresh","/api/v1/auth/student/logout","/api/v1/auth/partner/logout","/api/v1/auth/admin/logout").permitAll().anyRequest().authenticated())
           .exceptionHandling(e->e.authenticationEntryPoint((q,r,x)->AccessFilter.deny(r,401,"SESSION_EXPIRED"))
             .accessDeniedHandler((q,r,x)->AccessFilter.deny(r,403,"PERMISSION_DENIED")))
           .addFilterBefore(new AccessFilter(mapper,digester),UsernamePasswordAuthenticationFilter.class).build();

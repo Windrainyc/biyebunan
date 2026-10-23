@@ -10,10 +10,11 @@ import org.springframework.stereotype.Component;
 /** RFC 6238 六位 TOTP 校验；仅从受控目录读取 UUID 引用，数据库不存明文种子。 */
 @Component
 public class TotpVerifier {
- private final Path root;
+ private final SecretVault vault;private final Path root;
  /**
+ * @param vault 加密秘密仓库
  * @param directory 受保护密钥目录；生产由 secret volume 注入，不接受用户路径 */
- public TotpVerifier(@Value("${ZX_MFA_SECRET_DIR:secrets/mfa}") String directory){root=Path.of(directory).toAbsolutePath().normalize();}
+ public TotpVerifier(@Value("${ZX_MFA_SECRET_DIR:secrets/mfa}") String directory,SecretVault vault){this.vault=vault;root=Path.of(directory).toAbsolutePath().normalize();}
  /**
  * @param reference UUID 形式的密钥引用
  * @param code 六位验证码
@@ -23,8 +24,12 @@ public class TotpVerifier {
   if(reference==null)throw new BusinessException(503,"DEPENDENCY_UNAVAILABLE","管理员 MFA 尚未配置");
   try {
    String name=UUID.fromString(reference).toString();Path path=root.resolve(name);
-   if(Files.isSymbolicLink(path) || Files.size(path)>128)throw new java.io.IOException("invalid secret file");
-   byte[] key=decode(Files.readString(path).strip());
+   String seed=vault.get(UUID.fromString(name));
+   if(seed==null){
+    if(Files.isSymbolicLink(path) || Files.size(path)>128)throw new java.io.IOException("invalid secret file");
+    seed=Files.readString(path).strip();
+   }
+   byte[] key=decode(seed);
    long current=java.time.Instant.now().getEpochSecond()/30;
    for(long step=current-1;step<=current+1;step++)
     if(java.security.MessageDigest.isEqual(generate(key,step).getBytes(java.nio.charset.StandardCharsets.US_ASCII),code.getBytes(java.nio.charset.StandardCharsets.US_ASCII)))return step;

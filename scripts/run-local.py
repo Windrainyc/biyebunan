@@ -24,7 +24,7 @@ if profile == 'test':
     env['ZX_TEST_ADMIN_PASSWORD'] = (source.parent / 'secrets/postgres_admin_password').read_text().strip()
     os.chdir(root)
     os.execvpe('mvn', ['mvn', '-s', 'scripts/maven-settings.xml', '-B', '-ntp', 'verify'], env)
-if profile not in ('api', 'worker', 'migrate'):
-    raise SystemExit('仅允许 api、worker、migrate')
+if profile not in ('api', 'worker', 'migrate', 'bootstrap'):
+    raise SystemExit('仅允许 api、worker、migrate、bootstrap')
 os.chdir(root)
 os.execvpe('java', ['java', '-jar', 'target/platform-0.1.0-SNAPSHOT.jar', '--spring.profiles.active='+profile], env)
