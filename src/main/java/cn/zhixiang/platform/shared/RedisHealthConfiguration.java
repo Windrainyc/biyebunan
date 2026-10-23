@@ -7,7 +7,9 @@ import java.time.Duration;
 /** 最小权限 Redis 健康探针；执行应用所需读写与 PING，无需授予服务器 INFO 管理权限。 */
 @Configuration
 public class RedisHealthConfiguration {
- /** @param factory Redis 连接工厂 @return 与内置同名的真实读写健康探针 */
+ /**
+ * @param factory Redis 连接工厂
+ * @return 与内置同名的真实读写健康探针 */
  @Bean("redisHealthIndicator")
  public HealthIndicator redisHealthIndicator(RedisConnectionFactory factory) {
   return ()->{

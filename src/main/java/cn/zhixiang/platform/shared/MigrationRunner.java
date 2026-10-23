@@ -8,8 +8,10 @@ import org.springframework.stereotype.Component;
 @Profile("migrate")
 public class MigrationRunner implements ApplicationRunner {
  private final ConfigurableApplicationContext context;
- /** @param context 当前非 Web 容器 */
+ /**
+ * @param context 当前非 Web 容器 */
  public MigrationRunner(ConfigurableApplicationContext context) {this.context=context;}
- /** @param args 启动参数；不读取敏感命令行值 */
+ /**
+ * @param args 启动参数；不读取敏感命令行值 */
  @Override public void run(ApplicationArguments args) {context.close();}
 }

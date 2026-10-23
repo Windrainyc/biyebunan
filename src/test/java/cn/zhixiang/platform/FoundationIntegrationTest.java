@@ -26,6 +26,7 @@ class FoundationIntegrationTest {
  @Autowired MockMvc mvc;
  @Autowired JdbcTemplate db;
  @Autowired TokenDigester digester;
+ @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.identity.SmsGateway sms;
  @Autowired JsonMapper json;
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
  @Autowired cn.zhixiang.platform.operations.OutboxMapper outbox;
@@ -56,6 +57,59 @@ class FoundationIntegrationTest {
  void seed(UUID id,String platform,String token) {
   db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,?,?,?,?,?,'ENABLED')",id,platform,"隔离测试",UUID.randomUUID().toString(),"138****0000","not-a-login-password");
   db.update("INSERT INTO auth_session(id,user_id,access_digest,refresh_digest,csrf_digest,auth_version,expires_at,refresh_expires_at,family_id) VALUES(?,?,?,?,?,1,now()+interval '15 minutes',now()+interval '7 days',?)",UUID.randomUUID(),id,digester.digest("access",token),UUID.randomUUID().toString(),UUID.randomUUID().toString(),UUID.randomUUID());
+ }
+ @Test void disabledSchoolPreventsMajorEnable() throws Exception {
+  String schoolBody=json.writeValueAsString(Map.of("name","停用保护院校","code",UUID.randomUUID().toString(),"region","浙江","status","ENABLED"));
+  var school=mvc.perform(post("/api/v1/admin/schools").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(schoolBody)).andExpect(status().isCreated()).andReturn().getResponse();
+  String schoolId=json.readTree(school.getContentAsString()).get("id").asText();
+  String majorBody=json.writeValueAsString(Map.of("name","专业","code","TEST","schoolId",schoolId,"level","BACHELOR","status","DISABLED"));
+  var major=mvc.perform(post("/api/v1/admin/majors").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(majorBody)).andExpect(status().isCreated()).andReturn().getResponse();
+  String majorId=json.readTree(major.getContentAsString()).get("id").asText();
+  mvc.perform(post("/api/v1/admin/schools/"+schoolId+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+  mvc.perform(post("/api/v1/admin/majors/"+majorId+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"ENABLED\"}")).andExpect(status().isUnprocessableEntity());
+  mvc.perform(get("/api/v1/admin/majors").header("Authorization","Bearer "+adminToken).param("schoolId",schoolId)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+ }
+ @Test void registerResetAndSingleUseChallenges() throws Exception {
+  var codes=new java.util.concurrent.ConcurrentHashMap<UUID,String>();
+  org.mockito.Mockito.doAnswer(call->{codes.put(call.getArgument(0),call.getArgument(2));return null;})
+   .when(sms).send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+  String phone="13612345678",password="注册长密码".repeat(15);
+  var request=post("/api/v1/auth/challenges").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"purpose","REGISTER")));
+  String challengeResponse=mvc.perform(request).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+  UUID challenge=UUID.fromString(json.readTree(challengeResponse).get("challengeId").asText());
+  String registration=json.writeValueAsString(Map.of("phone",phone,"password",password,"displayName","新学生","challengeId",challenge,"code",codes.get(challenge),"termsVersion","2026-10-01"));
+  var response=mvc.perform(post("/api/v1/auth/student/register").contentType("application/json").content(registration))
+    .andExpect(status().isCreated()).andExpect(jsonPath("$.platform").value("student")).andReturn().getResponse();
+  String access=json.readTree(response.getContentAsString()).get("accessToken").asText();
+  mvc.perform(post("/api/v1/auth/student/register").contentType("application/json").content(registration)).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/auth/student/login").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"password",password)))).andExpect(status().isOk());
+  var resetResult=mvc.perform(post("/api/v1/auth/challenges").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"purpose","RESET_PASSWORD","platform","student")))).andExpect(status().isAccepted()).andReturn().getResponse();
+  UUID reset=UUID.fromString(json.readTree(resetResult.getContentAsString()).get("challengeId").asText());
+  mvc.perform(post("/api/v1/auth/password-reset").contentType("application/json").content(json.writeValueAsString(Map.of("challengeId",reset,"code",codes.get(reset),"newPassword","new-password-0938!")))).andExpect(status().isNoContent());
+  mvc.perform(get("/api/v1/auth/me").header("Authorization","Bearer "+access)).andExpect(status().isUnauthorized());
+  mvc.perform(post("/api/v1/auth/student/login").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"password",password)))).andExpect(status().isUnauthorized());
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM user_account WHERE phone_digest=? AND platform='student'",Integer.class,digester.digest("phone",phone)));
+ }
+ @Test void verificationFailureCounterCommitsAndLimitsAttempts() throws Exception {
+  var codes=new java.util.concurrent.ConcurrentHashMap<UUID,String>();
+  org.mockito.Mockito.doAnswer(call->{codes.put(call.getArgument(0),call.getArgument(2));return null;})
+   .when(sms).send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+  String phone="13512345678";
+  var response=mvc.perform(post("/api/v1/auth/challenges").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"purpose","REGISTER")))).andExpect(status().isAccepted()).andReturn().getResponse();
+  UUID id=UUID.fromString(json.readTree(response.getContentAsString()).get("challengeId").asText());
+  String wrong=codes.get(id).equals("000000")?"111111":"000000";
+  var input=new java.util.HashMap<String,Object>(Map.of("phone",phone,"password","test-password-833","displayName","失败计数","challengeId",id,"code",wrong,"termsVersion","2026-10-01"));
+  for(int i=0;i<5;i++)mvc.perform(post("/api/v1/auth/student/register").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isUnauthorized());
+  assertEquals(5,db.queryForObject("SELECT attempts FROM verification_challenge WHERE id=?",Integer.class,id));
+  input.put("code",codes.get(id));
+  mvc.perform(post("/api/v1/auth/student/register").contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isUnauthorized());
+ }
+ @Test void smsFailureCannotBecomeUsableChallenge() throws Exception {
+  org.mockito.Mockito.doThrow(new cn.zhixiang.platform.shared.BusinessException(503,"PROVIDER_UNAVAILABLE","短信未就绪"))
+    .when(sms).send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+  String phone="13412345678";
+  mvc.perform(post("/api/v1/auth/challenges").contentType("application/json").content(json.writeValueAsString(Map.of("phone",phone,"purpose","REGISTER")))).andExpect(status().isServiceUnavailable());
+  assertEquals("FAILED",db.queryForObject("SELECT state FROM verification_challenge WHERE phone_digest=?",String.class,digester.digest("phone",phone)));
  }
  @Test void administratorRequiresMfaAndRejectsStepReplay() throws Exception {
   UUID id=UUID.randomUUID(),ref=UUID.randomUUID();String phone="13712345678",password="admin-test-only-938!";

@@ -11,12 +11,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 public class AuthService {
  private final TotpVerifier mfa;private final AuthMapper mapper;private final TokenDigester digester;private final TransactionTemplate tx;
- private final PasswordEncoder passwords=PasswordEncoderFactories.createDelegatingPasswordEncoder();
- private final String dummy=passwords.encode("dummy-never-a-real-user-password");
+ private final Passwords passwords;
+ private final String dummy;
  private final SecureRandom random=new SecureRandom();
- /** @param mapper 认证数据库访问 @param digester 摘要 @param tx 短事务执行器 @param mfa 管理员二次认证 */
- public AuthService(AuthMapper mapper,TokenDigester digester,TransactionTemplate tx,TotpVerifier mfa){this.mfa=mfa;this.mapper=mapper;this.digester=digester;this.tx=tx;}
- /** @param platform 路径平台 @param input 登录请求 @param ip 直连来源，不信任任意转发头 @return 会话与刷新值 */
+ /**
+ * @param mapper 认证数据库访问
+ * @param digester 摘要
+ * @param tx 短事务执行器
+ * @param mfa 管理员二次认证
+ * @param passwords 密码服务 */
+ public AuthService(AuthMapper mapper,TokenDigester digester,TransactionTemplate tx,TotpVerifier mfa,Passwords passwords){this.passwords=passwords;this.dummy=passwords.encode("dummy-never-a-real-user-password");this.mfa=mfa;this.mapper=mapper;this.digester=digester;this.tx=tx;}
+ /**
+ * @param platform 路径平台
+ * @param input 登录请求
+ * @param ip 直连来源，不信任任意转发头
+ * @return 会话与刷新值 */
  public AuthDtos.Issued login(String platform,AuthDtos.Login input,String ip) {
   platform(platform);
   // 限速在单独已提交语句中计数，密码错误不能回滚失败次数。
@@ -36,7 +45,11 @@ public class AuthService {
    return issue(current,UUID.randomUUID(),OffsetDateTime.now(ZoneOffset.UTC).plusDays(7));
   });
  }
- /** @param platform 路径平台 @param refresh HttpOnly Cookie @param csrf 双提交校验后的请求值 @return 轮换的新会话 */
+ /**
+ * @param platform 路径平台
+ * @param refresh HttpOnly Cookie
+ * @param csrf 双提交校验后的请求值
+ * @return 轮换的新会话 */
  public AuthDtos.Issued refresh(String platform,String refresh,String csrf) {
   platform(platform);
   var outcome=tx.execute(s->{
@@ -52,11 +65,16 @@ public class AuthService {
   if(outcome.replay())throw new BusinessException(401,"TOKEN_REPLAY","刷新令牌重复使用，请重新登录");
   return outcome.issued();
  }
- /** @param platform 路径平台 @param refresh 刷新 Cookie @param csrf CSRF值；登出整个令牌族 */
+ /**
+ * @param platform 路径平台
+ * @param refresh 刷新 Cookie
+ * @param csrf CSRF值；登出整个令牌族 */
  public void logout(String platform,String refresh,String csrf) {
   platform(platform);tx.executeWithoutResult(s->{var old=locate(platform,refresh,csrf);mapper.revoke(old.familyId());});
  }
- /** @param actor 已验证身份 @return 当前用户 DTO */
+ /**
+ * @param actor 已验证身份
+ * @return 当前用户 DTO */
  public AuthDtos.User me(Actor actor) {
   return tx.execute(s->view(mapper.lockAccount(actor.id())));
  }
@@ -67,6 +85,14 @@ public class AuthService {
   var old=mapper.lockSession(found.id());
   if(!account.platform().equals(platform) || !MessageDigest.isEqual(old.csrfDigest().getBytes(java.nio.charset.StandardCharsets.UTF_8),digester.digest("csrf",csrf).getBytes(java.nio.charset.StandardCharsets.UTF_8)))throw expired();
   return old;
+ }
+ /** 仅由已经完成手机证明的事务调用，不能直接映射为HTTP入口。
+  *
+ * @param account 已锁定的新账户
+ * @return 初始会话 */
+ public AuthDtos.Issued issueVerified(AuthMapper.Account account) {
+  if(!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("签发必须处于账户事务");
+  return issue(account,UUID.randomUUID(),OffsetDateTime.now(ZoneOffset.UTC).plusDays(7));
  }
  private AuthDtos.Issued issue(AuthMapper.Account a,UUID family,OffsetDateTime refreshExpiry) {
   String access=token(),refresh=token(),csrf=token();OffsetDateTime now=OffsetDateTime.now(ZoneOffset.UTC);

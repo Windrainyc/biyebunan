@@ -11,9 +11,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class TotpVerifier {
  private final Path root;
- /** @param directory 受保护密钥目录；生产由 secret volume 注入，不接受用户路径 */
+ /**
+ * @param directory 受保护密钥目录；生产由 secret volume 注入，不接受用户路径 */
  public TotpVerifier(@Value("${ZX_MFA_SECRET_DIR:secrets/mfa}") String directory){root=Path.of(directory).toAbsolutePath().normalize();}
- /** @param reference UUID 形式的密钥引用 @param code 六位验证码 @return 匹配时间步，后续数据库必须原子防重放 */
+ /**
+ * @param reference UUID 形式的密钥引用
+ * @param code 六位验证码
+ * @return 匹配时间步，后续数据库必须原子防重放 */
  public long verify(String reference,String code) {
   if(code==null)throw new BusinessException(401,"MFA_REQUIRED","管理员需要二次验证码");
   if(reference==null)throw new BusinessException(503,"DEPENDENCY_UNAVAILABLE","管理员 MFA 尚未配置");
@@ -27,7 +31,10 @@ public class TotpVerifier {
   } catch(java.io.IOException|IllegalArgumentException e) {throw new BusinessException(503,"DEPENDENCY_UNAVAILABLE","MFA 密钥不可用");}
   throw new BusinessException(401,"MFA_INVALID","二次验证码无效");
  }
- /** @param key 原始种子字节 @param step Unix秒数除以30 @return 六位动态密码 */
+ /**
+ * @param key 原始种子字节
+ * @param step Unix秒数除以30
+ * @return 六位动态密码 */
  public static String generate(byte[] key,long step) {
   try {
    Mac mac=Mac.getInstance("HmacSHA1");mac.init(new SecretKeySpec(key,"HmacSHA1"));

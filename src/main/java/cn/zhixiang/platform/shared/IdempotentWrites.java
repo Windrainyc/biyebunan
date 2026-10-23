@@ -12,13 +12,23 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class IdempotentWrites {
     private final cn.zhixiang.platform.identity.IdentityMapper identity;private final WriteMapper mapper; private final JsonMapper json;
-    /** @param mapper 幂等表访问 @param json 应用 JSON 编码器 @param identity 写入前的权威身份检查 */
+    /**
+ * @param mapper 幂等表访问
+ * @param json 应用 JSON 编码器
+ * @param identity 写入前的权威身份检查 */
     public IdempotentWrites(WriteMapper mapper,JsonMapper json,cn.zhixiang.platform.identity.IdentityMapper identity) { this.mapper=mapper;this.json=json;this.identity=identity; }
     /**
      * 执行业务写；请求版本纳入 hash，旧请求重试可返回原响应，换请求体返回 409。
-     * @param actor 操作者 @param method HTTP 方法 @param path 服务端规范路径 @param key 幂等键
-     * @param input 已校验 DTO 与版本组成的摘要输入 @param action 事务内业务操作
-     * @return 保存的 HTTP 状态、响应 JSON 与 ETag
+     *
+ * @param actor 操作者
+ * @param method HTTP 方法
+ * @param path 服务端规范路径
+ * @param key 幂等键
+     *
+ * @param input 已校验 DTO 与版本组成的摘要输入
+ * @param action 事务内业务操作
+     *
+ * @return 保存的 HTTP 状态、响应 JSON 与 ETag
      */
     @Transactional(rollbackFor=Exception.class)
     public ResponseEntity<String> execute(UUID actor,String method,String path,String key,Object input,Supplier<ResponseEntity<?>> action) {

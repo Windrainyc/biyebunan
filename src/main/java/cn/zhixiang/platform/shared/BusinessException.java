@@ -4,12 +4,17 @@ package cn.zhixiang.platform.shared;
 public class BusinessException extends RuntimeException {
     private final int status;
     private final String code;
-    /** @param status HTTP 状态 @param code 稳定业务错误码 @param detail 安全的用户提示 */
+    /**
+ * @param status HTTP 状态
+ * @param code 稳定业务错误码
+ * @param detail 安全的用户提示 */
     public BusinessException(int status, String code, String detail) {
         super(detail); this.status = status; this.code = code;
     }
-    /** @return 真实 HTTP 状态 */
+    /**
+ * @return 真实 HTTP 状态 */
     public int status() { return status; }
-    /** @return 供客户端判断的稳定错误码 */
+    /**
+ * @return 供客户端判断的稳定错误码 */
     public String code() { return code; }
 }

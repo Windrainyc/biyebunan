@@ -15,7 +15,12 @@ import tools.jackson.databind.json.JsonMapper;
 public class OutboxPublisher {
  private final String exchange;private final String routingKey;private final OutboxMapper mapper;private final RabbitTemplate rabbit;private final JsonMapper json;
  private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(OutboxPublisher.class);
- /** @param mapper outbox数据 @param rabbit 启用confirm/mandatory的客户端 @param json JSON编码器 @param exchange 发布交换机 @param routingKey 路由键 */
+ /**
+ * @param mapper outbox数据
+ * @param rabbit 启用confirm/mandatory的客户端
+ * @param json JSON编码器
+ * @param exchange 发布交换机
+ * @param routingKey 路由键 */
  public OutboxPublisher(OutboxMapper mapper,RabbitTemplate rabbit,JsonMapper json,@org.springframework.beans.factory.annotation.Value("${ZX_EVENT_EXCHANGE:zx.events}") String exchange,@org.springframework.beans.factory.annotation.Value("${ZX_EVENT_ROUTING_KEY:task}") String routingKey){this.exchange=exchange;this.routingKey=routingKey;this.mapper=mapper;this.rabbit=rabbit;this.json=json;rabbit.setMandatory(true);}
  /** 定期领取待发布事件；无全局进程锁，多副本通过数据库 SKIP LOCKED 协作。 */
  @Scheduled(fixedDelayString="${ZX_OUTBOX_DELAY_MS:2000}")

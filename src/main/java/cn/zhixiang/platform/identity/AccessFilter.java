@@ -9,7 +9,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /** 不透明令牌认证过滤器；平台由账户决定，不能用客户端角色切换。 */
 public class AccessFilter extends OncePerRequestFilter {
     private final IdentityMapper mapper; private final TokenDigester digester;
-    /** @param mapper 身份数据端口 @param digester 令牌摘要服务 */
+    /**
+ * @param mapper 身份数据端口
+ * @param digester 令牌摘要服务 */
     public AccessFilter(IdentityMapper mapper,TokenDigester digester) { this.mapper=mapper;this.digester=digester; }
     @Override
     protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain) throws IOException,ServletException {
@@ -29,7 +31,11 @@ public class AccessFilter extends OncePerRequestFilter {
         }
         chain.doFilter(req,res);
     }
-    /** @param response HTTP 响应 @param status 状态码 @param code 固定错误码 @throws IOException 输出失败 */
+    /**
+ * @param response HTTP 响应
+ * @param status 状态码
+ * @param code 固定错误码
+ * @throws IOException 输出失败 */
     public static void deny(HttpServletResponse response,int status,String code) throws IOException {
         response.setStatus(status); response.setContentType("application/problem+json;charset=UTF-8");
         response.getWriter().write("{\"type\":\"about:blank\",\"title\":\""+code+"\",\"status\":"+status+",\"code\":\""+code+"\",\"detail\":\"身份或权限不满足要求\",\"traceId\":\""+java.util.UUID.randomUUID()+"\",\"fieldErrors\":[]}");

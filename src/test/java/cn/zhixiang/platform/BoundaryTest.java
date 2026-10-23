@@ -16,6 +16,10 @@ class BoundaryTest {
    assertThrows(BusinessException.class,()->Versions.parse(invalid));
   assertEquals(2,Versions.parse("\"2\""));
  }
+ @Test void smsIsDisabledByDefault() {
+  var gateway=new cn.zhixiang.platform.identity.HttpSmsGateway("","",false,new tools.jackson.databind.json.JsonMapper());
+  assertThrows(BusinessException.class,gateway::requireConfigured);
+ }
  @Test void totpMatchesRfc6238() {
   byte[] key="12345678901234567890".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
   assertEquals("287082",cn.zhixiang.platform.identity.TotpVerifier.generate(key,59/30));

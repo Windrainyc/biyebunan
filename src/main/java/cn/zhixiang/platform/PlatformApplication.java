@@ -8,7 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class PlatformApplication {
     /**
      * 启动应用，敏感配置由环境变量注入。
-     * @param args Spring Boot 命令行参数，不应携带明文密钥
+     *
+ * @param args Spring Boot 命令行参数，不应携带明文密钥
      */
     public static void main(String[] args) {
         SpringApplication.run(PlatformApplication.class, args);
