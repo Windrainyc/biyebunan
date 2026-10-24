@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.3-development
+  version: 1.0.4-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -8241,7 +8241,7 @@ paths:
         in: query
         required: false
         description: ''
-        schema: &id038
+        schema: &id033
           type: string
           enum:
           - PENDING
@@ -14970,16 +14970,21 @@ components:
         name: *id011
         code: *id011
         provider: *id011
-        endpoint: &id025
+        endpoint:
           type: string
-          description: ''
           format: uri
-        contextLimit: &id026
+          maxLength: 2048
+          description: HTTPS 地址，禁止凭证、查询、片段；运行时适配器另检查网络出口白名单。
+        contextLimit:
           type: integer
           minimum: 1
-        maxOutputTokens: &id027
+          maximum: 2147483647
+          description: 最大输出不得超过上下文。
+        maxOutputTokens:
           type: integer
           minimum: 1
+          maximum: 2147483647
+          description: 最大输出不得超过上下文。
         status: *id015
       required:
       - name
@@ -14989,6 +14994,7 @@ components:
       - contextLimit
       - maxOutputTokens
       - status
+      description: 模型目录元数据；有价格或凭证引用后代码、供应商、端点不可更换。配置启用不等于实际供应商可调用。
     Model:
       type: object
       additionalProperties: false
@@ -15000,9 +15006,21 @@ components:
         name: *id011
         code: *id011
         provider: *id011
-        endpoint: *id025
-        contextLimit: *id026
-        maxOutputTokens: *id027
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: HTTPS 地址，禁止凭证、查询、片段；运行时适配器另检查网络出口白名单。
+        contextLimit:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: 最大输出不得超过上下文。
+        maxOutputTokens:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: 最大输出不得超过上下文。
         status: *id015
       required:
       - id
@@ -15016,12 +15034,13 @@ components:
       - contextLimit
       - maxOutputTokens
       - status
+      description: 模型目录元数据；有价格或凭证引用后代码、供应商、端点不可更换。配置启用不等于实际供应商可调用。
     ModelPriceWrite:
       type: object
       additionalProperties: false
       properties:
         modelId: *id010
-        currency: &id028
+        currency: &id025
           type: string
           enum:
           - CNY
@@ -15038,6 +15057,7 @@ components:
       - cachedInputPerMillion
       - effectiveFrom
       - status
+      description: 价格以 CNY 每百万词元计价。新增或修改必须为未来生效时间；已生效金额不可覆盖或删除。运行时固定价格快照。
     ModelPrice:
       type: object
       additionalProperties: false
@@ -15047,7 +15067,7 @@ components:
         createdAt: *id014
         updatedAt: *id014
         modelId: *id010
-        currency: *id028
+        currency: *id025
         inputPerMillion: *id022
         outputPerMillion: *id022
         cachedInputPerMillion: *id022
@@ -15065,24 +15085,33 @@ components:
       - cachedInputPerMillion
       - effectiveFrom
       - status
+      description: 价格以 CNY 每百万词元计价。新增或修改必须为未来生效时间；已生效金额不可覆盖或删除。运行时固定价格快照。
     StorageWrite:
       type: object
       additionalProperties: false
       properties:
         name: *id011
-        provider: &id029
+        provider: &id026
           type: string
           enum:
           - ALIYUN_OSS
           - S3_COMPATIBLE
-        bucket: *id011
-        region: *id011
-        endpoint: &id030
+        bucket:
           type: string
-          description: ''
+          pattern: ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$
+          minLength: 3
+          maxLength: 63
+        region: *id011
+        endpoint:
+          type: string
           format: uri
-        credentialRef: *id011
-        access: &id031
+          maxLength: 2048
+          description: HTTPS 根地址，本地 S3_COMPATIBLE localhost/127.0.0.1/minio 允许 HTTP；不得含凭证查询片段。
+        credentialRef:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
+          description: 运行配置凭证别名，不接受明文或文件路径；使用适配器前须配置解析。
+        access: &id027
           type: string
           enum:
           - PRIVATE
@@ -15096,6 +15125,7 @@ components:
       - credentialRef
       - access
       - status
+      description: 配置元数据，不自动创建桶或验证连通性。更换目标或凭证、删除前先停用。实际文件引用建立后不可更换目标。
     Storage:
       type: object
       additionalProperties: false
@@ -15105,12 +15135,23 @@ components:
         createdAt: *id014
         updatedAt: *id014
         name: *id011
-        provider: *id029
-        bucket: *id011
+        provider: *id026
+        bucket:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$
+          minLength: 3
+          maxLength: 63
         region: *id011
-        endpoint: *id030
-        credentialRef: *id011
-        access: *id031
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: HTTPS 根地址，本地 S3_COMPATIBLE localhost/127.0.0.1/minio 允许 HTTP；不得含凭证查询片段。
+        credentialRef:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
+          description: 运行配置凭证别名，不接受明文或文件路径；使用适配器前须配置解析。
+        access: *id027
         status: *id015
       required:
       - id
@@ -15125,23 +15166,27 @@ components:
       - credentialRef
       - access
       - status
+      description: 配置元数据，不自动创建桶或验证连通性。更换目标或凭证、删除前先停用。实际文件引用建立后不可更换目标。
     DomainWrite:
       type: object
       additionalProperties: false
       properties:
         name: *id011
-        hostname: &id032
+        hostname:
           type: string
-          description: ''
-          pattern: ^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$
-        platform: &id033
+          maxLength: 253
+          pattern: ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$
+        platform: &id028
           type: string
           enum:
           - student
           - partner
           - admin
           - assets
-        certificateRef: *id011
+        certificateRef:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
+          description: 部署层证书别名，不包含私钥。
         status: *id015
       required:
       - name
@@ -15149,6 +15194,7 @@ components:
       - platform
       - certificateRef
       - status
+      description: 域名配置元数据，不自动设置 DNS/TLS。域名规范化为小写；更换域名、平台、证书及删除前先停用。
     Domain:
       type: object
       additionalProperties: false
@@ -15158,9 +15204,15 @@ components:
         createdAt: *id014
         updatedAt: *id014
         name: *id011
-        hostname: *id032
-        platform: *id033
-        certificateRef: *id011
+        hostname:
+          type: string
+          maxLength: 253
+          pattern: ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$
+        platform: *id028
+        certificateRef:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
+          description: 部署层证书别名，不包含私钥。
         status: *id015
       required:
       - id
@@ -15172,13 +15224,14 @@ components:
       - platform
       - certificateRef
       - status
+      description: 域名配置元数据，不自动设置 DNS/TLS。域名规范化为小写；更换域名、平台、证书及删除前先停用。
     CategoryWrite:
       type: object
       additionalProperties: false
       properties:
         name: *id011
         code: *id011
-        parentId: &id034
+        parentId: &id029
           type:
           - string
           - 'null'
@@ -15201,7 +15254,7 @@ components:
         updatedAt: *id014
         name: *id011
         code: *id011
-        parentId: *id034
+        parentId: *id029
         sortOrder: *id020
         status: *id015
       required:
@@ -15250,7 +15303,7 @@ components:
       properties:
         name: *id011
         code: *id011
-        requiresReview: &id035
+        requiresReview: &id030
           type: boolean
         sortOrder: *id020
         status: *id015
@@ -15270,7 +15323,7 @@ components:
         updatedAt: *id014
         name: *id011
         code: *id011
-        requiresReview: *id035
+        requiresReview: *id030
         sortOrder: *id020
         status: *id015
       required:
@@ -15289,7 +15342,7 @@ components:
       properties:
         name: *id011
         code: *id011
-        channel: &id036
+        channel: &id031
           type: string
           enum:
           - SMS
@@ -15312,7 +15365,7 @@ components:
         updatedAt: *id014
         name: *id011
         code: *id011
-        channel: *id036
+        channel: *id031
         providerTemplateId: *id011
         status: *id015
       required:
@@ -15450,6 +15503,8 @@ components:
           enum:
           - MANUAL
           - IMPORT
+          - PARTNER
+          description: 管理员创建仅MANUAL/IMPORT；编辑需保持已有来源，含中介创建的PARTNER。
         schoolId: *id010
         majorId: *id010
       required:
@@ -15463,6 +15518,7 @@ components:
       - source
       - schoolId
       - majorId
+      description: 仅编辑未绑定、未确认收款草稿。订单号、来源不可修改；更改中介用assignment。院校专业必须同属并启用。
     Order:
       type: object
       additionalProperties: false
@@ -15503,6 +15559,21 @@ components:
           - UNCONFIRMED
           - CONFIRMED
         packageCode: *id011
+        schoolId:
+          type: string
+          format: uuid
+        majorId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - MANUAL
+          - IMPORT
+          - PARTNER
+        note:
+          type: string
+          maxLength: 200
       required:
       - id
       - version
@@ -15517,6 +15588,11 @@ components:
       - status
       - receiptStatus
       - packageCode
+      - schoolId
+      - majorId
+      - source
+      - note
+      description: 订单响应不包含手机号；草稿并非收款。中介创建的草稿金额为0，需管理员报价。
     PartnerOrderWrite:
       type: object
       additionalProperties: false
@@ -15537,6 +15613,7 @@ components:
       - majorId
       - packageCode
       - note
+      description: 服务端生成订单号和当前中介归属，创建金额0的待报价草稿。不能指定学生ID或其他中介。
     PartnerOrderUpdate:
       type: object
       additionalProperties: false
@@ -15554,7 +15631,7 @@ components:
       properties:
         orderId: *id010
         title: *id011
-        requirements: &id037
+        requirements: &id032
           type: string
           description: ''
           maxLength: 20000
@@ -15574,9 +15651,9 @@ components:
         updatedAt: *id014
         orderId: *id010
         title: *id011
-        requirements: *id037
+        requirements: *id032
         deliveryDate: *id013
-        stage: *id038
+        stage: *id033
         progress:
           type: integer
           minimum: 0
@@ -15618,11 +15695,11 @@ components:
       properties:
         name: *id011
         dueDate: *id013
-        weight: &id039
+        weight: &id034
           type: integer
           minimum: 1
           maximum: 100
-        completed: &id040
+        completed: &id035
           type: boolean
       required:
       - name
@@ -15639,8 +15716,8 @@ components:
         updatedAt: *id014
         name: *id011
         dueDate: *id013
-        weight: *id039
-        completed: *id040
+        weight: *id034
+        completed: *id035
         projectId: *id010
       required:
       - id
@@ -15656,7 +15733,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        kind: &id041
+        kind: &id036
           type: string
           enum:
           - TASK
@@ -15679,7 +15756,7 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        kind: *id041
+        kind: *id036
         assetId: *id010
         note: *id011
         projectId: *id010
@@ -15710,28 +15787,28 @@ components:
       properties:
         title: *id011
         categoryId: *id010
-        tagIds: &id042
+        tagIds: &id037
           type: array
           items: *id010
-        type: &id043
+        type: &id038
           type: string
           enum:
           - VIDEO
           - DOCUMENT
           - MARKDOWN
-        assetId: &id044
+        assetId: &id039
           type:
           - string
           - 'null'
           format: uuid
-        markdown: *id037
-        audience: &id045
+        markdown: *id032
+        audience: &id040
           type: string
           enum:
           - PUBLIC
           - MEMBER
           - PROJECT
-        projectId: &id046
+        projectId: &id041
           type:
           - string
           - 'null'
@@ -15752,12 +15829,12 @@ components:
         updatedAt: *id014
         title: *id011
         categoryId: *id010
-        tagIds: *id042
-        type: *id043
-        assetId: *id044
-        markdown: *id037
-        audience: *id045
-        projectId: *id046
+        tagIds: *id037
+        type: *id038
+        assetId: *id039
+        markdown: *id032
+        audience: *id040
+        projectId: *id041
         state:
           type: string
           enum:
@@ -15880,7 +15957,7 @@ components:
           enum:
           - USER
           - ASSISTANT
-        text: *id037
+        text: *id032
         citations:
           type: array
           items:
@@ -16021,16 +16098,16 @@ components:
       additionalProperties: false
       properties:
         boardId: *id010
-        title: &id047
+        title: &id042
           type: string
           description: ''
           minLength: 1
           maxLength: 200
-        body: *id037
-        tagIds: &id048
+        body: *id032
+        tagIds: &id043
           type: array
           items: *id010
-        assetIds: &id049
+        assetIds: &id044
           type: array
           items: *id010
       required:
@@ -16048,10 +16125,10 @@ components:
         createdAt: *id014
         updatedAt: *id014
         boardId: *id010
-        title: *id047
-        body: *id037
-        tagIds: *id048
-        assetIds: *id049
+        title: *id042
+        body: *id032
+        tagIds: *id043
+        assetIds: *id044
         authorId: *id010
         state:
           type: string
@@ -16079,12 +16156,12 @@ components:
       type: object
       additionalProperties: false
       properties:
-        body: &id050
+        body: &id045
           type: string
           description: ''
           minLength: 1
           maxLength: 5000
-        parentId: &id051
+        parentId: &id046
           type:
           - string
           - 'null'
@@ -16100,8 +16177,8 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        body: *id050
-        parentId: *id051
+        body: *id045
+        parentId: *id046
         postId: *id010
         authorId: *id010
         state:
@@ -16168,6 +16245,7 @@ components:
       - maskedSuffix
       - status
       - rotatedAt
+      description: 不包含密文引用或密钥；长度不足八位的密钥尾部完全隐藏。
     SecretWrite:
       type: object
       additionalProperties: false
@@ -16184,6 +16262,7 @@ components:
       - name
       - modelId
       - secretValue
+      description: 创建为 DISABLED。密钥 AES-GCM 加密，响应仅脱敏元数据。
     SecretRotate:
       type: object
       additionalProperties: false
@@ -16198,6 +16277,7 @@ components:
       required:
       - secretValue
       - reason
+      description: 轮换使用 If-Match 和幂等键，更新引用并清除旧密文，审计原因不得含旧或新密钥。
     Asset:
       type: object
       additionalProperties: false
@@ -16483,11 +16563,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: &id052
+        phone: &id047
           type: string
           description: ''
           pattern: ^1\d{10}$
-        password: &id053
+        password: &id048
           type: string
           description: ''
           minLength: 10
@@ -16495,7 +16575,7 @@ components:
           writeOnly: true
         displayName: *id011
         challengeId: *id010
-        code: &id054
+        code: &id049
           type: string
           description: ''
           pattern: ^\d{6}$
@@ -16511,11 +16591,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: *id052
-        password: *id053
+        phone: *id047
+        password: *id048
         displayName: *id011
         challengeId: *id010
-        code: *id054
+        code: *id049
         termsVersion: *id011
         invitationToken:
           type: string
@@ -16655,7 +16735,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        stage: *id038
+        stage: *id033
         reason: *id011
       required:
       - stage
@@ -17614,7 +17694,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        durationDays: &id055
+        durationDays: &id050
           type: integer
           minimum: 1
           maximum: 36500
@@ -17634,7 +17714,7 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        durationDays: *id055
+        durationDays: *id050
         monthlyTokenQuota: *id020
         monthlyAmountLimit: *id022
         effectiveFrom: *id014
@@ -17680,7 +17760,7 @@ components:
           - string
           - 'null'
           format: uuid
-        markdown: *id037
+        markdown: *id032
         state:
           type: string
           enum:

@@ -391,4 +391,112 @@ class FoundationIntegrationTest {
   }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
  }
 
+
+ @Test void modelConfigurationValidationAndCas() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   Map<String,Object> body=new HashMap<>(Map.of("name","测试模型","code",UUID.randomUUID().toString(),"provider","OPENAI_COMPATIBLE","endpoint","https://example.invalid/v1","contextLimit",8192,"maxOutputTokens",1024,"status","ENABLED"));
+   String path="/api/v1/admin/models",key=UUID.randomUUID().toString();
+   var response=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse();
+   String id=json.readTree(response.getContentAsString()).get("id").asText();
+   mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andExpect(content().json(response.getContentAsString()));
+   body.put("maxOutputTokens",8193);
+   mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   body.put("maxOutputTokens",2048);body.put("endpoint","https://secret@example.invalid/v1");
+   mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   body.put("endpoint","https://example.invalid/v1");
+   mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
+   mvc.perform(delete(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isPreconditionFailed());
+   mvc.perform(get(path).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+   mvc.perform(get(path).header("Authorization","Bearer "+adminToken).param("q",body.get("code").toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   mvc.perform(delete(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isNoContent());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void modelPriceHistoryAndSecretRotation() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   String models="/api/v1/admin/models",prices="/api/v1/admin/model-prices",keys="/api/v1/admin/model-keys";
+   Map<String,Object> model=new HashMap<>(Map.of("name","带价格的模型","code",UUID.randomUUID().toString(),"provider","OPENAI_COMPATIBLE","endpoint","https://example.invalid/v1","contextLimit",8192,"maxOutputTokens",1024,"status","ENABLED"));
+   String mid=json.readTree(mvc.perform(post(models).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(model))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   var price=new HashMap<String,Object>(Map.of("modelId",mid,"currency","CNY","inputPerMillion","1.123456","outputPerMillion","2.500000","cachedInputPerMillion","0.100000","effectiveFrom",java.time.OffsetDateTime.now().plusHours(1).toString(),"status","ENABLED"));
+   var response=mvc.perform(post(prices).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(price))).andExpect(status().isCreated()).andExpect(jsonPath("$.inputPerMillion").value("1.123456")).andReturn().getResponse();
+   String pid=json.readTree(response.getContentAsString()).get("id").asText();
+   mvc.perform(get(prices).header("Authorization","Bearer "+adminToken).param("q",model.get("code").toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   model.put("endpoint","https://another.invalid/v1");
+   mvc.perform(put(models+"/"+mid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(model))).andExpect(status().isConflict());
+   mvc.perform(delete(models+"/"+mid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+   // 仅隔离 schema 推进生效时间，避免以睡眠测试时间敏感规则。
+   db.update("UPDATE model_price SET effective_from=now()-interval '1 minute' WHERE id=?",UUID.fromString(pid));
+   mvc.perform(put(prices+"/"+pid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(price))).andExpect(status().isConflict());
+   mvc.perform(delete(prices+"/"+pid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+   String secret="isolated-test-secret-"+UUID.randomUUID();
+   String keyBody=json.writeValueAsString(Map.of("name","测试凭证","modelId",mid,"secretValue",secret));
+   var kr=mvc.perform(post(keys).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(keyBody)).andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DISABLED")).andExpect(jsonPath("$.secretValue").doesNotExist()).andReturn().getResponse();
+   String kid=json.readTree(kr.getContentAsString()).get("id").asText();assertFalse(kr.getContentAsString().contains(secret));
+   UUID oldRef=db.queryForObject("SELECT secret_ref FROM model_key WHERE id=?",UUID.class,UUID.fromString(kid));
+   String ciphertext=db.queryForObject("SELECT ciphertext FROM secret_material WHERE id=?",String.class,oldRef);assertFalse(ciphertext.contains(secret));
+   String rotated="isolated-new-secret-"+UUID.randomUUID(),idem=UUID.randomUUID().toString();String rotation=json.writeValueAsString(Map.of("secretValue",rotated,"reason","例行轮换"));
+   for(int n=0;n<2;n++)mvc.perform(post(keys+"/"+kid+"/rotate").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",idem).header("If-Match","\"1\"").contentType("application/json").content(rotation)).andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM secret_material WHERE id=?",Integer.class,oldRef));
+   mvc.perform(get(keys).header("Authorization","Bearer "+adminToken).param("q","测试凭证")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].secretRef").doesNotExist());
+   mvc.perform(delete(keys+"/"+kid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isNoContent());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void storageAndDomainConfigurationBoundaries() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   String path="/api/v1/admin/storages";
+   var body=new HashMap<String,Object>(Map.of("name","本地私有存储","provider","S3_COMPATIBLE","bucket","test-"+UUID.randomUUID(),"region","us-east-1","endpoint","http://127.0.0.1:19000","credentialRef","local-minio","access","PRIVATE","status","ENABLED"));
+   var response=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse();
+   String id=json.readTree(response.getContentAsString()).get("id").asText();
+   body.put("endpoint","http://external.invalid");
+   mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   body.put("endpoint","https://storage.invalid");
+   mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isConflict());
+   mvc.perform(post(path+"/"+id+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+   mvc.perform(delete(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isNoContent());
+   String domains="/api/v1/admin/domains",host="ZX-"+UUID.randomUUID()+".EXAMPLE.COM";
+   var domain=new HashMap<String,Object>(Map.of("name","学生域名","hostname",host,"platform","student","certificateRef","zx-student-tls","status","DISABLED"));
+   var dr=mvc.perform(post(domains).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(domain))).andExpect(status().isCreated()).andExpect(jsonPath("$.hostname").value(host.toLowerCase(java.util.Locale.ROOT))).andReturn().getResponse();
+   domain.put("hostname",host.toLowerCase(java.util.Locale.ROOT));
+   mvc.perform(post(domains).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(domain))).andExpect(status().isConflict());
+   domain.put("hostname","-bad.example.com");
+   mvc.perform(post(domains).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(domain))).andExpect(status().isUnprocessableEntity());
+   mvc.perform(get(domains).header("Authorization","Bearer "+adminToken).param("q","学生域名").param("status","DISABLED")).andExpect(status().isOk());
+   mvc.perform(delete(domains+"/"+json.readTree(dr.getContentAsString()).get("id").asText()).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void orderDraftScopeReassignmentAndReferences() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   UUID p1=UUID.randomUUID(),p2=UUID.randomUUID(),student=UUID.randomUUID();String t1=UUID.randomUUID().toString(),t2=UUID.randomUUID().toString(),ts=UUID.randomUUID().toString();
+   seed(p1,"partner",t1);seed(p2,"partner",t2);seed(student,"student",ts);
+   for(UUID p:List.of(p1,p2)){db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000003')",p);db.update("UPDATE user_account SET activated_at=now() WHERE id=?",p);}
+   db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+   UUID school=UUID.randomUUID(),major=UUID.randomUUID();
+   db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'订单院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+   db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'订单专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+   String base="/api/v1/admin/orders",number="ZX-"+UUID.randomUUID();
+   var body=new HashMap<String,Object>(Map.of("title","隔离订单","orderNo",number,"studentPhone","13812340000","partnerId",p1,"amount","1999.123456","currency","CNY","packageCode","STANDARD","source","MANUAL","schoolId",school));body.put("majorId",major);
+   var response=mvc.perform(post(base).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT")).andExpect(jsonPath("$.studentPhone").doesNotExist()).andReturn().getResponse();
+   String id=json.readTree(response.getContentAsString()).get("id").asText();
+   assertFalse(db.queryForObject("SELECT student_phone_ciphertext FROM software_order WHERE id=?",String.class,UUID.fromString(id)).contains("13812340000"));
+   mvc.perform(get("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t1)).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t2)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/orders/"+id).header("Authorization","Bearer "+ts)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/partner/orders").header("Authorization","Bearer "+t2).param("q",number)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   String patch=json.writeValueAsString(Map.of("schoolId",school,"majorId",major,"note","更新备注"));
+   mvc.perform(patch("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t2).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(patch)).andExpect(status().isNotFound());
+   mvc.perform(patch("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t1).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(patch)).andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2));
+   mvc.perform(post(base+"/"+id+"/assignment").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content(json.writeValueAsString(Map.of("partnerId",p2,"reason","业务移交")))).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t1)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/partner/orders/"+id).header("Authorization","Bearer "+t2)).andExpect(status().isOk());
+   mvc.perform(delete("/api/v1/admin/majors/"+major).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+   var partnerBody=Map.of("title","中介下单","studentPhone","13812340001","schoolId",school,"majorId",major,"packageCode","STANDARD","note","待报价");
+   mvc.perform(post("/api/v1/partner/orders").header("Authorization","Bearer "+t1).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(partnerBody))).andExpect(status().isCreated()).andExpect(jsonPath("$.partnerId").value(p1.toString())).andExpect(jsonPath("$.amount").value("0.000000"));
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
 }
