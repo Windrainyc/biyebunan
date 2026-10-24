@@ -89,4 +89,15 @@ public interface OrderMapper {
  * @param source 来源
  * @param note 业务备注 */
  record Row(UUID id,long version,OffsetDateTime createdAt,OffsetDateTime updatedAt,String orderNo,String title,UUID studentId,UUID partnerId,String amount,String currency,String status,String receiptStatus,String packageCode,UUID schoolId,UUID majorId,String source,String note) {}
+ /** 查订单关联项目阶段，调用者已锁订单，因此项目写不能并发通过。
+ * @param orderId 订单
+ * @return 阶段或null */
+ @Select("SELECT stage FROM software_project WHERE order_id=#{orderId}") String projectStage(UUID orderId);
+ /** CAS更新状态，不改变收款标记。
+ * @param id 订单
+ * @param version 版本
+ * @param state 新状态
+ * @param actor 操作者
+ * @return 修改行数 */
+ @Update("UPDATE software_order SET status=#{state},version=version+1,updated_at=now(),updated_by=#{actor} WHERE id=#{id} AND version=#{version}") int transition(UUID id,long version,String state,UUID actor);
 }

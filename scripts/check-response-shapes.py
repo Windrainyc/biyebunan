@@ -16,6 +16,8 @@ bindings = {
     'configuration/StorageDtos.java': 'Storage',
     'configuration/DomainDtos.java': 'Domain',
     'order/OrderDtos.java': 'Order',
+    'project/ProjectDtos.java': 'Project',
+    'project/MilestoneDtos.java': 'Milestone',
 }
 errors = []
 for file, schema in bindings.items():

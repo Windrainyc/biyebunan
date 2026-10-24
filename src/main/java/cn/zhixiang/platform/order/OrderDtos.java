@@ -89,4 +89,8 @@ public final class OrderDtos {
  * @return 转义 LIKE 参数 */
  public String pattern(){return new PageQuery(page,size,q,null,sort).pattern();}
  }
+ /** 订单状态变更请求。
+ * @param action CONFIRM、ACTIVATE、COMPLETE、CANCEL或ARCHIVE
+ * @param reason 管理员核实原因 */
+ public record Transition(@NotNull @Pattern(regexp="CONFIRM|ACTIVATE|COMPLETE|CANCEL|ARCHIVE") String action,@NotBlank @Size(max=200) String reason) {}
 }

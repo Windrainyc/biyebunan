@@ -6,7 +6,7 @@ import java.util.UUID;
 public final class VerificationDtos {
  private VerificationDtos() {}
  /** 用途严格隔离，注册验证码不能作为订单归属凭证。 */
- public enum Purpose { /** 学生注册。 */ REGISTER, /** 重置密码。 */ RESET_PASSWORD, /** 邀请激活。 */ ACTIVATE, /** 订单归属证明；业务尚未启用。 */ BIND_ORDER }
+ public enum Purpose { /** 学生注册。 */ REGISTER, /** 重置密码。 */ RESET_PASSWORD, /** 邀请激活。 */ ACTIVATE, /** 订单归属证明，独立用途及持久化范围。 */ BIND_ORDER }
  /** 模块数据记录，字段含义和取值约束见参数说明。
  * @param phone 手机号
  * @param purpose 用途

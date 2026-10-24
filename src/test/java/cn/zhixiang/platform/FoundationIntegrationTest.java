@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FoundationIntegrationTest {
  static final String SCHEMA="zx_test_"+UUID.randomUUID().toString().replace("-","");
  @Autowired MockMvc mvc;
+ @Autowired cn.zhixiang.platform.storage.ObjectStorage storage;
  @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping handlers;
  @Autowired JdbcTemplate db;
  @Autowired TokenDigester digester;
@@ -498,5 +499,106 @@ class FoundationIntegrationTest {
    var partnerBody=Map.of("title","中介下单","studentPhone","13812340001","schoolId",school,"majorId",major,"packageCode","STANDARD","note","待报价");
    mvc.perform(post("/api/v1/partner/orders").header("Authorization","Bearer "+t1).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(partnerBody))).andExpect(status().isCreated()).andExpect(jsonPath("$.partnerId").value(p1.toString())).andExpect(jsonPath("$.amount").value("0.000000"));
   } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void orderBindingProofFailureCommitAndConcurrentConsumption() throws Exception {
+  UUID student=UUID.randomUUID(),other=UUID.randomUUID();String token=UUID.randomUUID().toString(),otherToken=UUID.randomUUID().toString(),phone="13900123456";
+  seed(student,"student",token);seed(other,"student",otherToken);
+  for(UUID user:List.of(student,other))db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",user);
+  db.update("UPDATE user_account SET phone_digest=?,phone_verified_at=now(),activated_at=now() WHERE id=?",digester.digest("phone",phone),student);
+  UUID school=UUID.randomUUID(),major=UUID.randomUUID(),order=UUID.randomUUID();String number="BIND-"+UUID.randomUUID();
+  db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'绑定院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+  db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'绑定专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+  // 隔离状态机夹具，仅测试绑定；生产确认/收款流程仍需另外验收。
+  db.update("INSERT INTO software_order(id,order_no,title,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by) VALUES(?,?,'绑定订单',?,'isolated-cipher-placeholder',100,'CNY','STANDARD','MANUAL',?,?,'CONFIRMED',?,?)",order,number,digester.digest("phone",phone),school,major,adminId,adminId);
+  var codes=new java.util.concurrent.ConcurrentHashMap<UUID,String>();
+  org.mockito.Mockito.doAnswer(call->{codes.put(call.getArgument(0),call.getArgument(2));return null;}).when(sms).send(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+  String challengeBody=json.writeValueAsString(Map.of("phone",phone,"purpose","BIND_ORDER","orderNo",number));
+  mvc.perform(post("/api/v1/auth/challenges").contentType("application/json").content(challengeBody)).andExpect(status().isUnauthorized());
+  String first=mvc.perform(post("/api/v1/auth/challenges").header("Authorization","Bearer "+token).contentType("application/json").content(challengeBody)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+  UUID challenge=UUID.fromString(json.readTree(first).get("challengeId").asText());String path="/api/v1/student/order-bindings";
+  String bad=codes.get(challenge).equals("999999")?"888888":"999999";
+  for(int n=0;n<5;n++)mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("orderNo",number,"challengeId",challenge,"code",bad)))).andExpect(status().isUnauthorized());
+  assertEquals(5,db.queryForObject("SELECT attempts FROM order_binding_challenge WHERE id=?",Integer.class,challenge));
+  String failureKey=UUID.randomUUID().toString();String failedBody=json.writeValueAsString(Map.of("orderNo",number,"challengeId",challenge,"code",bad));
+  for(int n=0;n<2;n++)mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",failureKey).contentType("application/json").content(failedBody)).andExpect(status().isUnauthorized()).andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+
+  mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("orderNo",number,"challengeId",challenge,"code",codes.get(challenge))))).andExpect(status().isUnauthorized());
+  String second=mvc.perform(post("/api/v1/auth/challenges").header("Authorization","Bearer "+token).contentType("application/json").content(challengeBody)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+  UUID fresh=UUID.fromString(json.readTree(second).get("challengeId").asText());String binding=json.writeValueAsString(Map.of("orderNo",number,"challengeId",fresh,"code",codes.get(fresh)));
+  mvc.perform(post(path).header("Authorization","Bearer "+otherToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
+  var start=new java.util.concurrent.CountDownLatch(1);String key=UUID.randomUUID().toString();
+  try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+   java.util.concurrent.Callable<Integer> call=()->{start.await();return mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",key).contentType("application/json").content(binding)).andReturn().getResponse().getStatus();};
+   var a=pool.submit(call);var b=pool.submit(call);start.countDown();assertEquals(200,a.get());assertEquals(200,b.get());
+  }
+  assertEquals(student,db.queryForObject("SELECT student_id FROM software_order WHERE id=?",UUID.class,order));
+  assertEquals(2L,db.queryForObject("SELECT version FROM software_order WHERE id=?",Long.class,order));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM audit_event WHERE resource_id=? AND action='BOUND'",Integer.class,order));
+  assertEquals("CONSUMED",db.queryForObject("SELECT state FROM order_binding_challenge WHERE id=?",String.class,fresh));
+  mvc.perform(get("/api/v1/student/orders/"+order).header("Authorization","Bearer "+token)).andExpect(status().isOk());
+  mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
+ }
+
+ @Test void realMinioSignedUploadIntegrityAndPrivateCopy() throws Exception {
+  var target=new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE",System.getenv("ZX_S3_ENDPOINT"),System.getenv("ZX_S3_REGION"),"zx-quarantine-private","local-minio");
+  String prefix="zx-test/"+UUID.randomUUID(),key=prefix+"/upload",finalKey=prefix+"/private";
+  byte[] data="知项独立对象存储协议验证".getBytes(java.nio.charset.StandardCharsets.UTF_8);String sha=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(data));
+  var client=java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NEVER).build();
+  cn.zhixiang.platform.storage.ObjectStorage.Metadata original=null,copy=null;
+  try {
+   var grant=storage.upload(target,key,data.length,"text/plain",sha);assertFalse(grant.toString().contains("X-Amz"));
+   var request=java.net.http.HttpRequest.newBuilder(java.net.URI.create(grant.url())).PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(data));
+   grant.headers().forEach((name,value)->{if(!name.equalsIgnoreCase("Content-Length"))request.header(name,value);});
+   assertEquals(200,client.send(request.build(),java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode());
+   original=storage.stat(target,key);assertEquals(data.length,original.size());assertEquals(sha,storage.sha256(target,key,original));
+   var badRequest=java.net.http.HttpRequest.newBuilder(java.net.URI.create(grant.url())).PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(new byte[data.length]));
+   grant.headers().forEach((name,value)->{if(!name.equalsIgnoreCase("Content-Length"))badRequest.header(name,value);});
+   int badStatus=client.send(badRequest.build(),java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode();assertTrue(badStatus==400||badStatus==403);
+   copy=storage.promote(target,key,original,finalKey);assertEquals(sha,storage.sha256(target,finalKey,copy));
+   var anonymous=java.net.http.HttpRequest.newBuilder(java.net.URI.create(target.endpoint()+"/"+target.bucket()+"/"+finalKey)).GET().build();
+   assertEquals(403,client.send(anonymous,java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode());
+   var download=storage.download(target,finalKey,copy.versionId());
+   var bytes=client.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(download.url())).GET().build(),java.net.http.HttpResponse.BodyHandlers.ofByteArray());assertEquals(200,bytes.statusCode());assertArrayEquals(data,bytes.body());
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->storage.stat(new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE","https://untrusted.invalid",target.region(),target.bucket(),"local-minio"),key));
+  } finally {if(copy!=null)storage.remove(target,finalKey,copy.versionId());if(original!=null)storage.remove(target,key,original.versionId());}
+ }
+
+ @Test void projectOrderTransitionScopeAndConcurrentMilestoneWeights() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  UUID admin2=UUID.randomUUID();String token2=UUID.randomUUID().toString();seed(admin2,"admin",token2);db.update("INSERT INTO user_role VALUES(?,?)",admin2,superRole);
+  try {
+   UUID school=UUID.randomUUID(),major=UUID.randomUUID(),student=UUID.randomUUID();String st=UUID.randomUUID().toString();seed(student,"student",st);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+   db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'项目院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+   db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'项目专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+   var orderBody=new HashMap<String,Object>(Map.of("title","项目订单","orderNo","PROJECT-"+UUID.randomUUID(),"studentPhone","13812341111","amount","100.00","currency","CNY","packageCode","STANDARD","source","MANUAL","schoolId",school,"majorId",major));orderBody.put("partnerId",null);
+   String order=json.readTree(mvc.perform(post("/api/v1/admin/orders").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(orderBody))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   String path="/api/v1/admin/projects",date=java.time.LocalDate.now().plusDays(30).toString();var body=Map.of("orderId",order,"title","项目题目","requirements","服务端维护的项目需求","deliveryDate",date);
+   mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   mvc.perform(post("/api/v1/admin/orders/"+order+"/transition").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"action\":\"CONFIRM\",\"reason\":\"已核实资料\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.receiptStatus").value("UNCONFIRMED"));
+   String project=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isConflict());
+   mvc.perform(get("/api/v1/student/projects/"+project).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+   UUID partner=UUID.randomUUID();String partnerAccess=UUID.randomUUID().toString();seed(partner,"partner",partnerAccess);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000003')",partner);
+   mvc.perform(get("/api/v1/partner/projects/"+project+"/progress").header("Authorization","Bearer "+partnerAccess)).andExpect(status().isNotFound());
+   db.update("UPDATE software_order SET partner_id=? WHERE id=?",partner,UUID.fromString(order));
+   mvc.perform(get("/api/v1/partner/projects/"+project+"/progress").header("Authorization","Bearer "+partnerAccess)).andExpect(status().isOk()).andExpect(jsonPath("$.requirements").doesNotExist()).andExpect(jsonPath("$.milestones").isArray());
+   mvc.perform(get("/api/v1/partner/projects").header("Authorization","Bearer "+partnerAccess).param("q","项目题目")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].requirements").doesNotExist());
+   // 绑定功能由另一完整挑战测试验证；此处仅建立项目可见性夹具。
+   db.update("UPDATE software_order SET student_id=? WHERE id=?",student,UUID.fromString(order));
+   mvc.perform(get("/api/v1/student/projects/"+project).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.progress").value(0));
+   mvc.perform(post("/api/v1/admin/orders/"+order+"/transition").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"action\":\"ACTIVATE\",\"reason\":\"测试缺少收款的拒绝\"}")).andExpect(status().isUnprocessableEntity());
+   String milestones=path+"/"+project+"/milestones";var start=new java.util.concurrent.CountDownLatch(1);
+   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    var tasks=new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+    for(String token:List.of(adminToken,token2))tasks.add(pool.submit(()->{start.await();return mvc.perform(post(milestones).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("name",UUID.randomUUID().toString(),"dueDate",date,"weight",60,"completed",true)))).andReturn().getResponse().getStatus();}));
+    start.countDown();var statuses=new java.util.ArrayList<Integer>();for(var f:tasks)statuses.add(f.get());java.util.Collections.sort(statuses);assertEquals(List.of(201,422),statuses);
+   }
+   mvc.perform(get(path+"/"+project).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.progress").value(60)).andExpect(jsonPath("$.version").value(2));
+   mvc.perform(put(path+"/"+project).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isPreconditionFailed());
+   var list=mvc.perform(get(milestones).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andReturn().getResponse();String mid=json.readTree(list.getContentAsString()).get("items").get(0).get("id").asText();
+   mvc.perform(delete("/api/v1/admin/milestones/"+mid).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
+   mvc.perform(get("/api/v1/student/projects/"+project).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.progress").value(0));
+  } finally {db.update("DELETE FROM user_role WHERE user_id IN (?,?) AND role_id=?",adminId,admin2,superRole);}
  }
 }

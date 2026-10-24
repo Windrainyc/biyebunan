@@ -62,4 +62,14 @@ public class AdminOrderController {
  @PreAuthorize("hasAuthority('post_admin_orders_id_assignment')")
  @PostMapping("/{id}/assignment")
  public ResponseEntity<String> assign(@PathVariable UUID id,@Valid @RequestBody OrderDtos.Assignment w,@RequestHeader("If-Match") String match,@RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal Actor actor){long v=Versions.parse(match);return writes.execute(actor.id(),"POST","/api/v1/admin/orders/"+id+"/assignment",key,List.of(v,w),()->{var result=service.assign(id,v,w,actor);return ResponseEntity.ok().eTag(Versions.etag(result.version())).body(result);});}
+ /** 按业务状态机核实与流转订单。
+ * @param id 订单
+ * @param w 动作
+ * @param match 期望版本
+ * @param key 幂等键
+ * @param actor 管理员
+ * @return 订单 */
+ @PreAuthorize("hasAuthority('post_admin_orders_id_transition')")
+ @PostMapping("/{id}/transition")
+ public ResponseEntity<String> transition(@PathVariable UUID id,@Valid @RequestBody OrderDtos.Transition w,@RequestHeader("If-Match") String match,@RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal Actor actor){long v=Versions.parse(match);return writes.execute(actor.id(),"POST","/api/v1/admin/orders/"+id+"/transition",key,List.of(v,w),()->{var result=service.transition(id,v,w,actor);return ResponseEntity.ok().eTag(Versions.etag(result.version())).body(result);});}
 }

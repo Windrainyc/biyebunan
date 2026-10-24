@@ -2,9 +2,9 @@
 
 开发中的项目答疑平台，Java21、Spring Boot4.0.8、MyBatis、PostgreSQL，复用独立Redis/RabbitMQ/MinIO环境。当前实现认证与权限、院校专业、会员、菜单、知识分类标签、模型价格密钥、存储域名配置、订单草稿及数据范围、outbox发布。整个后端尚未完成。
 
-[开发进度与接续](docs/开发进度.md) · [接口覆盖](docs/接口实现覆盖矩阵.md) · [本轮验证](docs/本轮验证-20261024晚.md) · [初始化管理员](docs/管理员初始化与邀请.md)
+[开发进度与接续](docs/开发进度.md) · [接口覆盖](docs/接口实现覆盖矩阵.md) · [本轮验证](docs/本轮验证-20261025凌晨.md) · [初始化管理员](docs/管理员初始化与邀请.md)
 
-截至2026-10-24晚，30项完整本地测试通过，117/243接口已映射；本地V1–V15迁移完成，0.3.0-dev镜像实际运行readiness UP。测试账户仅存在于隔离schema，正式环境没有默认账户。镜像验证容器已经停止，中间件保留。
+截至2026-10-25凌晨，33项完整本地测试通过，132/243接口已映射；本地V1–V17迁移完成，0.4.0-dev镜像实际运行readiness UP。测试账户仅存在于隔离schema，正式环境没有默认账户。镜像验证容器已经停止，中间件保留。
 
 ## 本地运行
 
@@ -18,8 +18,8 @@ python3 scripts/run-local.py worker
 python3 scripts/run-local.py test
 ```
 
-API为127.0.0.1:18080。脚本仅从受保护文件读取凭证，不将凭证写入仓库。Docker构建用`docker --context colima-zhixiang build -t zhixiang/platform:0.3.0-dev .`，随后运行`python3 scripts/verify-container.py`验证并清理自身容器。
+API为127.0.0.1:18080。脚本仅从受保护文件读取凭证，不将凭证写入仓库。Docker构建用`docker --context colima-zhixiang build -t zhixiang/platform:0.4.0-dev .`，随后运行`python3 scripts/verify-container.py`验证并清理自身容器。
 
-尚缺订单归属绑定/收款/状态流转、项目交付、实际对象存储适配、知识检索、模型SSE与账务、论坛及统计等。保存模型/存储/域名配置不代表对应外部服务已验证或部署。
+已接入订单一次性绑定、项目主体/里程碑、中介进度摘要和真实MinIO端口。尚缺资产上传生命周期、收款/进行中取消补偿、项目阶段/验收/交付、知识检索、模型SSE与账务、论坛及统计等。保存模型/存储/域名配置不代表对应外部服务已验证或部署。
 
 [Spring Boot系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html) · [MyBatis兼容范围](https://github.com/mybatis/spring-boot-starter)。运行时镜像锁定digest；未实施生产多节点部署。

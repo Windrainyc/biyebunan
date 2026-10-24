@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.4-development
+  version: 1.0.5-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -8621,11 +8621,6 @@ paths:
           type: string
           description: ''
           maxLength: 100
-      - name: status
-        in: query
-        required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
       - name: sort
         in: query
         required: false
@@ -8955,11 +8950,6 @@ paths:
           type: string
           description: ''
           maxLength: 100
-      - name: status
-        in: query
-        required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
       - name: sort
         in: query
         required: false
@@ -15641,6 +15631,7 @@ components:
       - title
       - requirements
       - deliveryDate
+      description: 一个CONFIRMED/ACTIVE订单最多一个项目，订单不可转移；交付日期不可早于已有里程碑。
     Project:
       type: object
       additionalProperties: false
@@ -15706,6 +15697,7 @@ components:
       - dueDate
       - weight
       - completed
+      description: 同项目权重总和最多100，完成权重之和为进度；所有写入锁定父项目并递增项目版本。日期不晚于项目交付日，DONE项目不可修改。
     Milestone:
       type: object
       additionalProperties: false
@@ -16667,6 +16659,7 @@ components:
       required:
       - phone
       - purpose
+      description: BIND_ORDER必须携带已登录学生身份与orderNo。手机号须同时匹配已验证学生账户和订单预留手机号；仅CONFIRMED/ACTIVE订单可发起。普通挑战不可用于绑定。
     Challenge:
       type: object
       additionalProperties: false
@@ -16711,6 +16704,7 @@ components:
       - orderNo
       - challengeId
       - code
+      description: 一次性绑定当前学生，挑战固定订单、学生和手机号，5次错误后失效。失败返回problem+json并提交错误次数。相同幂等键重放原结果，修改验证码须换新幂等键。
     Reason:
       type: object
       additionalProperties: false
@@ -16756,6 +16750,7 @@ components:
       required:
       - action
       - reason
+      description: CONFIRM为人工核实，不代表收款。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。直接CANCEL仅DRAFT/CONFIRMED；ACTIVE取消补偿流程尚未实现。
     Receipt:
       type: object
       additionalProperties: false

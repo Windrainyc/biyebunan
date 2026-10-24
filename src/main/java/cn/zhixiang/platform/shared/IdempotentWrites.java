@@ -61,7 +61,7 @@ public class IdempotentWrites {
     private static ResponseEntity<String> response(int status,String body,String etag) {
         var builder=ResponseEntity.status(status).cacheControl(org.springframework.http.CacheControl.noStore());
         if(etag!=null) builder.eTag(etag);
-        if(body!=null) builder.contentType(org.springframework.http.MediaType.APPLICATION_JSON);
+        if(body!=null) builder.contentType(status>=400?org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON:org.springframework.http.MediaType.APPLICATION_JSON);
         return builder.body(body);
     }
     private static String hash(String value) {

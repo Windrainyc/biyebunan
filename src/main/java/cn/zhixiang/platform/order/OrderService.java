@@ -79,4 +79,24 @@ public class OrderService {
  private void conflict(){throw new BusinessException(412,"VERSION_CONFLICT","订单已更新，请刷新重试");}
  private void audit(UUID id,UUID actor,String action,String reason){writes.auditReason(UUID.randomUUID(),actor,action,"software_order",id,reason);writes.event(UUID.randomUUID(),id,"software_order."+action,"{\"id\":\""+id+"\"}");}
  private OrderDtos.View view(OrderMapper.Row r){return new OrderDtos.View(r.id(),r.version(),r.createdAt(),r.updatedAt(),r.orderNo(),r.title(),r.studentId(),r.partnerId(),r.amount(),r.currency(),r.status(),r.receiptStatus(),r.packageCode(),r.schoolId(),r.majorId(),r.source(),r.note());}
+ /** 按状态机流转；确认是人工核实，不能等同收款。进行中取消需后续补偿流程。
+ * @param id 订单
+ * @param version CAS版本
+ * @param w 动作及原因
+ * @param actor 管理员
+ * @return 新状态
+ * @throws BusinessException 状态前置条件不满足 */
+ @Transactional(rollbackFor=Exception.class)
+ public OrderDtos.View transition(UUID id,long version,OrderDtos.Transition w,Actor actor){
+  platform(actor,"admin");var old=checked(id,version,actor);String next=switch(w.action()){
+   case "CONFIRM"->{requireState(old,"DRAFT");yield "CONFIRMED";}
+   case "ACTIVATE"->{requireState(old,"CONFIRMED");if(old.studentId()==null||!old.receiptStatus().equals("CONFIRMED")||mapper.projectStage(id)==null)throw new BusinessException(422,"ORDER_ACTIVATION_BLOCKED","需完成学生绑定、收款确认并建立项目后才能启动");yield "ACTIVE";}
+   case "COMPLETE"->{requireState(old,"ACTIVE");if(!"DONE".equals(mapper.projectStage(id)))throw new BusinessException(422,"PROJECT_NOT_ACCEPTED","项目尚未验收完成");yield "COMPLETED";}
+   case "CANCEL"->{if(!java.util.Set.of("DRAFT","CONFIRMED").contains(old.status()))throw new BusinessException(422,"ORDER_CANCEL_BLOCKED","仅草稿或未启动订单可直接取消，进行中订单需要补偿流程");yield "CANCELLED";}
+   case "ARCHIVE"->{requireState(old,"COMPLETED");yield "ARCHIVED";}
+   default->throw new BusinessException(422,"ORDER_ACTION_INVALID","订单动作无效");
+  };
+  if(mapper.transition(id,version,next,actor.id())!=1)conflict();audit(id,actor.id(),"TRANSITION_"+next,w.reason());return get(id,actor);
+ }
+ private void requireState(OrderMapper.Row r,String expected){if(!r.status().equals(expected))throw new BusinessException(422,"ORDER_STATE_INVALID","订单状态不允许此动作");}
 }

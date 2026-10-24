@@ -11,15 +11,16 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
- private final VerificationService verification;private final AuthService service; private final Map<String,String> origins;
+ private final OrderChallengePort orderChallenges;private final VerificationService verification;private final AuthService service; private final Map<String,String> origins;
  /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param orderChallenges 订单归属挑战端口
  * @param verification 手机验证用例
  * @param service 会话用例
  * @param student 学生允许来源
  * @param partner 中介来源
  * @param admin 管理来源 */
- public AuthController(VerificationService verification,AuthService service,@Value("${ZX_STUDENT_ORIGIN:https://student.invalid}") String student,@Value("${ZX_PARTNER_ORIGIN:https://partner.invalid}") String partner,@Value("${ZX_ADMIN_ORIGIN:https://admin.invalid}") String admin) {
-  this.verification=verification;this.service=service;this.origins=Map.of("student",student,"partner",partner,"admin",admin);
+ public AuthController(OrderChallengePort orderChallenges,VerificationService verification,AuthService service,@Value("${ZX_STUDENT_ORIGIN:https://student.invalid}") String student,@Value("${ZX_PARTNER_ORIGIN:https://partner.invalid}") String partner,@Value("${ZX_ADMIN_ORIGIN:https://admin.invalid}") String admin) {
+  this.orderChallenges=orderChallenges;this.verification=verification;this.service=service;this.origins=Map.of("student",student,"partner",partner,"admin",admin);
  }
  /** 返回会话及安全 Cookie。
  * @param platform 路径平台
@@ -48,12 +49,13 @@ public class AuthController {
   return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE,refreshCookie(platform,"",0),csrfCookie(platform,"",0)).build();
  }
  /** 返回202挑战，短信失败返回503。
+ * @param actor 可选认证身份，订单用途必须为学生
  * @param input 验证材料
  * @param request 请求来源
  * @return 202挑战，短信失败返回503 */
  @PostMapping("/challenges")
- public ResponseEntity<VerificationDtos.Challenge> challenge(@Valid @RequestBody VerificationDtos.ChallengeRequest input,HttpServletRequest request) {
-  return ResponseEntity.accepted().cacheControl(CacheControl.noStore()).body(verification.challenge(input,request.getRemoteAddr()));
+ public ResponseEntity<VerificationDtos.Challenge> challenge(@Valid @RequestBody VerificationDtos.ChallengeRequest input,HttpServletRequest request,@AuthenticationPrincipal Actor actor) {
+  return ResponseEntity.accepted().cacheControl(CacheControl.noStore()).body(input.purpose()==VerificationDtos.Purpose.BIND_ORDER?orderChallenges.challenge(input,actor,request.getRemoteAddr()):verification.challenge(input,request.getRemoteAddr()));
  }
  /** 返回初始会话，不接受客户端角色。
  * @param input 学生注册材料
