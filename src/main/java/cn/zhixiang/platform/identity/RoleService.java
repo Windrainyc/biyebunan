@@ -7,18 +7,22 @@ import org.springframework.transaction.annotation.*;
 @Service
 public class RoleService {
  private final RoleMapper roles;private final IdentityMapper identity;private final WriteMapper writes;
- /** @param roles 角色端口
+ /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param roles 角色端口
   * @param identity 操作者当前权限
   * @param writes 审计事件端口 */
  public RoleService(RoleMapper roles,IdentityMapper identity,WriteMapper writes){this.roles=roles;this.identity=identity;this.writes=writes;}
- /** @param q 分页条件
+ /** 返回角色分页。
+ * @param q 分页条件
   * @return 角色分页 */
  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
  public PageResult<RoleDtos.View> list(PageQuery q){return new PageResult<>(roles.list(q).stream().map(this::view).toList(),q.page(),q.size(),roles.count(q));}
- /** @param id 标识
+ /** 返回角色详情。
+ * @param id 标识
   * @return 角色详情 */
  public RoleDtos.View get(UUID id){var r=roles.get(id);if(r==null)throw missing();return view(r);}
- /** @param q 分页搜索
+ /** 返回仅操作者可授予的权限目录。
+ * @param q 分页搜索
   * @param actor 当前身份
   * @return 仅操作者可授予的权限目录 */
  public PageResult<RoleDtos.Permission> permissions(PageQuery q,UUID actor){
@@ -28,12 +32,14 @@ public class RoleService {
   int from=Math.min(q.offset(),values.size()),to=Math.min(from+q.size(),values.size());
   return new PageResult<>(values.subList(from,to),q.page(),q.size(),values.size());
  }
- /** @param w 新角色
+ /** 返回创建结果。
+ * @param w 新角色
   * @param actor 操作者
   * @return 创建结果 */
  @Transactional(rollbackFor=Exception.class)
  public RoleDtos.View create(RoleDtos.Write w,UUID actor){roles.lockIam();validate(w,actor);UUID id=UUID.randomUUID();roles.insert(id,w);setPermissions(id,w.permissionCodes());audit(id,actor,"CREATED");return get(id);}
- /** @param id 标识
+ /** 返回更新角色。
+ * @param id 标识
   * @param version 期望版本
   * @param w 完整新值
   * @param actor 操作者
@@ -44,7 +50,8 @@ public class RoleService {
   if(!old.platform().equals(w.platform()))throw new BusinessException(422,"INVALID_TRANSITION","角色平台创建后不可更改");
   if(roles.update(id,version,w)!=1)throw conflict();setPermissions(id,w.permissionCodes());roles.invalidate(id);audit(id,actor,"UPDATED");return get(id);
  }
- /** @param id 标识
+ /** 返回启停后角色。
+ * @param id 标识
   * @param version 期望版本
   * @param status 目标状态
   * @param actor 操作者
@@ -54,7 +61,8 @@ public class RoleService {
   roles.lockIam();var old=mutable(id,version);checkManage(id,actor);if(old.status().equals(status))return view(old);
   return update(id,version,new RoleDtos.Write(old.name(),old.code(),old.platform(),old.dataScope(),roles.codes(id),status),actor);
  }
- /** @param id 标识
+ /** 删除未被引用的资源，调用方必须先完成权限与版本检查。
+ * @param id 标识
   * @param version 期望版本
   * @param actor 操作者；有用户引用则数据库拒绝删除 */
  @Transactional(rollbackFor=Exception.class)

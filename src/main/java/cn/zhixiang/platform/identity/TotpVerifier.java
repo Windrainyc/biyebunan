@@ -11,11 +11,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class TotpVerifier {
  private final SecretVault vault;private final Path root;
- /**
+ /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param vault 加密秘密仓库
  * @param directory 受保护密钥目录；生产由 secret volume 注入，不接受用户路径 */
  public TotpVerifier(@Value("${ZX_MFA_SECRET_DIR:secrets/mfa}") String directory,SecretVault vault){this.vault=vault;root=Path.of(directory).toAbsolutePath().normalize();}
- /**
+ /** 返回匹配时间步，后续数据库必须原子防重放。
  * @param reference UUID 形式的密钥引用
  * @param code 六位验证码
  * @return 匹配时间步，后续数据库必须原子防重放 */
@@ -36,7 +36,7 @@ public class TotpVerifier {
   } catch(java.io.IOException|IllegalArgumentException e) {throw new BusinessException(503,"DEPENDENCY_UNAVAILABLE","MFA 密钥不可用");}
   throw new BusinessException(401,"MFA_INVALID","二次验证码无效");
  }
- /**
+ /** 返回六位动态密码。
  * @param key 原始种子字节
  * @param step Unix秒数除以30
  * @return 六位动态密码 */

@@ -11,10 +11,12 @@ import org.springframework.http.ResponseEntity;
 @RequestMapping("/api/v1/admin/users")
 public class UserController {
  private final UserService users;private final IdempotentWrites writes;
- /** @param users 用户用例
+ /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param users 用户用例
   * @param writes 幂等事务 */
  public UserController(UserService users,IdempotentWrites writes){this.users=users;this.writes=writes;}
- /** @param page 页码
+ /** 返回脱敏用户页。
+ * @param page 页码
   * @param size 页大小
   * @param q 昵称搜索
   * @param status 状态
@@ -24,17 +26,20 @@ public class UserController {
   * @return 脱敏用户页 */
  @GetMapping @PreAuthorize("hasAuthority('get_admin_users')")
  public PageResult<AuthDtos.User> list(@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size,@RequestParam(required=false) String q,@RequestParam(required=false) String status,@RequestParam(required=false) String sort,@RequestParam(required=false) String platform,@RequestParam(required=false) UUID roleId){return users.list(new PageQuery(page,size,q,status,sort),platform,roleId);}
- /** @param id 用户
+ /** 返回详情与ETag。
+ * @param id 用户
   * @return 详情与ETag */
  @GetMapping("/{id}") @PreAuthorize("hasAuthority('get_admin_users_id')")
  public ResponseEntity<AuthDtos.User> get(@PathVariable UUID id){var v=users.get(id);return ResponseEntity.ok().eTag(Versions.etag(v.version())).body(v);}
- /** @param w 待激活账户
+ /** 返回201账户。
+ * @param w 待激活账户
   * @param key 幂等键
   * @param actor 当前管理员
   * @return 201账户 */
  @PostMapping @PreAuthorize("hasAuthority('post_admin_users')")
  public ResponseEntity<String> create(@Valid @RequestBody UserDtos.Create w,@RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal Actor actor){return writes.execute(actor.id(),"POST","/api/v1/admin/users",key,w,()->{var v=users.create(w,actor.id());return ResponseEntity.status(201).eTag(Versions.etag(v.version())).body(v);});}
- /** @param id 用户
+ /** 返回更新结果。
+ * @param id 用户
   * @param w 完整新资料
   * @param match 版本
   * @param key 幂等键
@@ -42,7 +47,8 @@ public class UserController {
   * @return 更新结果 */
  @PutMapping("/{id}") @PreAuthorize("hasAuthority('put_admin_users_id')")
  public ResponseEntity<String> update(@PathVariable UUID id,@Valid @RequestBody UserDtos.Write w,@RequestHeader("If-Match") String match,@RequestHeader("Idempotency-Key") String key,@AuthenticationPrincipal Actor actor){long v=Versions.parse(match);return writes.execute(actor.id(),"PUT","/api/v1/admin/users/"+id,key,List.of(v,w),()->{var r=users.update(id,v,w,actor.id());return ResponseEntity.ok().eTag(Versions.etag(r.version())).body(r);});}
- /** @param id 用户
+ /** 返回启停结果。
+ * @param id 用户
   * @param state 启停
   * @param match 版本
   * @param key 幂等键

@@ -14,14 +14,14 @@ public class AuthService {
  private final Passwords passwords;
  private final String dummy;
  private final SecureRandom random=new SecureRandom();
- /**
+ /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param mapper 认证数据库访问
  * @param digester 摘要
  * @param tx 短事务执行器
  * @param mfa 管理员二次认证
  * @param passwords 密码服务 */
  public AuthService(AuthMapper mapper,TokenDigester digester,TransactionTemplate tx,TotpVerifier mfa,Passwords passwords){this.passwords=passwords;this.dummy=passwords.encode("dummy-never-a-real-user-password");this.mfa=mfa;this.mapper=mapper;this.digester=digester;this.tx=tx;}
- /**
+ /** 返回会话与刷新值。
  * @param platform 路径平台
  * @param input 登录请求
  * @param ip 直连来源，不信任任意转发头
@@ -45,7 +45,7 @@ public class AuthService {
    return issue(current,UUID.randomUUID(),OffsetDateTime.now(ZoneOffset.UTC).plusDays(7));
   });
  }
- /**
+ /** 返回轮换的新会话。
  * @param platform 路径平台
  * @param refresh HttpOnly Cookie
  * @param csrf 双提交校验后的请求值
@@ -65,14 +65,14 @@ public class AuthService {
   if(outcome.replay())throw new BusinessException(401,"TOKEN_REPLAY","刷新令牌重复使用，请重新登录");
   return outcome.issued();
  }
- /**
+ /** 执行参数所描述的业务变更，异常由统一错误处理器转换。
  * @param platform 路径平台
  * @param refresh 刷新 Cookie
  * @param csrf CSRF值；登出整个令牌族 */
  public void logout(String platform,String refresh,String csrf) {
   platform(platform);tx.executeWithoutResult(s->{var old=locate(platform,refresh,csrf);mapper.revoke(old.familyId());});
  }
- /**
+ /** 返回当前用户 DTO。
  * @param actor 已验证身份
  * @return 当前用户 DTO */
  public AuthDtos.User me(Actor actor) {

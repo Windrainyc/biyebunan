@@ -6,18 +6,18 @@ import java.util.UUID;
 public final class SchoolDtos {
  private SchoolDtos() {}
  /** 启停状态；停用保留历史引用。 */
- public enum Status { ENABLED, DISABLED }
+ public enum Status { /** 可供新业务选择。 */ ENABLED, /** 停用并保留历史引用。 */ DISABLED }
  
- /**
+ /** 已验证业务写入请求，字段不含服务端生成的标识或版本。
  * @param name 展示名称
  * @param code 稳定代码
  * @param region 院校地区
  * @param status 启停状态 */
  public record Write(@NotBlank @Size(max=200) String name,@NotBlank @Size(max=200) String code,@NotBlank @Size(max=200) String region,@NotNull Status status) {}
- /**
+ /** 资源启停请求。
  * @param status 目标启停状态 */
  public record StatusWrite(@NotNull Status status) {}
- /**
+ /** 只读响应数据，版本及审计字段由服务端生成。
  * @param id 只读标识
  * @param version 乐观锁版本
  * @param createdAt UTC 创建时间

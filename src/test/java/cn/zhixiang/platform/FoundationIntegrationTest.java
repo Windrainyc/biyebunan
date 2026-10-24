@@ -298,4 +298,97 @@ class FoundationIntegrationTest {
   assertTrue(rows.size()>30);
  }
 
+ @Test void membershipSnapshotsVersioningAndRevocation() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   UUID student=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(student,"student",token);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+   String body=json.writeValueAsString(Map.of("name","标准答疑会员","code",UUID.randomUUID().toString(),"durationDays",30,"monthlyTokenQuota",100000,"monthlyAmountLimit","20.123456","status","ENABLED"));
+   var plan=mvc.perform(post("/api/v1/admin/membership-plans").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.monthlyAmountLimit").value("20.123456")).andReturn().getResponse();
+   UUID planId=UUID.fromString(json.readTree(plan.getContentAsString()).get("id").asText());
+   String grant=json.writeValueAsString(Map.of("planId",planId,"startsAt",java.time.OffsetDateTime.now().minusMinutes(1).toString(),"reason","测试发放"));String path="/api/v1/admin/users/"+student+"/memberships",key=UUID.randomUUID().toString();
+   var member=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(grant)).andExpect(status().isCreated()).andExpect(jsonPath("$.state").value("ACTIVE")).andReturn().getResponse();
+   UUID memberId=UUID.fromString(json.readTree(member.getContentAsString()).get("id").asText());UUID originalRevision=db.queryForObject("SELECT plan_version_id FROM membership WHERE id=?",UUID.class,memberId);
+   mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(grant)).andExpect(status().isCreated()).andExpect(content().json(member.getContentAsString()));
+   mvc.perform(get("/api/v1/student/membership").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(memberId.toString()));
+   mvc.perform(put("/api/v1/admin/membership-plans/"+planId).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body.replace("100000","200000"))).andExpect(status().isUnprocessableEntity());
+   String revision=json.writeValueAsString(Map.of("durationDays",60,"monthlyTokenQuota",200000,"monthlyAmountLimit","30.5","effectiveFrom",java.time.OffsetDateTime.now().plusDays(1).toString()));
+   mvc.perform(post("/api/v1/admin/membership-plans/"+planId+"/versions").header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(revision)).andExpect(status().isCreated()).andExpect(jsonPath("$.version").value(2));
+   assertEquals(originalRevision,db.queryForObject("SELECT plan_version_id FROM membership WHERE id=?",UUID.class,memberId));
+   mvc.perform(get("/api/v1/admin/membership-plans/"+planId).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.monthlyTokenQuota").value(100000)).andExpect(header().string("ETag","\"2\""));
+   mvc.perform(get("/api/v1/admin/membership-plans/"+planId+"/versions").header("Authorization","Bearer "+adminToken).param("size","1").param("sort","createdAt:asc")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2)).andExpect(jsonPath("$.items[0].version").value(1));
+   mvc.perform(delete("/api/v1/admin/membership-plans/"+planId).header("Authorization","Bearer "+adminToken).header("If-Match","\"2\"").header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isConflict());
+   mvc.perform(post("/api/v1/admin/memberships/"+memberId+"/revoke").header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"撤销测试\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("REVOKED"));
+   mvc.perform(get("/api/v1/student/membership").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+   mvc.perform(get(path).header("Authorization","Bearer "+adminToken).param("status","REVOKED").param("q","标准答疑")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   assertEquals("撤销测试",db.queryForObject("SELECT detail->>'reason' FROM audit_event WHERE resource_id=? AND action='REVOKED'",String.class,memberId));
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+ @Test void concurrentMembershipGrantsNeverOverlapAndScheduledIsNotActive() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   UUID student=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(student,"student",token);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+   String body=json.writeValueAsString(Map.of("name","未来会员","code",UUID.randomUUID().toString(),"durationDays",10,"monthlyTokenQuota",1000,"monthlyAmountLimit","1","status","ENABLED"));
+   var response=mvc.perform(post("/api/v1/admin/membership-plans").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isCreated()).andReturn().getResponse();
+   UUID plan=UUID.fromString(json.readTree(response.getContentAsString()).get("id").asText());String grant=json.writeValueAsString(Map.of("planId",plan,"startsAt",java.time.OffsetDateTime.now().plusDays(1).toString(),"reason","并发测试"));
+   var start=new java.util.concurrent.CountDownLatch(1);
+   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    java.util.concurrent.Callable<Integer> call=()->{start.await();return mvc.perform(post("/api/v1/admin/users/"+student+"/memberships").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(grant)).andReturn().getResponse().getStatus();};
+    var a=pool.submit(call);var b=pool.submit(call);start.countDown();assertEquals(Set.of(201,409),Set.of(a.get(10,java.util.concurrent.TimeUnit.SECONDS),b.get(10,java.util.concurrent.TimeUnit.SECONDS)));
+   }
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM membership WHERE user_id=?",Integer.class,student));
+   mvc.perform(get("/api/v1/admin/users/"+student+"/memberships").header("Authorization","Bearer "+adminToken).param("status","SCHEDULED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   mvc.perform(get("/api/v1/student/membership").header("Authorization","Bearer "+token)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/admin/membership-plans").header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void menuTreeScopePermissionFilteringAndCycleProtection() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   UUID student=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(student,"student",token);
+   UUID role=UUID.randomUUID();db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'student','SELF','ENABLED')",role,role.toString(),"菜单受限角色");db.update("INSERT INTO user_role VALUES(?,?)",student,role);
+   for(String permission:List.of("get_student_dictionaries_menus","get_student_membership"))db.update("INSERT INTO role_permission VALUES(?,?)",role,permission);
+   String unique=UUID.randomUUID().toString();Map<String,Object> root=new HashMap<>();root.put("name","会员入口");root.put("code",unique);root.put("platform","student");root.put("parentId",null);root.put("path","/membership-"+unique);root.put("permissionCode","get_student_membership");root.put("sortOrder",0);root.put("status","ENABLED");
+   var created=mvc.perform(post("/api/v1/admin/menus").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(root))).andExpect(status().isCreated()).andReturn().getResponse();
+   String parent=json.readTree(created.getContentAsString()).get("id").asText();Map<String,Object> child=new HashMap<>(root);child.put("name","需另一权限");child.put("code",unique+"child");child.put("path","/child-"+unique);child.put("parentId",parent);child.put("permissionCode","get_student_dictionaries_menus");
+   var childResponse=mvc.perform(post("/api/v1/admin/menus").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(child))).andExpect(status().isCreated()).andReturn().getResponse();String childId=json.readTree(childResponse.getContentAsString()).get("id").asText();
+   mvc.perform(get("/api/v1/student/dictionaries/menus").header("Authorization","Bearer "+token).param("q",unique)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+   root.put("parentId",childId);
+   mvc.perform(put("/api/v1/admin/menus/"+parent).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(root))).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("MENU_CYCLE"));
+   mvc.perform(post("/api/v1/admin/menus/"+parent+"/status").header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isConflict());
+   mvc.perform(delete("/api/v1/admin/menus/"+parent).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isConflict());
+   // 删除父项权限后，拥有子项权限也不能绕过整条祖先链。
+   db.update("DELETE FROM role_permission WHERE role_id=? AND permission_code='get_student_membership'",role);
+   mvc.perform(get("/api/v1/student/dictionaries/menus").header("Authorization","Bearer "+token).param("q",unique)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   child.put("permissionCode","menus:write");
+   mvc.perform(post("/api/v1/admin/menus").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(child))).andExpect(status().isUnprocessableEntity());
+   child.put("path","//evil.invalid");
+   mvc.perform(post("/api/v1/admin/menus").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(child))).andExpect(status().isBadRequest());
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void taxonomyCrudLiteralSearchAndTreeInvariants() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  try {
+   String code="tag_%_"+UUID.randomUUID();String input=json.writeValueAsString(Map.of("name","精确标签","code",code,"status","ENABLED"));
+   var tag=mvc.perform(post("/api/v1/admin/tags").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(input)).andExpect(status().isCreated()).andReturn().getResponse();String id=json.readTree(tag.getContentAsString()).get("id").asText();
+   mvc.perform(get("/api/v1/admin/tags").header("Authorization","Bearer "+adminToken).param("q",code)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   mvc.perform(post("/api/v1/admin/tags").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(input)).andExpect(status().isConflict());
+   mvc.perform(put("/api/v1/admin/tags/"+id).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(input.replace("精确标签","更新标签"))).andExpect(status().isOk()).andExpect(header().string("ETag","\"2\""));
+   mvc.perform(post("/api/v1/admin/tags/"+id+"/status").header("Authorization","Bearer "+adminToken).header("If-Match","\"2\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+   UUID student=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(student,"student",token);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+   mvc.perform(get("/api/v1/student/dictionaries/tags").header("Authorization","Bearer "+token).param("q",code)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(delete("/api/v1/admin/tags/"+id).header("Authorization","Bearer "+adminToken).header("If-Match","\"3\"").header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isNoContent());
+   Map<String,Object> root=new HashMap<>();root.put("name","知识根分类");root.put("code",UUID.randomUUID().toString());root.put("parentId",null);root.put("sortOrder",1);root.put("status","ENABLED");
+   var category=mvc.perform(post("/api/v1/admin/categories").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(root))).andExpect(status().isCreated()).andReturn().getResponse();String parent=json.readTree(category.getContentAsString()).get("id").asText();
+   Map<String,Object> child=new HashMap<>(root);child.put("parentId",parent);child.put("code",UUID.randomUUID().toString());
+   var createdChild=mvc.perform(post("/api/v1/admin/categories").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(child))).andExpect(status().isCreated()).andReturn().getResponse();String childId=json.readTree(createdChild.getContentAsString()).get("id").asText();
+   root.put("parentId",childId);
+   mvc.perform(put("/api/v1/admin/categories/"+parent).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(root))).andExpect(status().isUnprocessableEntity());
+   mvc.perform(delete("/api/v1/admin/categories/"+parent).header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isConflict());
+   mvc.perform(post("/api/v1/admin/categories/"+parent+"/status").header("Authorization","Bearer "+adminToken).header("If-Match","\"1\"").header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isConflict());
+   mvc.perform(get("/api/v1/student/dictionaries/categories").header("Authorization","Bearer "+token).param("status","DISABLED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
 }

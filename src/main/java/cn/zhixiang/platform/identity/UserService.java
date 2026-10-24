@@ -7,7 +7,8 @@ import java.util.*;
 @Service
 public class UserService {
  private final UserMapper users;private final AuthMapper accounts;private final RoleMapper roles;private final IdentityMapper identity;private final TokenDigester digester;private final Passwords passwords;private final WriteMapper writes;
- /** @param users 用户数据
+ /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param users 用户数据
   * @param accounts 账户锁
   * @param roles 角色目录
   * @param identity 当前权限
@@ -15,7 +16,8 @@ public class UserService {
   * @param passwords 密码摘要
   * @param writes 审计 */
  public UserService(UserMapper users,AuthMapper accounts,RoleMapper roles,IdentityMapper identity,TokenDigester digester,Passwords passwords,WriteMapper writes){this.users=users;this.accounts=accounts;this.roles=roles;this.identity=identity;this.digester=digester;this.passwords=passwords;this.writes=writes;}
- /** @param q 分页
+ /** 返回脱敏分页。
+ * @param q 分页
   * @param platform 平台筛选
   * @param roleId 角色筛选
   * @return 脱敏分页 */
@@ -24,10 +26,12 @@ public class UserService {
   if(platform!=null&&!Set.of("admin","student","partner").contains(platform))throw new BusinessException(400,"INVALID_FILTER","平台筛选无效");
   return new PageResult<>(users.list(q,platform,roleId).stream().map(this::view).toList(),q.page(),q.size(),users.count(q,platform,roleId));
  }
- /** @param id 账户
+ /** 返回脱敏详情。
+ * @param id 账户
   * @return 脱敏详情 */
  public AuthDtos.User get(UUID id){var a=users.get(id);if(a==null)throw missing();return view(a);}
- /** @param w 新账户
+ /** 返回禁用且待激活的账户。
+ * @param w 新账户
   * @param actor 操作者
   * @return 禁用且待激活的账户 */
  @Transactional(rollbackFor=Exception.class)
@@ -37,7 +41,8 @@ public class UserService {
   UUID id=UUID.randomUUID();users.insert(id,w,digester.digest("phone",w.phone()),w.phone().substring(0,3)+"****"+w.phone().substring(7),passwords.encode(UUID.randomUUID().toString()+UUID.randomUUID()));
   setRoles(id,w.roleIds());audit(id,actor,"CREATED");return get(id);
  }
- /** @param id 账户
+ /** 返回更新后的脱敏账户。
+ * @param id 账户
   * @param version 期望版本
   * @param w 新资料
   * @param actor 操作者
@@ -53,7 +58,8 @@ public class UserService {
    throw new BusinessException(409,"LAST_ADMIN_REQUIRED","不能停用或移除最后一个超级管理员");
   if(users.update(id,version,w)!=1)throw conflict();setRoles(id,w.roleIds());writes.auditReason(UUID.randomUUID(),actor,"UPDATED","user",id,w.reason());writes.event(UUID.randomUUID(),id,"user.UPDATED","{\"id\":\""+id+"\"}");return get(id);
  }
- /** @param id 账户
+ /** 返回启停结果。
+ * @param id 账户
   * @param version 版本
   * @param state 状态
   * @param actor 操作者

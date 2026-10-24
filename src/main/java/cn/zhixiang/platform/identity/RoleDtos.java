@@ -29,9 +29,11 @@ public final class RoleDtos {
   * @param status 状态
   */
  public record View(UUID id,long version,OffsetDateTime createdAt,OffsetDateTime updatedAt,String name,String code,String platform,String dataScope,List<String> permissionCodes,String status) {}
- /** @param status 目标启停状态 */
+ /** 模块数据记录，字段含义和取值约束见参数说明。
+ * @param status 目标启停状态 */
  public record State(@NotNull @Pattern(regexp="ENABLED|DISABLED") String status) {}
- /** @param code 权限代码
+ /** 模块数据记录，字段含义和取值约束见参数说明。
+ * @param code 权限代码
   * @param module 模块名称
   * @param description 权限含义 */
  public record Permission(String code,String module,String description) {}

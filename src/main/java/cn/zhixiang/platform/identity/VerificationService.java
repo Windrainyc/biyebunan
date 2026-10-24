@@ -13,7 +13,7 @@ public class VerificationService {
  private final TokenDigester digester;private final Passwords passwords;private final SmsGateway sms;
  private final TransactionTemplate tx;private final WriteMapper writes;private final String terms;
  private final SecureRandom random=new SecureRandom();
- /**
+ /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param mapper 挑战端口
  * @param accounts 账户端口
  * @param auth 会话签发
@@ -27,7 +27,7 @@ public class VerificationService {
  public VerificationService(VerificationMapper mapper,AuthMapper accounts,AuthService auth,TokenDigester digester,Passwords passwords,SmsGateway sms,TransactionTemplate tx,WriteMapper writes,@Value("${ZX_TERMS_VERSION:2026-10-01}") String terms){
   this.mapper=mapper;this.accounts=accounts;this.auth=auth;this.digester=digester;this.passwords=passwords;this.sms=sms;this.tx=tx;this.writes=writes;this.terms=terms;
  }
- /**
+ /** 返回供应商确认接收的挑战，不返回验证码。
  * @param input 发送请求
  * @param ip 直连来源IP
  * @return 供应商确认接收的挑战，不返回验证码 */
@@ -47,7 +47,7 @@ public class VerificationService {
   catch(RuntimeException e){mapper.sent(id,"FAILED");throw e;}
   return new VerificationDtos.Challenge(id,expiry,600);
  }
- /**
+ /** 返回新学生会话。
  * @param ip 来源IP
  * @param input 注册材料；挑战必须属于此手机
  * @return 新学生会话 */
@@ -65,7 +65,7 @@ public class VerificationService {
   });
   if(result==null)throw invalid();return result;
  }
- /**
+ /** 验证手机证明后修改密码，并撤销历史会话。
  * @param ip 来源IP
  * @param input 密码重置材料；任何平台只重置密码，不移除管理员MFA */
  public void reset(VerificationDtos.PasswordReset input,String ip) {

@@ -10,18 +10,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class SecretCipher {
  private final byte[] key;private final SecureRandom random=new SecureRandom();
- /** @param master 部署级秘密，所有副本一致；轮换需迁移历史密文 */
+ /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param master 部署级秘密，所有副本一致；轮换需迁移历史密文 */
  public SecretCipher(@Value("${ZX_AUTH_HMAC_KEY}") String master){
   if(master.length()<32)throw new IllegalArgumentException("密钥长度不足");
   try{Mac mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(master.getBytes(StandardCharsets.UTF_8),"HmacSHA256"));key=mac.doFinal("zhixiang/aes-gcm/v1".getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new IllegalStateException(e);}
  }
- /** @param purpose 固定用途/对象标识，防止密文跨对象替换
+ /** 返回v1加密信封。
+ * @param purpose 固定用途/对象标识，防止密文跨对象替换
   * @param plain 明文
   * @return v1加密信封 */
  public String encrypt(String purpose,String plain){
   try{byte[] nonce=new byte[12];random.nextBytes(nonce);Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,"AES"),new GCMParameterSpec(128,nonce));c.updateAAD(purpose.getBytes(StandardCharsets.UTF_8));return "v1:"+Base64.getEncoder().encodeToString(nonce)+":"+Base64.getEncoder().encodeToString(c.doFinal(plain.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException("秘密加密失败",e);}
  }
- /** @param purpose 加密时的用途/对象标识
+ /** 返回经认证的明文，不应写日志。
+ * @param purpose 加密时的用途/对象标识
   * @param envelope 密文信封
   * @return 经认证的明文，不应写日志 */
  public String decrypt(String purpose,String envelope){

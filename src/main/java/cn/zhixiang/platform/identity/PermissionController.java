@@ -7,9 +7,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 @RestController
 public class PermissionController {
  private final RoleService roles;
- /** @param roles 权限目录用例 */
+ /** 初始化模块组件，所需端口和配置由构造器注入。
+ * @param roles 权限目录用例 */
  public PermissionController(RoleService roles){this.roles=roles;}
- /** @param page 页码
+ /** 返回可授予权限页。
+ * @param page 页码
   * @param size 页大小
   * @param q 搜索代码或说明
   * @param status ENABLED或DISABLED

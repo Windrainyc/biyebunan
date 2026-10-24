@@ -10,13 +10,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 @Profile("!migrate & !worker & !bootstrap")
 public class SecurityConfiguration {
-    /**
+ /** 配置独立平台的无状态安全链。 */
+ public SecurityConfiguration() {}
+    /** 返回禁用默认用户名密码账户；本工程只使用数据库不透明会话认证。
  * @return 禁用默认用户名密码账户；本工程只使用数据库不透明会话认证 */
     @Bean
     public org.springframework.security.core.userdetails.UserDetailsService noDefaultUsers() {
         return username -> { throw new org.springframework.security.core.userdetails.UsernameNotFoundException("仅支持平台认证入口"); };
     }
-    /**
+    /** 返回安全链。
  * @param http 安全构建器
  * @param mapper 权威会话访问
  * @param digester 密钥化摘要

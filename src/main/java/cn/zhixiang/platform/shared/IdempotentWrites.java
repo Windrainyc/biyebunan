@@ -12,7 +12,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class IdempotentWrites {
     private final SecretCipher cipher;private final cn.zhixiang.platform.identity.RoleMapper roles;private final cn.zhixiang.platform.identity.IdentityMapper identity;private final WriteMapper mapper; private final JsonMapper json;
-    /**
+    /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param mapper 幂等表访问
  * @param json 应用 JSON 编码器
  * @param cipher 幂等响应加密，避免邀请凭证明文持久化

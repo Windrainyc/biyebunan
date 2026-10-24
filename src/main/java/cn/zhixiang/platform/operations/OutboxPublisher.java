@@ -15,7 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class OutboxPublisher {
  private final String exchange;private final String routingKey;private final OutboxMapper mapper;private final RabbitTemplate rabbit;private final JsonMapper json;
  private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(OutboxPublisher.class);
- /**
+ /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param mapper outbox数据
  * @param rabbit 启用confirm/mandatory的客户端
  * @param json JSON编码器

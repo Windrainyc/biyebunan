@@ -4,7 +4,7 @@ import org.apache.ibatis.annotations.*;
 /** Outbox 租约持久化；领取原子提交，网络发布不占用数据库事务和连接。 */
 @Mapper
 public interface OutboxMapper {
- /**
+ /** 返回最多20条领取事件；过期租约重新领取并递增 fencing generation。
  * @return 最多20条领取事件；过期租约重新领取并递增 fencing generation */
  @Select("""
  WITH candidates AS (
@@ -15,13 +15,13 @@ public interface OutboxMapper {
  generation=generation+1,attempts=attempts+1 FROM candidates c WHERE e.id=c.id
  RETURNING e.id,e.aggregate_id,e.event_type,e.payload::text,e.generation
  """) List<Event> claim();
- /**
+ /** 返回标记数量，旧工作者为0。
  * @param id 事件
  * @param generation 领取代数
  * @return 标记数量，旧工作者为0 */
  @Update("UPDATE outbox_event SET status='SENT',sent_at=now(),lease_until=NULL WHERE id=#{id} AND generation=#{generation} AND status='SENDING'")
  int sent(UUID id,long generation);
- /**
+ /** 待投递领域事件的内部表示。
  * @param id 事件标识
  * @param aggregateId 聚合标识
  * @param eventType 类型

@@ -9,7 +9,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /** 不透明令牌认证过滤器；平台由账户决定，不能用客户端角色切换。 */
 public class AccessFilter extends OncePerRequestFilter {
     private final IdentityMapper mapper; private final TokenDigester digester;
-    /**
+    /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param mapper 身份数据端口
  * @param digester 令牌摘要服务 */
     public AccessFilter(IdentityMapper mapper,TokenDigester digester) { this.mapper=mapper;this.digester=digester; }
@@ -32,7 +32,7 @@ public class AccessFilter extends OncePerRequestFilter {
         }
         chain.doFilter(req,res);
     }
-    /**
+    /** 执行参数所描述的业务变更，异常由统一错误处理器转换。
  * @param response HTTP 响应
  * @param status 状态码
  * @param code 固定错误码

@@ -5,4 +5,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @Configuration
 @Profile("worker")
 @EnableScheduling
-public class WorkerConfiguration {}
+public class WorkerConfiguration {
+ /** 启用独立worker进程的调度配置。 */
+ public WorkerConfiguration() {}}

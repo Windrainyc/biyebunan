@@ -12,7 +12,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class HttpSmsGateway implements SmsGateway {
  private final String endpoint,key;private final boolean enabled;private final JsonMapper json;
  private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
- /**
+ /** 初始化模块组件，所需端口和配置由构造器注入。
  * @param endpoint 已审定的固定网关地址
  * @param key 服务器密钥
  * @param enabled 是否明确启用

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.2-development
+  version: 1.0.3-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -1562,9 +1562,11 @@ paths:
         schema:
           type: string
           enum:
+          - sortOrder:asc
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+          default: sortOrder:asc
       - name: platform
         in: query
         required: false
@@ -1572,6 +1574,7 @@ paths:
         schema: &id012
           type: string
           enum:
+          - student
           - partner
           - admin
       - name: parentId
@@ -6924,9 +6927,11 @@ paths:
         schema:
           type: string
           enum:
+          - sortOrder:asc
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+          default: sortOrder:asc
       - name: X-Request-ID
         in: header
         required: false
@@ -7149,9 +7154,11 @@ paths:
         schema:
           type: string
           enum:
+          - sortOrder:asc
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+          default: sortOrder:asc
       - name: X-Request-ID
         in: header
         required: false
@@ -9996,6 +10003,7 @@ paths:
                 size: &id020
                   type: integer
                   minimum: 0
+                  maximum: 9223372036854775807
                 etag: *id011
                 uploadId: *id010
               required:
@@ -14340,6 +14348,14 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: GET 返回的强 ETag，如 "3"
+        schema:
+          type: string
+          description: ''
+          pattern: ^"[0-9]+"$
       requestBody:
         required: true
         content:
@@ -14850,11 +14866,12 @@ components:
         durationDays: &id021
           type: integer
           minimum: 1
+          maximum: 36500
         monthlyTokenQuota: *id020
         monthlyAmountLimit: &id022
           type: string
           description: 十进制字符串，人民币元；禁止浮点运算
-          pattern: ^\d+(\.\d{1,6})?$
+          pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
         status: *id015
       required:
       - name
@@ -14903,7 +14920,8 @@ components:
         path: &id024
           type: string
           description: ''
-          pattern: ^/
+          pattern: ^/(?!/)[A-Za-z0-9/_-]*$
+          maxLength: 500
         permissionCode: *id011
         sortOrder: *id020
         status: *id015
@@ -16404,6 +16422,7 @@ components:
         state:
           type: string
           enum:
+          - SCHEDULED
           - ACTIVE
           - EXPIRED
           - REVOKED
@@ -17598,6 +17617,7 @@ components:
         durationDays: &id055
           type: integer
           minimum: 1
+          maximum: 36500
         monthlyTokenQuota: *id020
         monthlyAmountLimit: *id022
         effectiveFrom: *id014
