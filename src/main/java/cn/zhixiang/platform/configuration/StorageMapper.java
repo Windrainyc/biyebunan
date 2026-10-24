@@ -68,4 +68,8 @@ public interface StorageMapper {
  * @param status 是否允许业务选择此配置 */
  record Row(UUID id,long version,java.time.OffsetDateTime createdAt,java.time.OffsetDateTime updatedAt,String name,StorageDtos.Provider provider,String bucket,String region,String endpoint,String credentialRef,StorageDtos.Access access,StorageDtos.Status status) {}
 
+ /** 判断是否已有资产持久引用，调用方先锁配置。
+ * @param id 配置
+ * @return 是否被引用 */
+ @Select("SELECT EXISTS(SELECT 1 FROM asset WHERE storage_id=#{id})") boolean referenced(UUID id);
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.5-development
+  version: 1.0.6-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -9105,7 +9105,7 @@ paths:
               $ref: '#/components/schemas/MilestoneWrite'
     delete:
       operationId: delete_admin_milestones_id
-      summary: 删除未完成里程碑
+      summary: 删除验收前可维护的里程碑
       tags:
       - admin
       x-permission: delete_admin_milestones_id
@@ -9683,7 +9683,7 @@ paths:
       x-permission: post_admin_assets_id_download
       x-data-scope: 按操作权限；私聊另需 chat:audit
       responses:
-        '201':
+        '200':
           description: 成功
           content:
             application/json:
@@ -9710,15 +9710,6 @@ paths:
         required: true
         description: ''
         schema: *id010
-      - name: Idempotency-Key
-        in: header
-        required: true
-        description: ''
-        schema:
-          type: string
-          description: ''
-          minLength: 16
-          maxLength: 128
       - name: X-Request-ID
         in: header
         required: false
@@ -9727,6 +9718,8 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 每次重新校验资产与所属业务权限，签发一分钟只读授权；不创建业务资源，不缓存幂等响应，过期后可重新申请。
+
   /api/v1/student/uploads:
     post:
       operationId: post_student_uploads
@@ -9888,7 +9881,7 @@ paths:
       x-permission: post_student_assets_id_download
       x-data-scope: 本人及已绑定项目
       responses:
-        '201':
+        '200':
           description: 成功
           content:
             application/json:
@@ -9915,15 +9908,6 @@ paths:
         required: true
         description: ''
         schema: *id010
-      - name: Idempotency-Key
-        in: header
-        required: true
-        description: ''
-        schema:
-          type: string
-          description: ''
-          minLength: 16
-          maxLength: 128
       - name: X-Request-ID
         in: header
         required: false
@@ -9932,6 +9916,8 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 每次重新校验所属学生及当前发布版本，一分钟只读签名；撤回后不再签发，已签发链接最多残余一分钟。
+
   /api/v1/callbacks/oss:
     post:
       operationId: post_callbacks_oss
@@ -16726,6 +16712,7 @@ components:
       - status
       - reason
     StageChange:
+      description: 订单须ACTIVE。阶段顺序推进，可暂停并恢复原阶段；DONE仅由学生验收产生。进入ACCEPTANCE须进度100并发布源码与论文模板。
       type: object
       additionalProperties: false
       properties:
@@ -16752,6 +16739,7 @@ components:
       - reason
       description: CONFIRM为人工核实，不代表收款。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。直接CANCEL仅DRAFT/CONFIRMED；ACTIVE取消补偿流程尚未实现。
     Receipt:
+      description: 已确认未收款订单全额核验；流水号全局唯一，凭证须属于订单且READY，核验记录不可覆盖，不支持分期与退款。
       type: object
       additionalProperties: false
       properties:
@@ -17673,6 +17661,7 @@ components:
       - otpAuthUri
       - expiresAt
     Acceptance:
+      description: 仅本人项目ACCEPTANCE阶段；ACCEPT转DONE，REJECT退DEVELOPMENT并记录原因。
       type: object
       additionalProperties: false
       properties:

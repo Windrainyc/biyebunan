@@ -62,4 +62,10 @@ public interface ObjectStorage {
  * @param key 对象键
  * @param versionId 版本，可空 */
  void remove(Target target,String key,String versionId);
+ /** 打开固定版本/ETag的流，供扫描适配器使用，调用者必须关闭。
+ * @param target 位置
+ * @param key 对象键
+ * @param expected 元数据
+ * @return 需关闭的输入流 */
+ java.io.InputStream open(Target target,String key,Metadata expected);
 }

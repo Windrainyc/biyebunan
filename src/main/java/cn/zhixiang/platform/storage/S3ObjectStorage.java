@@ -72,4 +72,10 @@ public class S3ObjectStorage implements ObjectStorage {
  /** 关闭专用网络连接池。
  */
  @jakarta.annotation.PreDestroy public void close(){if(client!=null)try{client.close();}catch(Exception ignored){/* 关闭失败不能泄漏包含签名的异常；进程退出将释放连接。 */}}
+ /** 打开版本固定的对象流。
+ * @param target 位置
+ * @param key 对象键
+ * @param expected 已核实元数据
+ * @return 输入流 */
+ @Override public java.io.InputStream open(Target target,String key,Metadata expected){check(target,key);try{return client.getObject(GetObjectArgs.builder().bucket(target.bucket()).object(key).versionId(expected.versionId()).matchETag(expected.etag()).build());}catch(Exception e){throw failure(e);}}
 }

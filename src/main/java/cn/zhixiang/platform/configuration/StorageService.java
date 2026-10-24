@@ -35,7 +35,7 @@ public class StorageService {
  * @param actor 操作者
  * @return 新版本 */
  @Transactional(rollbackFor=Exception.class)
- public StorageDtos.View update(UUID id,long version,StorageDtos.Write w,UUID actor) {w=normalize(w);var old=checked(id,version);if(old.status()==StorageDtos.Status.ENABLED && (!old.endpoint().equals(w.endpoint()) || !old.bucket().equals(w.bucket()) || old.provider()!=w.provider() || !old.region().equals(w.region()) || !old.credentialRef().equals(w.credentialRef())))throw new BusinessException(409,"CONFIG_MUST_BE_DISABLED","更换存储目标或凭证前请先停用配置");if(mapper.update(id,version,w,actor)!=1) conflict();audit(id,actor,"UPDATED");return get(id);}
+ public StorageDtos.View update(UUID id,long version,StorageDtos.Write w,UUID actor) {w=normalize(w);var old=checked(id,version);if((old.status()==StorageDtos.Status.ENABLED || mapper.referenced(id)) && (!old.endpoint().equals(w.endpoint()) || !old.bucket().equals(w.bucket()) || old.provider()!=w.provider() || !old.region().equals(w.region()) || !old.credentialRef().equals(w.credentialRef())))throw new BusinessException(409,"CONFIG_MUST_BE_DISABLED","有资产引用不能更换存储目标；未引用配置须先停用");if(mapper.update(id,version,w,actor)!=1) conflict();audit(id,actor,"UPDATED");return get(id);}
  /** 返回新版本或同值原版本。
  * @param id 标识
  * @param version 期望版本

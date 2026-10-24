@@ -30,6 +30,10 @@ class FoundationIntegrationTest {
  @Autowired TokenDigester digester;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.identity.SmsGateway sms;
  @Autowired JsonMapper json;
+ @Autowired cn.zhixiang.platform.asset.AssetValidation validation;
+ @Autowired cn.zhixiang.platform.asset.AssetTaskMapper assetTasks;
+ @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
+ static final UUID UPLOAD_STORE=UUID.randomUUID();
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
  @Autowired cn.zhixiang.platform.operations.OutboxMapper outbox;
  private String adminToken,partnerToken;
@@ -40,6 +44,7 @@ class FoundationIntegrationTest {
   String url=System.getenv("ZX_DB_URL").replaceAll("([?&])currentSchema=[^&]+","$1currentSchema="+SCHEMA);
   if(!url.contains("currentSchema="))url+=(url.contains("?")?"&":"?")+"currentSchema="+SCHEMA;
   String jdbc=url;
+  r.add("ZX_UPLOAD_STORAGE_ID",()->UPLOAD_STORE.toString());
   r.add("spring.datasource.url",()->jdbc);
   r.add("spring.flyway.enabled",()->true);
   r.add("spring.flyway.default-schema",()->SCHEMA);
@@ -538,6 +543,120 @@ class FoundationIntegrationTest {
   assertEquals("CONSUMED",db.queryForObject("SELECT state FROM order_binding_challenge WHERE id=?",String.class,fresh));
   mvc.perform(get("/api/v1/student/orders/"+order).header("Authorization","Bearer "+token)).andExpect(status().isOk());
   mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
+ }
+
+ @Test void assetQuarantineScanDownloadAndDeletion() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  UUID school=UUID.randomUUID(),major=UUID.randomUUID(),order=UUID.randomUUID();
+  db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'资产院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+  db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'资产专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+  db.update("INSERT INTO software_order(id,order_no,title,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by) VALUES(?,?,'资产订单',?,'test-only',100,'CNY','STANDARD','MANUAL',?,?,'CONFIRMED',?,?)",order,order.toString(),UUID.randomUUID().toString(),school,major,adminId,adminId);
+  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)",UPLOAD_STORE,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  var target=new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE",System.getenv("ZX_S3_ENDPOINT"),System.getenv("ZX_S3_REGION"),"zx-quarantine-private","local-minio");
+  byte[] bytes="隔离资产校验".getBytes(java.nio.charset.StandardCharsets.UTF_8);String sha=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+  var client=java.net.http.HttpClient.newHttpClient();
+  try {
+   for(boolean clean:List.of(true,false)) {
+    String input=json.writeValueAsString(Map.of("ownerType","RECEIPT","ownerId",order,"filename","凭证.txt","size",bytes.length,"sha256",sha,"mimeType","text/plain"));
+    var grant=json.readTree(mvc.perform(post("/api/v1/admin/uploads").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(input)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+    UUID asset=UUID.fromString(grant.get("assetId").asText());String key=grant.get("objectKey").asText();
+    var req=java.net.http.HttpRequest.newBuilder(java.net.URI.create(grant.get("url").asText())).PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(bytes));
+    grant.get("headers").properties().forEach(e->{if(!e.getKey().equalsIgnoreCase("Content-Length"))req.header(e.getKey(),e.getValue().asText());});
+    assertEquals(200,client.send(req.build(),java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode());
+    var source=storage.stat(target,key);
+    try {
+     String complete="/api/v1/admin/uploads/"+grant.get("uploadId").asText()+"/complete",idem=UUID.randomUUID().toString();
+     for(int n=0;n<2;n++)mvc.perform(post(complete).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",idem)).andExpect(status().isAccepted()).andExpect(jsonPath("$.state").value("QUARANTINED"));
+     assertEquals(1,db.queryForObject("SELECT count(*) FROM asset_validation_task WHERE asset_id=?",Integer.class,asset));
+     var lease=assetTasks.claim();assertNotNull(lease);assertNull(assetTasks.claim());
+     db.update("UPDATE asset_validation_task SET lease_until=now()-interval '1 second' WHERE asset_id=?",asset);
+     var recovered=assetTasks.claim();assertTrue(recovered.generation()>lease.generation());
+     assertEquals(0,assetTasks.finish(asset,lease.generation(),null));
+     assetTasks.retry(asset,recovered.generation(),"TEST_RECOVERY");
+     db.update("UPDATE asset_validation_task SET next_attempt_at=now() WHERE asset_id=?",asset);
+     String download="/api/v1/admin/assets/"+asset+"/download";
+     mvc.perform(post(download).header("Authorization","Bearer "+adminToken)).andExpect(status().isUnprocessableEntity());
+     org.mockito.Mockito.when(scanner.clean(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyLong())).thenThrow(new cn.zhixiang.platform.shared.BusinessException(503,"SCANNER_UNAVAILABLE","测试扫描不可用"));
+     assertTrue(validation.runOne());assertEquals("QUARANTINED",db.queryForObject("SELECT state FROM asset WHERE id=?",String.class,asset));
+     db.update("UPDATE asset_validation_task SET next_attempt_at=now() WHERE asset_id=?",asset);
+     org.mockito.Mockito.doReturn(clean).when(scanner).clean(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyLong());
+     assertTrue(validation.runOne());
+     mvc.perform(get("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value(clean?"READY":"REJECTED"));
+     mvc.perform(get("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+     if(clean){var signed=json.readTree(mvc.perform(post(download).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());assertArrayEquals(bytes,client.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(signed.get("url").asText())).GET().build(),java.net.http.HttpResponse.BodyHandlers.ofByteArray()).body());}
+     if(clean){
+      String receiptPath="/api/v1/admin/orders/"+order+"/receipt",receiptKey=UUID.randomUUID().toString();
+      var receipt=new HashMap<String,Object>(Map.of("reference","TEST-"+UUID.randomUUID(),"receivedAt",java.time.OffsetDateTime.now().minusMinutes(1).toString(),"amount","99","proofAssetId",asset,"reason","隔离测试人工核验"));
+      mvc.perform(post(receiptPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(receipt))).andExpect(status().isUnprocessableEntity());
+      receipt.put("amount","100.000000");
+      for(int n=0;n<2;n++)mvc.perform(post(receiptPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",receiptKey).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(receipt))).andExpect(status().isOk()).andExpect(jsonPath("$.receiptStatus").value("CONFIRMED")).andExpect(header().string("ETag","\"2\""));
+      assertEquals(1,db.queryForObject("SELECT count(*) FROM order_receipt WHERE order_id=?",Integer.class,order));
+      mvc.perform(delete("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isConflict());
+      mvc.perform(post(receiptPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content(json.writeValueAsString(receipt))).andExpect(status().isUnprocessableEntity());
+     }else{
+      mvc.perform(delete("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isNoContent());
+      mvc.perform(post(download).header("Authorization","Bearer "+adminToken)).andExpect(status().isNotFound());
+     }
+    } finally {var row=db.queryForMap("SELECT private_key,object_version FROM asset WHERE id=?",asset);if(row.get("private_key")!=null)storage.remove(target,(String)row.get("private_key"),(String)row.get("object_version"));storage.remove(target,key,source.versionId());}
+   }
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void immutableDeliveryPublicationAndStudentScope() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  UUID school=UUID.randomUUID(),major=UUID.randomUUID(),order=UUID.randomUUID(),project=UUID.randomUUID(),student=UUID.randomUUID(),other=UUID.randomUUID(),store=UUID.randomUUID();String st=UUID.randomUUID().toString(),ot=UUID.randomUUID().toString();
+  seed(student,"student",st);seed(other,"student",ot);for(UUID u:List.of(student,other))db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",u);
+  db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'交付院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+  db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'交付专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+  db.update("INSERT INTO software_order(id,order_no,title,student_id,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by) VALUES(?,?,'交付订单',?,?,'test-only',100,'CNY','STANDARD','MANUAL',?,?,'CONFIRMED',?,?)",order,order.toString(),student,UUID.randomUUID().toString(),school,major,adminId,adminId);
+  db.update("INSERT INTO software_project(id,order_id,title,requirements,delivery_date,created_by,updated_by) VALUES(?,?,'交付项目','测试',current_date+30,?,?)",project,order,adminId,adminId);
+  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'交付测试','S3_COMPATIBLE','zx-project-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)",store,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  String adminPath="/api/v1/admin/projects/"+project+"/deliveries",studentPath="/api/v1/student/projects/"+project+"/deliveries";
+  UUID previous=null,previousAsset=null;
+  try {
+   for(int n=1;n<=2;n++){
+    UUID asset=UUID.randomUUID();
+    // 本测试聚焦授权和版本状态，READY夹具不代表上传验证；真实上传另有独立端到端测试。
+    db.update("INSERT INTO asset(id,upload_id,owner_type,project_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,state,upload_expires_at,created_by,updated_by) VALUES(?,?,'PROJECT',?,?,'源码.zip',10,?,'application/zip',?,?,'READY',now(),?,?)",asset,UUID.randomUUID(),project,store,"0".repeat(64),"zx-test/"+asset+"/source","zx-test/"+asset+"/private",adminId,adminId);
+    String body=json.writeValueAsString(Map.of("kind","SOURCE_CODE","assetId",asset,"note","版本"+n));
+    var result=json.readTree(mvc.perform(post(adminPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.versionNumber").value(n)).andReturn().getResponse().getContentAsString());
+    UUID delivery=UUID.fromString(result.get("id").asText());
+    mvc.perform(get(studentPath).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(n-1));
+    mvc.perform(post("/api/v1/student/assets/"+asset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+    String publish="/api/v1/admin/deliveries/"+delivery+"/publish";
+    mvc.perform(post(publish).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"reason\":\"审核通过\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("PUBLISHED"));
+    mvc.perform(get(studentPath).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].versionNumber").value(n));
+    mvc.perform(get(studentPath).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+    mvc.perform(post("/api/v1/student/assets/"+asset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isOk());
+    mvc.perform(post("/api/v1/student/assets/"+asset+"/download").header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+    mvc.perform(delete("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+    assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE project_delivery SET note='覆盖' WHERE id=?",delivery));
+    if(previous!=null){assertEquals("SUPERSEDED",db.queryForObject("SELECT state FROM project_delivery WHERE id=?",String.class,previous));mvc.perform(post("/api/v1/student/assets/"+previousAsset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());}
+    previous=delivery;previousAsset=asset;
+   }
+   // 状态机夹具：收款和绑定另有端到端测试，此处激活仅用于阶段分支。
+   db.update("UPDATE software_order SET status='ACTIVE',receipt_status='CONFIRMED' WHERE id=?",order);
+   String stagePath="/api/v1/admin/projects/"+project+"/stage";long pv=1;
+   mvc.perform(post(stagePath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"stage\":\"DONE\",\"reason\":\"越过验收\"}")).andExpect(status().isUnprocessableEntity());
+   for(String stage:List.of("REQUIREMENTS","PAUSED","REQUIREMENTS","PROPOSAL","DEVELOPMENT","DOCUMENTATION")){
+    mvc.perform(post(stagePath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content(json.writeValueAsString(Map.of("stage",stage,"reason","阶段测试")))).andExpect(status().isOk()).andExpect(jsonPath("$.stage").value(stage));pv++;
+   }
+   mvc.perform(post(stagePath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content("{\"stage\":\"ACCEPTANCE\",\"reason\":\"尚无模板\"}")).andExpect(status().isUnprocessableEntity());
+   db.update("INSERT INTO project_milestone(id,project_id,name,due_date,weight,completed,created_by,updated_by) VALUES(?,?,'验收夹具',current_date,100,true,?,?)",UUID.randomUUID(),project,adminId,adminId);
+   String template=json.readTree(mvc.perform(post(adminPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(Map.of("kind","THESIS_TEMPLATE","assetId",previousAsset,"note","验收模板")))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   mvc.perform(post("/api/v1/admin/deliveries/"+template+"/publish").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"reason\":\"审核通过\"}")).andExpect(status().isOk());
+   for(String decision:List.of("REJECT","ACCEPT")){
+    if(decision.equals("ACCEPT")){mvc.perform(post(stagePath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content("{\"stage\":\"DOCUMENTATION\",\"reason\":\"修正完成\"}")).andExpect(status().isOk());pv++;}
+    mvc.perform(post(stagePath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content("{\"stage\":\"ACCEPTANCE\",\"reason\":\"提交验收\"}")).andExpect(status().isOk());pv++;
+    String acceptPath="/api/v1/student/projects/"+project+"/acceptance",body=json.writeValueAsString(Map.of("decision",decision,"reason","学生验收意见"));
+    mvc.perform(post(acceptPath).header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content(body)).andExpect(status().isNotFound());
+    mvc.perform(post(acceptPath).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+pv+"\"").contentType("application/json").content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.stage").value(decision.equals("ACCEPT")?"DONE":"DEVELOPMENT"));pv++;
+   }
+   mvc.perform(post("/api/v1/admin/deliveries/"+previous+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"reason\":\"撤回待复核\"}")).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/admin/deliveries/"+template+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"reason\":\"撤回模板\"}")).andExpect(status().isOk());
+   mvc.perform(get(studentPath).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(post("/api/v1/student/assets/"+previousAsset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
  }
 
  @Test void realMinioSignedUploadIntegrityAndPrivateCopy() throws Exception {
