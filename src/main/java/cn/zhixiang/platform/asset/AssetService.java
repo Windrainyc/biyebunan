@@ -13,8 +13,9 @@ import cn.zhixiang.platform.shared.*;
 /** 资产用例；所属业务权限与资产通用权限叠加，不仅检查上传者。 */
 @Service
 public class AssetService {
- private final AssetMapper mapper;private final StorageMapper stores;private final OrderMapper orders;private final ProjectMapper projects;private final ObjectStorage storage;private final WriteMapper writes;private final String configured;
+ private final cn.zhixiang.platform.knowledge.ContentMapper contents;private final AssetMapper mapper;private final StorageMapper stores;private final OrderMapper orders;private final ProjectMapper projects;private final ObjectStorage storage;private final WriteMapper writes;private final String configured;
  /** 构造用例。
+ * @param contents 知识授权
  * @param mapper 资产端口
  * @param stores 配置端口
  * @param orders 订单授权
@@ -22,7 +23,7 @@ public class AssetService {
  * @param storage 统一存储端口
  * @param writes 审计事件
  * @param configured 指定上传存储配置ID，未设置时显式503 */
- public AssetService(AssetMapper mapper,StorageMapper stores,OrderMapper orders,ProjectMapper projects,ObjectStorage storage,WriteMapper writes,@Value("${ZX_UPLOAD_STORAGE_ID:}") String configured){this.mapper=mapper;this.stores=stores;this.orders=orders;this.projects=projects;this.storage=storage;this.writes=writes;this.configured=configured;}
+ public AssetService(cn.zhixiang.platform.knowledge.ContentMapper contents,AssetMapper mapper,StorageMapper stores,OrderMapper orders,ProjectMapper projects,ObjectStorage storage,WriteMapper writes,@Value("${ZX_UPLOAD_STORAGE_ID:}") String configured){this.contents=contents;this.mapper=mapper;this.stores=stores;this.orders=orders;this.projects=projects;this.storage=storage;this.writes=writes;this.configured=configured;}
  /** 创建上传会话。签名由已配置区域和固定凭证在本地生成，不发送存储请求。
  * @param w 文件材料
  * @param actor 管理员
@@ -59,10 +60,11 @@ public class AssetService {
  @Transactional(rollbackFor=Exception.class)
  public void delete(UUID id,long version,Actor actor){var found=visible(id,actor);authorize(found.ownerType(),owner(found),actor,true);var r=mapper.lock(id);live(r);if(r.version()!=version)throw new BusinessException(412,"VERSION_CONFLICT","资产已更新");if(mapper.referenced(id))throw new BusinessException(409,"RESOURCE_REFERENCED","资产已作为业务凭证引用，不能删除");mapper.delete(id,actor.id());audit(id,actor.id(),"DELETED");}
  private AssetMapper.Row visible(UUID id,Actor actor){var r=mapper.get(id);live(r);if(actor.platform().equals("student")){if(!mapper.studentVisible(id,actor.id()))missing();}else authorize(r.ownerType(),owner(r),actor,false);return r;}
- private UUID owner(AssetMapper.Row r){return r.projectId()!=null?r.projectId():r.receiptOrderId();}
+ private UUID owner(AssetMapper.Row r){return r.projectId()!=null?r.projectId():r.receiptOrderId()!=null?r.receiptOrderId():r.contentId();}
  private void authorize(String type,UUID id,Actor actor,boolean write){if(!"admin".equals(actor.platform()))missing();String permission;
   if(type.equals("PROJECT")){permission=write?"post_admin_projects_id_deliveries":"get_admin_projects_id_deliveries";if(projects.get(id,actor)==null)missing();}
   else if(type.equals("RECEIPT")){permission="finance:confirm";if(orders.get(id,actor)==null)missing();}
+  else if(type.equals("KNOWLEDGE")){permission=write?"put_admin_knowledge_id":"get_admin_knowledge_id";if(contents.get(id,true,actor.id())==null)missing();}
   else throw new BusinessException(503,"ASSET_OWNER_UNAVAILABLE","所属内容模块尚未接入文件授权");
   var auth=SecurityContextHolder.getContext().getAuthentication();if(auth==null||auth.getAuthorities().stream().noneMatch(a->a.getAuthority().equals(permission)))throw new BusinessException(403,"FORBIDDEN","缺少所属业务文件权限");
  }

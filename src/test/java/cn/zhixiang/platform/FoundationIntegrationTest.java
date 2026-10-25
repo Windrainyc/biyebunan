@@ -32,6 +32,9 @@ class FoundationIntegrationTest {
  @Autowired JsonMapper json;
  @Autowired cn.zhixiang.platform.asset.AssetValidation validation;
  @Autowired cn.zhixiang.platform.asset.AssetTaskMapper assetTasks;
+ @Autowired cn.zhixiang.platform.knowledge.KnowledgeIndexer knowledgeIndexer;
+ @Autowired cn.zhixiang.platform.knowledge.IndexMapper indexes;
+ @Autowired cn.zhixiang.platform.operations.ActivityInbox activityInbox;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
  static final UUID UPLOAD_STORE=UUID.randomUUID();
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
@@ -578,7 +581,14 @@ class FoundationIntegrationTest {
      mvc.perform(post(download).header("Authorization","Bearer "+adminToken)).andExpect(status().isUnprocessableEntity());
      org.mockito.Mockito.when(scanner.clean(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyLong())).thenThrow(new cn.zhixiang.platform.shared.BusinessException(503,"SCANNER_UNAVAILABLE","测试扫描不可用"));
      assertTrue(validation.runOne());assertEquals("QUARANTINED",db.queryForObject("SELECT state FROM asset WHERE id=?",String.class,asset));
-     db.update("UPDATE asset_validation_task SET next_attempt_at=now() WHERE asset_id=?",asset);
+     db.update("UPDATE asset_validation_task SET state='FAILED',attempts=8,version=version+1 WHERE asset_id=?",asset);
+     var job=mvc.perform(get("/api/v1/admin/jobs/"+asset).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED")).andReturn().getResponse();
+     String retryPath="/api/v1/admin/jobs/"+asset+"/retry",retryKey=UUID.randomUUID().toString();
+     mvc.perform(get("/api/v1/admin/jobs").header("Authorization","Bearer "+adminToken).param("q",asset.toString()).param("status","FAILED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+     mvc.perform(get("/api/v1/admin/jobs/"+asset).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+     for(int n=0;n<2;n++)mvc.perform(post(retryPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",retryKey).header("If-Match",job.getHeader("ETag")).contentType("application/json").content("{\"reason\":\"扫描器已恢复\"}")).andExpect(status().isAccepted()).andExpect(jsonPath("$.state").value("QUEUED"));
+     assertEquals(1,db.queryForObject("SELECT count(*) FROM job_retry_event WHERE job_id=?",Integer.class,asset));
+     mvc.perform(post(retryPath).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match",job.getHeader("ETag")).contentType("application/json").content("{\"reason\":\"旧版本\"}")).andExpect(status().isPreconditionFailed());
      org.mockito.Mockito.doReturn(clean).when(scanner).clean(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyLong());
      assertTrue(validation.runOne());
      mvc.perform(get("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value(clean?"READY":"REJECTED"));
@@ -614,6 +624,21 @@ class FoundationIntegrationTest {
   String adminPath="/api/v1/admin/projects/"+project+"/deliveries",studentPath="/api/v1/student/projects/"+project+"/deliveries";
   UUID previous=null,previousAsset=null;
   try {
+   UUID category=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'项目知识',?,0,'ENABLED',?,?)",category,category.toString(),adminId,adminId);
+   var kb=new HashMap<String,Object>(Map.of("title","项目私有知识"+project,"categoryId",category,"tagIds",List.of(),"type","DOCUMENT","audience","PROJECT","projectId",project));
+   UUID contentId=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(kb))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
+   UUID docAsset=UUID.randomUUID();
+   db.update("INSERT INTO asset(id,upload_id,owner_type,content_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,state,upload_expires_at,created_by,updated_by) VALUES(?,?,'KNOWLEDGE',?,?,'资料.pdf',10,?,'application/pdf',?,?,'READY',now(),?,?)",docAsset,UUID.randomUUID(),contentId,store,"0".repeat(64),"zx-test/"+docAsset+"/upload","zx-test/"+docAsset+"/private",adminId,adminId);
+   kb.put("assetId",docAsset);String kp="/api/v1/admin/knowledge/"+contentId;
+   mvc.perform(put(kp).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(kb))).andExpect(status().isOk());
+   for(int n=0;n<2;n++)mvc.perform(post(kp+(n==0?"/submit-review":"/publish")).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+(n+2)+"\"").contentType("application/json").content("{\"reason\":\"项目知识审核\"}")).andExpect(status().isOk());
+   assertTrue(knowledgeIndexer.runOne());assertEquals("CONTENT_EXTRACTION_UNAVAILABLE",db.queryForObject("SELECT error_code FROM knowledge_index_task WHERE content_id=?",String.class,contentId));
+   mvc.perform(get("/api/v1/student/knowledge/"+contentId).header("Authorization","Bearer "+st)).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/student/knowledge/"+contentId).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(post("/api/v1/student/assets/"+docAsset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/student/assets/"+docAsset+"/download").header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(post(kp+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"4\"").contentType("application/json").content("{\"reason\":\"撤回知识\"}")).andExpect(status().isOk());
+   mvc.perform(post("/api/v1/student/assets/"+docAsset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
    for(int n=1;n<=2;n++){
     UUID asset=UUID.randomUUID();
     // 本测试聚焦授权和版本状态，READY夹具不代表上传验证；真实上传另有独立端到端测试。
@@ -657,6 +682,72 @@ class FoundationIntegrationTest {
    mvc.perform(get(studentPath).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
    mvc.perform(post("/api/v1/student/assets/"+previousAsset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
   }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void knowledgePublishIndexFencingAndMembershipScope() throws Exception {
+  UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
+  UUID category=UUID.randomUUID(),tag=UUID.randomUUID(),student=UUID.randomUUID(),other=UUID.randomUUID();String st=UUID.randomUUID().toString(),ot=UUID.randomUUID().toString(),needle="知识隔离"+UUID.randomUUID();
+  seed(student,"student",st);seed(other,"student",ot);for(UUID u:List.of(student,other))db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",u);
+  db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'索引测试',?,0,'ENABLED',?,?)",category,category.toString(),adminId,adminId);
+  db.update("INSERT INTO knowledge_tag(id,name,code,status,created_by,updated_by) VALUES(?,'测试标签',?,'ENABLED',?,?)",tag,tag.toString(),adminId,adminId);
+  try {
+   var body=new HashMap<String,Object>(Map.of("title",needle,"categoryId",category,"tagIds",List.of(tag),"type","MARKDOWN","markdown","# 原文\n事务与幂等测试内容","audience","PUBLIC"));
+   String path="/api/v1/admin/knowledge";
+   var created=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+   UUID id=UUID.fromString(created.get("id").asText());String item=path+"/"+id;
+   mvc.perform(get("/api/v1/student/knowledge/"+id).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+   for(int n=0;n<2;n++)mvc.perform(post(item+(n==0?"/submit-review":"/publish")).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+(n+1)+"\"").contentType("application/json").content("{\"reason\":\"审核发布\"}")).andExpect(status().isOk());
+   UUID first=db.queryForObject("SELECT published_version_id FROM knowledge_content WHERE id=?",UUID.class,id);
+   mvc.perform(put(item).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   var old=indexes.claim();assertNotNull(old);
+   mvc.perform(post(item+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"").contentType("application/json").content("{\"reason\":\"撤回修订\"}")).andExpect(status().isOk());
+   assertFalse(knowledgeIndexer.complete(old,List.of("不应写入的过期内容"),null));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM knowledge_chunk WHERE content_id=?",Integer.class,id));
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+st).param("q",needle)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   body.put("markdown","# 新版\n"+needle+"：事务隔离和幂等会计");body.put("audience","MEMBER");
+   mvc.perform(put(item).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"4\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isOk());
+   for(int n=0;n<2;n++)mvc.perform(post(item+(n==0?"/submit-review":"/publish")).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+(n+5)+"\"").contentType("application/json").content("{\"reason\":\"再次审核发布\"}")).andExpect(status().isOk());
+   assertTrue(knowledgeIndexer.runOne());assertEquals("READY",db.queryForObject("SELECT index_state FROM knowledge_content WHERE id=?",String.class,id));
+   assertEquals("# 原文\n事务与幂等测试内容",db.queryForObject("SELECT markdown FROM knowledge_version WHERE id=?",String.class,first));
+   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE knowledge_version SET markdown='覆盖' WHERE id=?",first));
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+st).param("q",needle)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   UUID plan=UUID.randomUUID(),pv=UUID.randomUUID(),member=UUID.randomUUID();
+   db.update("INSERT INTO membership_plan(id,name,code,status,created_by,updated_by) VALUES(?,'知识会员',?,'ENABLED',?,?)",plan,plan.toString(),adminId,adminId);
+   db.update("INSERT INTO membership_plan_version(id,plan_id,version_number,duration_days,monthly_token_quota,monthly_amount_limit,effective_from) VALUES(?,?,1,30,1000,1,now())",pv,plan);
+   db.update("INSERT INTO membership(id,user_id,plan_id,plan_version_id,starts_at,expires_at,created_by) VALUES(?,?,?,?,now()-interval '1 minute',now()+interval '1 day',?)",member,student,plan,pv,adminId);
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+st).param("q",needle).param("categoryId",category.toString()).param("tagId",tag.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].citations[0].sourceType").value("KNOWLEDGE"));
+   mvc.perform(get("/api/v1/student/knowledge/"+id+"/versions").header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+   mvc.perform(get("/api/v1/student/knowledge/"+id+"/versions").header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+ot).param("q",needle)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   var rebuild=mvc.perform(post(item+"/reindex").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"7\"").contentType("application/json").content("{\"reason\":\"测试重建\"}")).andExpect(status().isAccepted()).andExpect(jsonPath("$.kind").value("KNOWLEDGE_INDEX"));
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+st).param("q",needle)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   assertTrue(knowledgeIndexer.runOne());
+   db.update("UPDATE membership SET revoked_at=now() WHERE id=?",member);
+   mvc.perform(get("/api/v1/student/knowledge-search").header("Authorization","Bearer "+st).param("q",needle)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(post(item+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"8\"").contentType("application/json").content("{\"reason\":\"测试删除\"}")).andExpect(status().isOk());
+   mvc.perform(delete(item).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"9\"")).andExpect(status().isNoContent());
+   mvc.perform(delete("/api/v1/admin/tags/"+tag).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+  } finally {db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?",adminId,superRole);}
+ }
+
+ @Test void realBrokerInboxDeduplicatesAndDeadLettersInvalidEvents() throws Exception {
+  UUID event=UUID.randomUUID(),aggregate=UUID.randomUUID();String type="test.activity."+UUID.randomUUID();
+  db.update("INSERT INTO outbox_event(id,aggregate_id,event_type,payload) VALUES(?,?,?,'{}'::jsonb)",event,aggregate,type);
+  byte[] body=json.writeValueAsBytes(Map.of("eventId",event,"aggregateId",aggregate,"type",type,"data",Map.of()));
+  var props=new org.springframework.amqp.core.MessageProperties();props.setMessageId(event.toString());props.setContentType("application/json");var message=new org.springframework.amqp.core.Message(body,props);
+  String name="zx.test.activity."+UUID.randomUUID(),dead=name+".dead",exchange=name+".dlx";var admin=new org.springframework.amqp.rabbit.core.RabbitAdmin(rabbit.getConnectionFactory());
+  var queue=org.springframework.amqp.core.QueueBuilder.nonDurable(name).deadLetterExchange(exchange).deadLetterRoutingKey("dead").build();var dlq=new org.springframework.amqp.core.Queue(dead,false);var dlx=new org.springframework.amqp.core.DirectExchange(exchange,false,false);
+  var listener=new org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer(rabbit.getConnectionFactory());var handled=new java.util.concurrent.CountDownLatch(2);
+  try {
+   admin.declareExchange(dlx);admin.declareQueue(dlq);admin.declareQueue(queue);admin.declareBinding(org.springframework.amqp.core.BindingBuilder.bind(dlq).to(dlx).with("dead"));
+   listener.setQueueNames(name);listener.setAcknowledgeMode(org.springframework.amqp.core.AcknowledgeMode.AUTO);listener.setDefaultRequeueRejected(false);listener.setConcurrentConsumers(2);listener.setErrorHandler(error->{});
+   listener.setMessageListener((org.springframework.amqp.core.MessageListener)m->{activityInbox.consume(m);handled.countDown();});listener.start();
+   rabbit.send("",name,message);rabbit.send("",name,message);assertTrue(handled.await(10,java.util.concurrent.TimeUnit.SECONDS));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM inbox_event WHERE event_id=? AND consumer='activity-v1'",Integer.class,event));
+   assertEquals(1L,db.queryForObject("SELECT sum(event_count) FROM event_activity_day WHERE event_type=?",Long.class,type));
+   var wrongProps=new org.springframework.amqp.core.MessageProperties();wrongProps.setMessageId(UUID.randomUUID().toString());rabbit.send("",name,new org.springframework.amqp.core.Message(body,wrongProps));
+   assertNotNull(rabbit.receive(dead,5000));assertEquals(1L,db.queryForObject("SELECT sum(event_count) FROM event_activity_day WHERE event_type=?",Long.class,type));
+  }finally{listener.stop();admin.deleteQueue(name);admin.deleteQueue(dead);admin.deleteExchange(exchange);}
  }
 
  @Test void realMinioSignedUploadIntegrityAndPrivateCopy() throws Exception {

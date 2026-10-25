@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.*;
 @Mapper
 public interface AssetMapper {
  /** 内部完整投影字段，不直接返回HTTP。 */
- String COLS="id,upload_id,owner_type,project_id,receipt_order_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,object_version,state,upload_expires_at,deleted_at,version,created_by,created_at,updated_at";
+ String COLS="id,upload_id,owner_type,project_id,receipt_order_id,content_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,object_version,state,upload_expires_at,deleted_at,version,created_by,created_at,updated_at";
  /** 查询资产。
  * @param id ID
  * @return 行或null */
@@ -27,7 +27,7 @@ public interface AssetMapper {
  * @param key 隔离对象键
  * @param expiry 签名到期
  * @param actor 上传者 */
- @Insert("INSERT INTO asset(id,upload_id,owner_type,project_id,receipt_order_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by) VALUES(#{id},#{uploadId},#{w.ownerType},CASE WHEN #{w.ownerType}='PROJECT' THEN #{w.ownerId} ELSE NULL END,CASE WHEN #{w.ownerType}='RECEIPT' THEN #{w.ownerId} ELSE NULL END,#{storageId},#{w.filename},#{w.size},#{w.sha256},#{w.mimeType},#{key},#{expiry},#{actor},#{actor})")
+ @Insert("INSERT INTO asset(id,upload_id,owner_type,project_id,receipt_order_id,content_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by) VALUES(#{id},#{uploadId},#{w.ownerType},CASE WHEN #{w.ownerType}='PROJECT' THEN #{w.ownerId} ELSE NULL END,CASE WHEN #{w.ownerType}='RECEIPT' THEN #{w.ownerId} ELSE NULL END,CASE WHEN #{w.ownerType}='KNOWLEDGE' THEN #{w.ownerId} ELSE NULL END,#{storageId},#{w.filename},#{w.size},#{w.sha256},#{w.mimeType},#{key},#{expiry},#{actor},#{actor})")
  void insert(UUID id,UUID uploadId,@Param("w") AssetDtos.Upload w,UUID storageId,String key,OffsetDateTime expiry,UUID actor);
  /** 转隔离并排队前更新版本。
  * @param id 资产
@@ -47,18 +47,19 @@ public interface AssetMapper {
  /** 检查不可变收款凭证引用；调用方必须已锁资产，避免删除与收款竞争。
  * @param id 资产
  * @return 是否被引用 */
- @Select("SELECT EXISTS(SELECT 1 FROM order_receipt WHERE proof_asset_id=#{id}) OR EXISTS(SELECT 1 FROM project_delivery WHERE asset_id=#{id})") boolean referenced(UUID id);
+ @Select("SELECT EXISTS(SELECT 1 FROM order_receipt WHERE proof_asset_id=#{id}) OR EXISTS(SELECT 1 FROM project_delivery WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM knowledge_content WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM knowledge_version WHERE asset_id=#{id})") boolean referenced(UUID id);
  /** 当前学生是否拥有该资产的已发布项目交付。
  * @param id 资产
  * @param student 学生
  * @return 是否允许下载 */
- @Select("SELECT EXISTS(SELECT 1 FROM project_delivery d JOIN software_project p ON p.id=d.project_id JOIN software_order o ON o.id=p.order_id WHERE d.asset_id=#{id} AND d.state='PUBLISHED' AND o.student_id=#{student} AND o.status IN ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED'))") boolean studentVisible(UUID id,UUID student);
+ @Select("SELECT EXISTS(SELECT 1 FROM project_delivery d JOIN software_project p ON p.id=d.project_id JOIN software_order o ON o.id=p.order_id WHERE d.asset_id=#{id} AND d.state='PUBLISHED' AND o.student_id=#{student} AND o.status IN ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1 FROM knowledge_content c WHERE c.asset_id=#{id} AND c.state='PUBLISHED' AND c.deleted_at IS NULL AND "+cn.zhixiang.platform.knowledge.ContentMapper.ACCESS+")") boolean studentVisible(UUID id,UUID student);
  /** 内部资产数据。
  * @param id ID
  * @param uploadId 上传会话
  * @param ownerType 所属类型
  * @param projectId 项目
  * @param receiptOrderId 凭证订单
+ * @param contentId 知识内容
  * @param storageId 存储配置
  * @param filename 文件名
  * @param size 字节数
@@ -74,5 +75,5 @@ public interface AssetMapper {
  * @param createdBy 上传者
  * @param createdAt 创建时间
  * @param updatedAt 更新时间 */
- record Row(UUID id,UUID uploadId,String ownerType,UUID projectId,UUID receiptOrderId,UUID storageId,String filename,long size,String sha256,String mimeType,String uploadKey,String privateKey,String objectVersion,String state,OffsetDateTime uploadExpiresAt,OffsetDateTime deletedAt,long version,UUID createdBy,OffsetDateTime createdAt,OffsetDateTime updatedAt) {}
+ record Row(UUID id,UUID uploadId,String ownerType,UUID projectId,UUID receiptOrderId,UUID contentId,UUID storageId,String filename,long size,String sha256,String mimeType,String uploadKey,String privateKey,String objectVersion,String state,OffsetDateTime uploadExpiresAt,OffsetDateTime deletedAt,long version,UUID createdBy,OffsetDateTime createdAt,OffsetDateTime updatedAt) {}
 }

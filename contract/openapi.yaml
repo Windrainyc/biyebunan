@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.6-development
+  version: 1.0.7-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -10064,6 +10064,12 @@ paths:
         required: false
         description: ''
         schema: *id010
+      - name: contentType
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [VIDEO, DOCUMENT, MARKDOWN]
       - name: X-Request-ID
         in: header
         required: false
@@ -10351,6 +10357,24 @@ paths:
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+      - name: categoryId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: tagId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: contentType
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [VIDEO, DOCUMENT, MARKDOWN]
       - name: X-Request-ID
         in: header
         required: false
@@ -10650,6 +10674,13 @@ paths:
           description: ''
           minLength: 16
           maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: 当前内容强ETag，重建使旧代次立即不可检索
+        schema:
+          type: string
+          pattern: '^"[0-9]+"$'
       - name: X-Request-ID
         in: header
         required: false
@@ -10667,7 +10698,7 @@ paths:
   /api/v1/student/knowledge-search:
     get:
       operationId: get_student_knowledge_search
-      summary: 关键词向量混合检索
+      summary: 带原文引用的关键词检索（向量召回待实现）
       tags:
       - student
       x-permission: get_student_knowledge_search
@@ -13658,6 +13689,13 @@ paths:
           description: ''
           minLength: 16
           maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: 任务详情的强ETag；仅恢复FAILED且资产仍隔离的技术失败
+        schema:
+          type: string
+          pattern: '^"[0-9]+"$'
       - name: X-Request-ID
         in: header
         required: false
@@ -15760,6 +15798,7 @@ components:
       - versionNumber
       - state
     ContentWrite:
+      description: 先建草稿再上传本内容附件；发布须内容完整、分类标签启用、附件READY。已发布须先撤回，编辑会使审核失效。PUBLIC仅指已登录学生可见。
       type: object
       additionalProperties: false
       properties:
