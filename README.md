@@ -20,7 +20,7 @@ python3 scripts/run-local.py test
 
 API为127.0.0.1:18080。脚本仅从受保护文件读取凭证，不将凭证写入仓库。Docker构建用`docker --context colima-zhixiang build -t zhixiang/platform:0.8.0-dev .`，随后运行`python3 scripts/verify-container.py`验证并清理自身容器。
 
-已接入订单一次性绑定、项目主体/里程碑、中介进度摘要和真实MinIO端口。本轮新增资产隔离扫描流程、私有下载、全额收款核验、不可变交付版本与项目阶段/学生验收。尚缺真实扫描服务部署、对象GC、进行中取消补偿、知识向量召回、模型运行/SSE与账务对账、论坛及统计等。保存模型/存储/域名配置不代表对应外部服务已验证或部署。
+已接入订单一次性绑定、项目主体/里程碑、中介进度摘要和真实MinIO端口。本轮新增资产隔离扫描流程、私有下载、全额收款核验、不可变交付版本与项目阶段/学生验收。尚缺真实扫描服务部署、对象GC、进行中取消补偿、知识向量召回、模型创建/执行与账务对账、论坛及统计等。保存模型/存储/域名配置不代表对应外部服务已验证或部署。
 
 [Spring Boot系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html) · [MyBatis兼容范围](https://github.com/mybatis/spring-boot-starter)。运行时镜像锁定digest；未实施生产多节点部署。
 
