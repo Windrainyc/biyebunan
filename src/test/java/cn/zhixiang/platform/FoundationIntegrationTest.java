@@ -35,6 +35,7 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.knowledge.KnowledgeIndexer knowledgeIndexer;
  @Autowired cn.zhixiang.platform.knowledge.IndexMapper indexes;
  @Autowired cn.zhixiang.platform.operations.ActivityInbox activityInbox;
+ @Autowired cn.zhixiang.platform.billing.QuotaService quotas;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
  static final UUID UPLOAD_STORE=UUID.randomUUID();
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
@@ -624,6 +625,14 @@ class FoundationIntegrationTest {
   String adminPath="/api/v1/admin/projects/"+project+"/deliveries",studentPath="/api/v1/student/projects/"+project+"/deliveries";
   UUID previous=null,previousAsset=null;
   try {
+   String convBody=json.writeValueAsString(Map.of("projectId",project,"title","仅本人私聊")),convKey=UUID.randomUUID().toString();String conversation=null;
+   for(int n=0;n<2;n++){String cid=json.readTree(mvc.perform(post("/api/v1/student/conversations").header("Authorization","Bearer "+st).header("Idempotency-Key",convKey).contentType("application/json").content(convBody)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();if(conversation!=null)assertEquals(conversation,cid);conversation=cid;}
+   mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/student/conversations").header("Authorization","Bearer "+st).param("q","仅本人")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isPreconditionFailed());
+   mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
    UUID category=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'项目知识',?,0,'ENABLED',?,?)",category,category.toString(),adminId,adminId);
    var kb=new HashMap<String,Object>(Map.of("title","项目私有知识"+project,"categoryId",category,"tagIds",List.of(),"type","DOCUMENT","audience","PROJECT","projectId",project));
    UUID contentId=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(kb))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
@@ -748,6 +757,43 @@ class FoundationIntegrationTest {
    var wrongProps=new org.springframework.amqp.core.MessageProperties();wrongProps.setMessageId(UUID.randomUUID().toString());rabbit.send("",name,new org.springframework.amqp.core.Message(body,wrongProps));
    assertNotNull(rabbit.receive(dead,5000));assertEquals(1L,db.queryForObject("SELECT sum(event_count) FROM event_activity_day WHERE event_type=?",Long.class,type));
   }finally{listener.stop();admin.deleteQueue(name);admin.deleteQueue(dead);admin.deleteExchange(exchange);}
+ }
+
+ @Test void quotaConcurrentReservationsUnknownSettlementAndAppendOnlyLedger() throws Exception {
+  UUID student=UUID.randomUUID(),plan=UUID.randomUUID(),pv=UUID.randomUUID(),member=UUID.randomUUID(),model=UUID.randomUUID(),price=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(student,"student",token);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+  assertEquals(0,quotas.current(student).availableTokens());
+  db.update("INSERT INTO membership_plan(id,name,code,status,created_by,updated_by) VALUES(?,'额度会员',?,'ENABLED',?,?)",plan,plan.toString(),adminId,adminId);
+  db.update("INSERT INTO membership_plan_version(id,plan_id,version_number,duration_days,monthly_token_quota,monthly_amount_limit,effective_from) VALUES(?,?,1,30,100,1,now())",pv,plan);
+  db.update("INSERT INTO membership(id,user_id,plan_id,plan_version_id,starts_at,expires_at,created_by) VALUES(?,?,?,?,now()-interval '1 minute',now()+interval '1 day',?)",member,student,plan,pv,adminId);
+  db.update("INSERT INTO model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by) VALUES(?,'隔离模型',?,'TEST','https://model.invalid',4096,1024,'ENABLED',?,?)",model,model.toString(),adminId,adminId);
+  db.update("INSERT INTO model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by) VALUES(?,?,'CNY',10,20,2,now()-interval '1 day','ENABLED',?,?)",price,model,adminId,adminId);
+  assertEquals(100,quotas.current(student).availableTokens());assertEquals(100,quotas.current(student).availableTokens());
+  UUID a=UUID.randomUUID(),b=UUID.randomUUID();var gate=new java.util.concurrent.CountDownLatch(1);List<UUID> accepted=java.util.Collections.synchronizedList(new ArrayList<>());
+  try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+   var futures=new ArrayList<java.util.concurrent.Future<Boolean>>();for(UUID run:List.of(a,b))futures.add(pool.submit(()->{gate.await();try{quotas.reserve(student,run,price,60,new java.math.BigDecimal("0.600000"));accepted.add(run);return true;}catch(cn.zhixiang.platform.shared.BusinessException e){assertEquals("QUOTA_EXCEEDED",e.code());return false;}}));gate.countDown();assertEquals(1,futures.stream().map(f->{try{return f.get()?1:0;}catch(Exception e){throw new RuntimeException(e);}}).mapToInt(Integer::intValue).sum());
+  }
+  UUID run=accepted.getFirst();quotas.reserve(student,run,price,60,new java.math.BigDecimal("0.600000"));assertEquals(40,quotas.current(student).availableTokens());
+  quotas.unknown(run);quotas.unknown(run);assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->quotas.release(run,false));assertEquals(60,quotas.current(student).reservedTokens());
+  quotas.settle(run,40,10,20);quotas.settle(run,40,10,20);assertEquals(50,quotas.current(student).availableTokens());assertEquals(0,quotas.current(student).reservedTokens());assertEquals("0.999560",quotas.current(student).availableAmount());
+  assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->quotas.settle(run,41,10,20));
+  UUID release=UUID.randomUUID();quotas.reserve(student,release,price,30,new java.math.BigDecimal("0.100000"));quotas.release(release,true);quotas.release(release,true);assertEquals(50,quotas.current(student).availableTokens());
+  UUID account=db.queryForObject("SELECT id FROM quota_account WHERE user_id=?",UUID.class,student);
+  assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE quota_hold SET state='SETTLED',input_tokens=NULL WHERE run_id=?",run));
+  assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("INSERT INTO quota_ledger(id,account_id,source_id,kind,grant_tokens) VALUES(?,?,?,'GRANT',-1)",UUID.randomUUID(),account,UUID.randomUUID()));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE account_id=? AND kind='GRANT'",Integer.class,account));
+  assertEquals(50L,db.queryForObject("SELECT sum(spend_tokens) FROM quota_ledger WHERE account_id=?",Long.class,account));
+  assertEquals(0L,db.queryForObject("SELECT sum(reserve_tokens) FROM quota_ledger WHERE account_id=?",Long.class,account));
+  assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE quota_ledger SET spend_tokens=0 WHERE account_id=?",account));
+  mvc.perform(get("/api/v1/student/quota").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.availableTokens").value(50));
+  // 仅把此测试学生的账户移至上月，模拟跨月迟到结算，不修改服务器时钟。
+  UUID late=UUID.randomUUID();quotas.reserve(student,late,price,30,new java.math.BigDecimal("0.100000"));
+  db.update("UPDATE quota_account SET period_start=period_start-interval '1 month',period_end=period_start WHERE id=?",account);
+  assertEquals(100,quotas.current(student).availableTokens());assertEquals(0,quotas.current(student).reservedTokens());
+  quotas.unknown(late);quotas.settle(late,150,20,0); // 超出预占也完整记账，不能向新周期转嫁费用。
+  assertEquals(220L,db.queryForObject("SELECT spent_tokens FROM quota_account WHERE id=?",Long.class,account));
+  assertEquals(100,quotas.current(student).availableTokens());
+  db.update("UPDATE membership SET revoked_at=now() WHERE id=?",member);assertEquals(0,quotas.current(student).availableTokens());
+  assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->quotas.reserve(student,UUID.randomUUID(),price,1,new java.math.BigDecimal("0.000001")));
  }
 
  @Test void realMinioSignedUploadIntegrityAndPrivateCopy() throws Exception {
