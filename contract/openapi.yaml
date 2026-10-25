@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.8-development
+  version: 1.0.9-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -11060,11 +11060,6 @@ paths:
           type: string
           description: ''
           maxLength: 100
-      - name: status
-        in: query
-        required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
       - name: sort
         in: query
         required: false
@@ -11251,7 +11246,7 @@ paths:
       x-data-scope: 本人及已绑定项目
       responses:
         '200':
-          description: SSE UTF-8；id/event/data，15秒心跳；终态完成后关闭
+          description: SSE UTF-8；id/event/data，15秒心跳；终态完成后关闭，连接最多30秒，客户端持最后ID重连
           content:
             text/event-stream:
               schema:
@@ -15969,7 +15964,11 @@ components:
           enum:
           - USER
           - ASSISTANT
-        text: *id032
+        text:
+          type: string
+          minLength: 1
+          maxLength: 262144
+          description: 完整正文；用户输入上限16000，助手输出上限262144字符，不静默截断
         citations:
           type: array
           items:

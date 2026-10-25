@@ -13,6 +13,9 @@ public class AccessFilter extends OncePerRequestFilter {
  * @param mapper 身份数据端口
  * @param digester 令牌摘要服务 */
     public AccessFilter(IdentityMapper mapper,TokenDigester digester) { this.mapper=mapper;this.digester=digester; }
+    /** 异步响应分派重新认证，避免SSE完成分派丢失SecurityContext；不放宽访问规则。
+     * @return false，继续验证原请求令牌 */
+    @Override protected boolean shouldNotFilterAsyncDispatch(){return false;}
     @Override
     protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain) throws IOException,ServletException {
         String header=req.getHeader("Authorization");

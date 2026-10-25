@@ -18,12 +18,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** 真实 PostgreSQL 的 HTTP 纵向测试；每次运行独立 schema，测试结束仅删除自身 schema。 */
-@SpringBootTest
+@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named="ZX_INTEGRATION",matches="true")
 class FoundationIntegrationTest {
  static final String SCHEMA="zx_test_"+UUID.randomUUID().toString().replace("-","");
  @Autowired MockMvc mvc;
+ @org.springframework.beans.factory.annotation.Value("${local.server.port}") int httpPort;
  @Autowired cn.zhixiang.platform.storage.ObjectStorage storage;
  @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping handlers;
  @Autowired JdbcTemplate db;
@@ -36,6 +37,11 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.knowledge.IndexMapper indexes;
  @Autowired cn.zhixiang.platform.operations.ActivityInbox activityInbox;
  @Autowired cn.zhixiang.platform.billing.QuotaService quotas;
+ @Autowired cn.zhixiang.platform.chat.RunJournal journal;
+ @Autowired cn.zhixiang.platform.chat.RunLeaseService runLeases;
+ @Autowired cn.zhixiang.platform.chat.MessageService messages;
+ @Autowired cn.zhixiang.platform.chat.RunStreamAccess streamAccess;
+ @Autowired cn.zhixiang.platform.chat.RunCompletionService completion;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
  static final UUID UPLOAD_STORE=UUID.randomUUID();
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
@@ -630,6 +636,83 @@ class FoundationIntegrationTest {
    mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
    mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
    mvc.perform(get("/api/v1/student/conversations").header("Authorization","Bearer "+st).param("q","仅本人")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   UUID journalModel=UUID.randomUUID(),journalPrice=UUID.randomUUID(),journalRun=UUID.randomUUID();
+   db.update("INSERT INTO model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by) VALUES(?,'日志测试',?,'TEST','https://model.invalid',4096,1024,'ENABLED',?,?)",journalModel,journalModel.toString(),adminId,adminId);
+   db.update("INSERT INTO model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by) VALUES(?,?,'CNY',1,1,1,now(),'ENABLED',?,?)",journalPrice,journalModel,adminId,adminId);
+   db.update("INSERT INTO generation_run(id,student_id,conversation_id,client_message_id,request_hash,model_id,price_id) VALUES(?,?,?,?,'test',?,?)",journalRun,student,UUID.fromString(conversation),UUID.randomUUID(),journalModel,journalPrice);
+   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE generation_run SET student_id=? WHERE id=?",other,journalRun));
+   UUID userMessage=messages.save(journalRun,"USER","独立消息问题");assertEquals(userMessage,messages.save(journalRun,"USER","独立消息问题"));
+   assertNull(runLeases.claim(UUID.randomUUID())); // 未预占额度的运行不允许被执行器领取。
+   UUID journalAccount=UUID.randomUUID();
+   db.update("INSERT INTO quota_account(id,user_id,period_start,period_end,granted_tokens,reserved_tokens) VALUES(?,?,date_trunc('month',now()),date_trunc('month',now())+interval '1 month',10,1)",journalAccount,student);
+   db.update("INSERT INTO quota_hold(run_id,account_id,price_id,tokens,amount) VALUES(?,?,?,?,0)",journalRun,journalAccount,journalPrice,1);
+   db.update("INSERT INTO quota_ledger(id,account_id,source_id,kind,grant_tokens) VALUES(?,?,?,'GRANT',10)",UUID.randomUUID(),journalAccount,UUID.randomUUID());
+   db.update("INSERT INTO quota_ledger(id,account_id,source_id,kind,reserve_tokens) VALUES(?,?,?,'RESERVE',1)",UUID.randomUUID(),journalAccount,journalRun);
+   UUID worker1=UUID.randomUUID(),worker2=UUID.randomUUID();var lease1=runLeases.claim(worker1);assertEquals(journalRun,lease1.id());assertNull(runLeases.claim(worker2));
+   db.update("UPDATE generation_run SET lease_until=now()-interval '1 second' WHERE id=?",journalRun);
+   var lease2=runLeases.claim(worker2);assertTrue(lease2.generation()>lease1.generation());
+   assertFalse(runLeases.start(journalRun,worker1,lease1.generation()));assertTrue(runLeases.start(journalRun,worker2,lease2.generation()));assertFalse(runLeases.start(journalRun,worker2,lease2.generation()));
+   db.update("UPDATE generation_run SET lease_until=now()-interval '1 second' WHERE id=?",journalRun);
+   assertNull(runLeases.claim(worker1)); // 已开始调用，即使租约失效也不能重发付费请求。
+   assertEquals(1,journal.append(journalRun,"accepted",Map.of("state","RESERVED")));
+   try(var workers=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    var one=workers.submit(()->journal.append(journalRun,"delta",Map.of("text","甲")));var two=workers.submit(()->journal.append(journalRun,"delta",Map.of("text","乙")));
+    assertEquals(Set.of(2L,3L),Set.of(one.get(),two.get()));
+   }
+   assertEquals(List.of(1L,2L,3L),journal.replay(journalRun,0,100).stream().map(cn.zhixiang.platform.chat.RunJournalMapper.Event::sequence).toList());
+   assertEquals(2,journal.cursor(journalRun,journalRun+":2"));assertEquals(1,journal.replay(journalRun,2,100).size());
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->journal.cursor(journalRun,UUID.randomUUID()+":2"));
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->journal.replay(journalRun,4,100));
+   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE run_event SET payload='{}' WHERE run_id=?",journalRun));
+   var usage=new cn.zhixiang.platform.chat.ModelGateway.Usage(2,1,0,"isolated-provider-id");
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->completion.success(journalRun,worker2,lease2.generation(),"x".repeat(262145),usage));
+   assertEquals("RESERVED",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,journalRun));
+   assertEquals(0L,db.queryForObject("SELECT spent_tokens FROM quota_account WHERE id=?",Long.class,journalAccount));
+   assertFalse(completion.success(journalRun,worker1,lease1.generation(),"旧执行器结果",usage));
+   assertTrue(completion.success(journalRun,worker2,lease2.generation(),"完整回答甲乙",usage));
+   assertTrue(completion.success(journalRun,worker2,lease2.generation(),"完整回答甲乙",usage));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,journalRun));
+   assertEquals(5L,db.queryForObject("SELECT last_sequence FROM generation_run WHERE id=?",Long.class,journalRun));
+   UUID answer=db.queryForObject("SELECT id FROM chat_message WHERE run_id=? AND role='ASSISTANT'",UUID.class,journalRun);assertEquals(answer,messages.save(journalRun,"ASSISTANT","完整回答甲乙"));
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->messages.save(journalRun,"ASSISTANT","覆盖原回答"));
+   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE chat_message SET text='覆盖' WHERE id=?",answer));
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("q","完整回答")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].text").value("完整回答甲乙")).andExpect(jsonPath("$.items[0].citations").isEmpty());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->journal.append(journalRun,"delta",Map.of("text","终态事件后拒绝")));
+   UUID sessionId=db.queryForObject("SELECT id FROM auth_session WHERE user_id=?",UUID.class,student);long authVersion=db.queryForObject("SELECT auth_version FROM user_account WHERE id=?",Long.class,student);
+   var streamActor=new cn.zhixiang.platform.identity.Actor(student,"student",authVersion,sessionId);assertTrue(streamAccess.allowed(journalRun,streamActor));
+   db.update("UPDATE user_account SET auth_version=auth_version+1 WHERE id=?",student);assertFalse(streamAccess.allowed(journalRun,streamActor));
+   db.update("UPDATE user_account SET auth_version=? WHERE id=?",authVersion,student);
+   mvc.perform(get("/api/v1/student/runs/"+journalRun+"/events").header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/runs/"+journalRun+"/events").header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/student/runs/"+journalRun+"/events").header("Authorization","Bearer "+st).header("Last-Event-ID",UUID.randomUUID()+":2")).andExpect(status().isBadRequest());
+   var stream=mvc.perform(get("/api/v1/student/runs/"+journalRun+"/events").header("Authorization","Bearer "+st).header("Last-Event-ID",journalRun+":2")).andExpect(request().asyncStarted()).andReturn();
+   stream.getAsyncResult(5000);
+   String replay=mvc.perform(asyncDispatch(stream)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+   assertTrue(replay.contains("id:"+journalRun+":3"));assertTrue(replay.contains("event:completed"));assertFalse(replay.contains("id:"+journalRun+":2"));
+   var http=java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build();
+   var request=java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:"+httpPort+"/api/v1/student/runs/"+journalRun+"/events")).header("Authorization","Bearer "+st).header("Last-Event-ID",journalRun+":2").timeout(java.time.Duration.ofSeconds(5)).GET().build();
+   var networkReplay=http.send(request,java.net.http.HttpResponse.BodyHandlers.ofString());assertEquals(200,networkReplay.statusCode());assertTrue(networkReplay.body().contains("event:completed"));assertFalse(networkReplay.body().contains("id:"+journalRun+":2"));
+   var exhausted=java.net.http.HttpRequest.newBuilder(request.uri()).header("Authorization","Bearer "+st).header("Last-Event-ID",journalRun+":5").timeout(java.time.Duration.ofSeconds(5)).GET().build();
+   assertEquals("",http.send(exhausted,java.net.http.HttpResponse.BodyHandlers.ofString()).body());
+
+
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->journal.append(journalRun,"delta",Map.of("text","结束后拒绝")));
+   db.update("DELETE FROM run_event WHERE run_id=? AND sequence=1",journalRun);
+   assertEquals("STREAM_REPLAY_EXPIRED",assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->journal.replay(journalRun,0,100)).code());assertEquals(4,journal.replay(journalRun,1,100).size());
+   for(boolean noCharge:List.of(false,true)){
+    UUID failedRun=UUID.randomUUID();
+    db.update("INSERT INTO generation_run(id,student_id,conversation_id,client_message_id,request_hash,model_id,price_id,state,call_started_at,lease_owner,lease_until,generation) SELECT ?,student_id,conversation_id,?,'failure-test',model_id,price_id,'RUNNING',now(),?,now()+interval '1 minute',1 FROM generation_run WHERE id=?",failedRun,UUID.randomUUID(),worker2,journalRun);
+    db.update("INSERT INTO quota_hold(run_id,account_id,price_id,tokens,amount) VALUES(?,?,?,1,0)",failedRun,journalAccount,journalPrice);
+    db.update("UPDATE quota_account SET reserved_tokens=reserved_tokens+1 WHERE id=?",journalAccount);
+    db.update("INSERT INTO quota_ledger(id,account_id,source_id,kind,reserve_tokens) VALUES(?,?,?,'RESERVE',1)",UUID.randomUUID(),journalAccount,failedRun);
+    var failed=new cn.zhixiang.platform.chat.ModelGateway.Failure(noCharge?"MODEL_HTTP_429":"MODEL_USAGE_UNKNOWN",noCharge);
+    assertTrue(completion.failure(failedRun,worker2,1,failed));assertFalse(completion.failure(failedRun,worker2,1,failed));
+    assertEquals(noCharge?"RELEASED":"RECONCILING",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,failedRun));
+    assertEquals("FAILED",db.queryForObject("SELECT state FROM generation_run WHERE id=?",String.class,failedRun));
+    assertEquals(1,journal.replay(failedRun,0,100).size());
+   }
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isPreconditionFailed());
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
    mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
