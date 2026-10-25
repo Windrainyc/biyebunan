@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.9-development
+  version: 1.0.10-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -15996,6 +15996,9 @@ components:
         modelId: *id010
         sourceVersionIds:
           type: array
+          description: 当前支持已发布且索引就绪的Markdown知识版本；最多8个不重复版本，服务端重新验证访问权限。
+          maxItems: 8
+          uniqueItems: true
           items: *id010
         maxOutputTokens:
           type: integer

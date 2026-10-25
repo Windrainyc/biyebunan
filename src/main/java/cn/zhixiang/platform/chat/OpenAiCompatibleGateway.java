@@ -23,8 +23,8 @@ public class OpenAiCompatibleGateway implements ModelGateway {
  * @param delta 增量持久化回调
  * @return 供应商用量 */
  @Override public Usage stream(ModelGateway.Request request,Consumer<String> delta){
-  if(!enabled)throw new Failure("MODEL_PROVIDER_DISABLED",true);URI uri;
-  try{uri=URI.create(request.endpoint());if(uri.getHost()==null||!hosts.contains(uri.getHost())||uri.getUserInfo()!=null||uri.getRawQuery()!=null||uri.getFragment()!=null||!("https".equals(uri.getScheme())||localTest&&"http".equals(uri.getScheme())&&Set.of("127.0.0.1","localhost").contains(uri.getHost())))throw new IllegalArgumentException();if(request.secret()==null||request.secret().isBlank()||request.maxOutputTokens()<1||request.maxOutputTokens()>8192)throw new IllegalArgumentException();}catch(IllegalArgumentException e){throw new Failure("MODEL_CONFIGURATION_INVALID",true);}
+  check(request.endpoint());URI uri=URI.create(request.endpoint());
+  if(request.secret()==null||request.secret().isBlank()||request.maxOutputTokens()<1||request.maxOutputTokens()>8192)throw new Failure("MODEL_CONFIGURATION_INVALID",true);
   if(request.runId()==null||request.model()==null||request.model().isBlank()||request.messages().isEmpty()||request.messages().size()>128)throw new Failure("MODEL_REQUEST_INVALID",true);
   long inputChars=0;for(var turn:request.messages()){if(turn.role()==null||!Set.of("system","user","assistant").contains(turn.role())||turn.content()==null||turn.content().isBlank())throw new Failure("MODEL_REQUEST_INVALID",true);inputChars+=turn.content().length();if(inputChars>1048576)throw new Failure("MODEL_CONTEXT_LIMIT",true);}
   okhttp3.Request call;
@@ -47,5 +47,8 @@ public class OpenAiCompatibleGateway implements ModelGateway {
    if(!done||usage==null)throw new Failure("MODEL_USAGE_UNKNOWN",false);return usage;
   }catch(Failure e){throw e;}catch(Exception e){throw new Failure("MODEL_OUTCOME_UNKNOWN",false);}
  }
+ /** 预检开关及可信目标，不产生费用。
+ * @param endpoint 完整端点 */
+ @Override public void check(String endpoint){if(!enabled)throw new Failure("MODEL_PROVIDER_DISABLED",true);try{URI uri=URI.create(endpoint);if(uri.getHost()==null||!hosts.contains(uri.getHost())||uri.getUserInfo()!=null||uri.getRawQuery()!=null||uri.getFragment()!=null||!("https".equals(uri.getScheme())||localTest&&"http".equals(uri.getScheme())&&Set.of("127.0.0.1","localhost").contains(uri.getHost())))throw new IllegalArgumentException();}catch(IllegalArgumentException e){throw new Failure("MODEL_CONFIGURATION_INVALID",true);}}
  private long integer(tools.jackson.databind.JsonNode node){if(node==null||!node.isIntegralNumber()||!node.canConvertToLong()||node.asLong()<0)throw new Failure("MODEL_USAGE_INVALID",false);return node.asLong();}
 }

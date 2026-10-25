@@ -43,6 +43,14 @@ public class RunCompletionService {
  * @return 是否接受错误结果 */
  @Transactional(rollbackFor=Exception.class)
  public boolean failure(UUID run,UUID owner,long generation,ModelGateway.Failure failure){var head=lock(run);if(!leases.owner(run,owner,generation)||!head.state().equals("RUNNING"))return false;if(failure.noCharge())quotas.release(run,true);else quotas.unknown(run);terminalEvent(run,"failed","FAILED",null,failure.code());leases.terminal(run,"FAILED",failure.code(),null);return true;}
+ /** 调用前发现配置/权限不可用，安全释放；只接受原准备租约。
+ * @param run 运行
+ * @param owner 持有者
+ * @param generation 代次
+ * @param code 稳定错误码
+ * @return 是否结束 */
+ @Transactional(rollbackFor=Exception.class)
+ public boolean rejectBeforeCall(UUID run,UUID owner,long generation,String code){var head=lock(run);if(!head.state().equals("RESERVED")||!leases.owner(run,owner,generation))return false;quotas.release(run,true);terminalEvent(run,"failed","FAILED",null,code);leases.terminal(run,"FAILED",code,null);return true;}
  private RunJournalMapper.Head lock(UUID run){var hold=accounts.hold(run);if(hold==null)throw new BusinessException(404,"RESOURCE_NOT_FOUND","运行预占不存在");accounts.lock(hold.accountId());var head=runs.lock(run);if(head==null)throw new BusinessException(404,"RESOURCE_NOT_FOUND","运行不存在");return head;}
  private void terminalEvent(UUID run,String type,String state,UUID message,String error){var data=new LinkedHashMap<String,Object>();data.put("state",state);data.put("messageId",message);data.put("errorCode",error);journal.append(run,type,data);}
 }

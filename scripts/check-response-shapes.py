@@ -10,6 +10,7 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 schemas = yaml.safe_load((root / 'contract/openapi.yaml').read_text())['components']['schemas']
 bindings = {
+    'chat/RunDtos.java': 'Run',
     'chat/MessageService.java': 'Message',
     'chat/ConversationDtos.java': 'Conversation',
     'billing/QuotaService.java': 'Quota',

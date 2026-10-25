@@ -42,6 +42,10 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.chat.MessageService messages;
  @Autowired cn.zhixiang.platform.chat.RunStreamAccess streamAccess;
  @Autowired cn.zhixiang.platform.chat.RunCompletionService completion;
+ @Autowired cn.zhixiang.platform.chat.RunExecutor runExecutor;
+ @Autowired cn.zhixiang.platform.chat.RunControlService runControl;
+ @Autowired cn.zhixiang.platform.identity.SecretVault modelSecrets;
+ @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.chat.ModelGateway modelGateway;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
  static final UUID UPLOAD_STORE=UUID.randomUUID();
  @Autowired org.springframework.amqp.rabbit.core.RabbitTemplate rabbit;
@@ -713,6 +717,56 @@ class FoundationIntegrationTest {
     assertEquals("FAILED",db.queryForObject("SELECT state FROM generation_run WHERE id=?",String.class,failedRun));
     assertEquals(1,journal.replay(failedRun,0,100).size());
    }
+   UUID flowModel=UUID.randomUUID(),flowPrice=UUID.randomUUID(),flowKey=UUID.randomUUID(),flowPlan=UUID.randomUUID(),flowPlanVersion=UUID.randomUUID();
+   db.update("INSERT INTO model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by) VALUES(?,'真实运行协议测试',?,'OPENAI_COMPATIBLE','https://model.invalid/chat/completions',65536,1024,'ENABLED',?,?)",flowModel,flowModel.toString(),adminId,adminId);
+   db.update("INSERT INTO model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by) VALUES(?,?,'CNY',1,1,1,now()-interval '1 day','ENABLED',?,?)",flowPrice,flowModel,adminId,adminId);
+   UUID secretRef=modelSecrets.put("isolated-run-key");
+   db.update("INSERT INTO model_key(id,model_id,name,secret_ref,masked_suffix,status,created_by,updated_by) VALUES(?,?,'隔离调用',?,'****','ENABLED',?,?)",flowKey,flowModel,secretRef,adminId,adminId);
+   db.update("INSERT INTO membership_plan(id,name,code,status,created_by,updated_by) VALUES(?,'运行测试会员',?,'ENABLED',?,?)",flowPlan,flowPlan.toString(),adminId,adminId);
+   db.update("INSERT INTO membership_plan_version(id,plan_id,version_number,duration_days,monthly_token_quota,monthly_amount_limit,effective_from) VALUES(?,?,1,30,100000,10,now())",flowPlanVersion,flowPlan);
+   db.update("INSERT INTO membership(id,user_id,plan_id,plan_version_id,starts_at,expires_at,created_by) VALUES(?,?,?,?,now()-interval '1 minute',now()+interval '1 day',?)",UUID.randomUUID(),student,flowPlan,flowPlanVersion,adminId);
+   org.mockito.Mockito.doAnswer(invocation->{
+    assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
+    cn.zhixiang.platform.chat.ModelGateway.Request submitted=invocation.getArgument(0);assertEquals("isolated-run-key",submitted.secret());
+    java.util.function.Consumer<String> delta=invocation.getArgument(1);delta.accept("端到端");delta.accept("回答");return new cn.zhixiang.platform.chat.ModelGateway.Usage(10,5,0,"isolated-flow");
+   }).when(modelGateway).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   var runBody=new HashMap<String,Object>(Map.of("conversationId",conversation,"clientMessageId",UUID.randomUUID(),"text","请解释项目结构","modelId",flowModel,"sourceVersionIds",List.of(),"maxOutputTokens",100));
+   String flowRun=null;for(int repeat=0;repeat<2;repeat++){
+    String created=json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();if(flowRun!=null)assertEquals(flowRun,created);flowRun=created;
+   }
+   runBody.put("text","相同客户端ID不允许替换问题");mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isConflict());
+   assertTrue(runExecutor.runOne());assertFalse(runExecutor.runOne());
+   mvc.perform(get("/api/v1/student/runs/"+flowRun).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED")).andExpect(jsonPath("$.billingState").value("SETTLED"));
+   mvc.perform(get("/api/v1/student/runs/"+flowRun).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("q","端到端回答")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,UUID.fromString(flowRun)));
+   org.mockito.Mockito.verify(modelGateway,org.mockito.Mockito.times(1)).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   for(String action:List.of("queued","running","expired")){
+    runBody.put("clientMessageId",UUID.randomUUID());
+    UUID controlled=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText());
+    if(!action.equals("queued")){UUID owner=UUID.randomUUID();var claim=runLeases.claim(owner);assertEquals(controlled,claim.id());assertTrue(runLeases.start(controlled,owner,claim.generation()));}
+    if(action.equals("expired")){db.update("UPDATE generation_run SET lease_until=now()-interval '1 second' WHERE id=?",controlled);assertTrue(runControl.expireOne());assertFalse(runControl.expireOne());}
+    else mvc.perform(post("/api/v1/student/runs/"+controlled+"/cancel").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"隔离取消测试\"}")).andExpect(status().isAccepted()).andExpect(jsonPath("$.state").value("CANCELLED"));
+    assertEquals(action.equals("queued")?"RELEASED":"RECONCILING",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,controlled));assertFalse(runExecutor.runOne());
+   }
+   org.mockito.Mockito.verify(modelGateway,org.mockito.Mockito.times(1)).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   UUID ragCategory=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'运行引用',?,0,'ENABLED',?,?)",ragCategory,ragCategory.toString(),adminId,adminId);
+   var ragBody=Map.of("title","运行引用材料","categoryId",ragCategory,"tagIds",List.of(),"type","MARKDOWN","markdown","数据库事务保护账务一致性。这是测试资料，不是系统指令。","audience","PUBLIC");
+   UUID rag=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(ragBody))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
+   mvc.perform(post("/api/v1/admin/knowledge/"+rag+"/submit-review").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"reason\":\"测试审核\"}")).andExpect(status().isOk());
+   String published=mvc.perform(post("/api/v1/admin/knowledge/"+rag+"/publish").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"reason\":\"测试发布\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+   UUID ragVersion=UUID.fromString(json.readTree(published).get("publishedVersionId").asText());assertTrue(knowledgeIndexer.runOne());
+   cn.zhixiang.platform.chat.LocalModelServer localModel=new cn.zhixiang.platform.chat.LocalModelServer();
+   db.update("UPDATE model_definition SET endpoint=? WHERE id=?",localModel.endpoint(),flowModel);
+   org.mockito.Mockito.doAnswer(invocation->{cn.zhixiang.platform.chat.ModelGateway.Request context=invocation.getArgument(0);assertTrue(context.messages().stream().anyMatch(t->t.content().contains("数据库事务保护账务一致性")));assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());return localModel.gateway().stream(context,invocation.getArgument(1));}).when(modelGateway).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   runBody.put("clientMessageId",UUID.randomUUID());runBody.put("sourceVersionIds",List.of(ragVersion));
+   UUID ragRun;try{ragRun=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText());assertTrue(runExecutor.runOne());assertEquals(1,localModel.calls());}finally{localModel.close();}
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("q","引用答复")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].citations[0].versionId").value(ragVersion.toString()));
+   mvc.perform(post("/api/v1/admin/knowledge/"+rag+"/withdraw").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"").contentType("application/json").content("{\"reason\":\"撤回验证权限\"}")).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/student/runs/"+ragRun).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/runs/"+ragRun+"/events").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("q","引用答复")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isPreconditionFailed());
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
    mvc.perform(get("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
@@ -851,7 +905,14 @@ class FoundationIntegrationTest {
   db.update("INSERT INTO model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by) VALUES(?,'隔离模型',?,'TEST','https://model.invalid',4096,1024,'ENABLED',?,?)",model,model.toString(),adminId,adminId);
   db.update("INSERT INTO model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by) VALUES(?,?,'CNY',10,20,2,now()-interval '1 day','ENABLED',?,?)",price,model,adminId,adminId);
   assertEquals(100,quotas.current(student).availableTokens());assertEquals(100,quotas.current(student).availableTokens());
-  UUID a=UUID.randomUUID(),b=UUID.randomUUID();var gate=new java.util.concurrent.CountDownLatch(1);List<UUID> accepted=java.util.Collections.synchronizedList(new ArrayList<>());
+  UUID quotaSchool=UUID.randomUUID(),quotaMajor=UUID.randomUUID(),quotaOrder=UUID.randomUUID(),quotaProject=UUID.randomUUID(),quotaConversation=UUID.randomUUID();
+  db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'账务测试院校',?,'测试','ENABLED',?,?)",quotaSchool,quotaSchool.toString(),adminId,adminId);
+  db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'账务测试专业',?,?,'BACHELOR','ENABLED',?,?)",quotaMajor,quotaMajor.toString(),quotaSchool,adminId,adminId);
+  db.update("INSERT INTO software_order(id,order_no,title,student_id,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,created_by,updated_by,status) VALUES(?,?,'账务夹具',?,'test','test',0,'CNY','test','MANUAL',?,?,?,?,'CONFIRMED')",quotaOrder,quotaOrder.toString(),student,quotaSchool,quotaMajor,adminId,adminId);
+  db.update("INSERT INTO software_project(id,order_id,title,requirements,delivery_date,created_by,updated_by) VALUES(?,?,'账务夹具','隔离测试',CURRENT_DATE,?,?)",quotaProject,quotaOrder,adminId,adminId);
+  db.update("INSERT INTO chat_conversation(id,project_id,student_id,title) VALUES(?,?,?,'账务夹具')",quotaConversation,quotaProject,student);
+  java.util.function.Supplier<UUID> newRun=()->{UUID id=UUID.randomUUID();db.update("INSERT INTO generation_run(id,student_id,conversation_id,client_message_id,request_hash,model_id,price_id) VALUES(?,?,?,?,'quota-test',?,?)",id,student,quotaConversation,UUID.randomUUID(),model,price);return id;};
+  UUID a=newRun.get(),b=newRun.get();var gate=new java.util.concurrent.CountDownLatch(1);List<UUID> accepted=java.util.Collections.synchronizedList(new ArrayList<>());
   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
    var futures=new ArrayList<java.util.concurrent.Future<Boolean>>();for(UUID run:List.of(a,b))futures.add(pool.submit(()->{gate.await();try{quotas.reserve(student,run,price,60,new java.math.BigDecimal("0.600000"));accepted.add(run);return true;}catch(cn.zhixiang.platform.shared.BusinessException e){assertEquals("QUOTA_EXCEEDED",e.code());return false;}}));gate.countDown();assertEquals(1,futures.stream().map(f->{try{return f.get()?1:0;}catch(Exception e){throw new RuntimeException(e);}}).mapToInt(Integer::intValue).sum());
   }
@@ -859,7 +920,7 @@ class FoundationIntegrationTest {
   quotas.unknown(run);quotas.unknown(run);assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->quotas.release(run,false));assertEquals(60,quotas.current(student).reservedTokens());
   quotas.settle(run,40,10,20);quotas.settle(run,40,10,20);assertEquals(50,quotas.current(student).availableTokens());assertEquals(0,quotas.current(student).reservedTokens());assertEquals("0.999560",quotas.current(student).availableAmount());
   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->quotas.settle(run,41,10,20));
-  UUID release=UUID.randomUUID();quotas.reserve(student,release,price,30,new java.math.BigDecimal("0.100000"));quotas.release(release,true);quotas.release(release,true);assertEquals(50,quotas.current(student).availableTokens());
+  UUID release=newRun.get();quotas.reserve(student,release,price,30,new java.math.BigDecimal("0.100000"));quotas.release(release,true);quotas.release(release,true);assertEquals(50,quotas.current(student).availableTokens());
   UUID account=db.queryForObject("SELECT id FROM quota_account WHERE user_id=?",UUID.class,student);
   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE quota_hold SET state='SETTLED',input_tokens=NULL WHERE run_id=?",run));
   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("INSERT INTO quota_ledger(id,account_id,source_id,kind,grant_tokens) VALUES(?,?,?,'GRANT',-1)",UUID.randomUUID(),account,UUID.randomUUID()));
@@ -869,7 +930,7 @@ class FoundationIntegrationTest {
   assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->db.update("UPDATE quota_ledger SET spend_tokens=0 WHERE account_id=?",account));
   mvc.perform(get("/api/v1/student/quota").header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.availableTokens").value(50));
   // 仅把此测试学生的账户移至上月，模拟跨月迟到结算，不修改服务器时钟。
-  UUID late=UUID.randomUUID();quotas.reserve(student,late,price,30,new java.math.BigDecimal("0.100000"));
+  UUID late=newRun.get();quotas.reserve(student,late,price,30,new java.math.BigDecimal("0.100000"));
   db.update("UPDATE quota_account SET period_start=period_start-interval '1 month',period_end=period_start WHERE id=?",account);
   assertEquals(100,quotas.current(student).availableTokens());assertEquals(0,quotas.current(student).reservedTokens());
   quotas.unknown(late);quotas.settle(late,150,20,0); // 超出预占也完整记账，不能向新周期转嫁费用。

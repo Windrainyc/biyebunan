@@ -10,6 +10,12 @@ public interface QuotaMapper {
  * @param user 学生
  * @return 学生或null */
  @Select("SELECT id FROM user_account WHERE id=#{user} AND platform='student' AND status='ENABLED' FOR UPDATE") UUID user(UUID user);
+ /** 验证预占所属运行、学生和价格，运行身份由数据库不可变触发器保护。
+ * @param run 运行
+ * @param user 学生
+ * @param price 价格
+ * @return 是否一致 */
+ @Select("SELECT EXISTS(SELECT 1 FROM generation_run WHERE id=#{run} AND student_id=#{user} AND price_id=#{price})") boolean runMatches(UUID run,UUID user,UUID price);
  /** 当前有效权益快照。
  * @param user 学生
  * @return 权益或null */

@@ -18,6 +18,10 @@ public interface RunLeaseMapper {
  /** 读取过期调用候选；核对流程必须按额度账户→运行加锁并重查，不得直接重新派发。
  * @return 一个待核对ID或null */
  @Select("SELECT id FROM generation_run WHERE state='RUNNING' AND lease_until<clock_timestamp() ORDER BY lease_until,id LIMIT 1") UUID expiredCall();
+ /** 加锁后复核调用是否失联。
+ * @param run 运行
+ * @return RUNNING且租约过期 */
+ @Select("SELECT EXISTS(SELECT 1 FROM generation_run WHERE id=#{run} AND state='RUNNING' AND lease_until<clock_timestamp())") boolean expired(UUID run);
  /** 在运行锁内验证完成结果仍属于原领取者；允许租约过期后的迟到结果，但拒绝新代次覆盖。
  * @param run 运行
  * @param owner 原领取者

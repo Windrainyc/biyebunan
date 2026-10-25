@@ -36,7 +36,7 @@ public class MessageService {
  * @param actor 当前学生
  * @return 历史分页 */
  @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
- public PageResult<View> history(UUID conversation,PageQuery q,Actor actor){if(q.status()!=null)throw new BusinessException(400,"INVALID_FILTER","消息没有启停状态");conversations.get(conversation,actor);return new PageResult<>(mapper.list(conversation,q).stream().map(r->new View(r.id(),r.conversationId(),r.runId(),r.role(),r.text(),json.readTree(r.citations()),r.createdAt())).toList(),q.page(),q.size(),mapper.count(conversation,q));}
+ public PageResult<View> history(UUID conversation,PageQuery q,Actor actor){if(q.status()!=null)throw new BusinessException(400,"INVALID_FILTER","消息没有启停状态");conversations.get(conversation,actor);return new PageResult<>(mapper.list(conversation,q,actor.id()).stream().map(r->new View(r.id(),r.conversationId(),r.runId(),r.role(),r.text(),json.readTree(r.citations()),r.createdAt())).toList(),q.page(),q.size(),mapper.count(conversation,q,actor.id()));}
  /** 历史响应，不暴露运行上下文或供应商密钥。
  * @param id 消息ID
  * @param conversationId 会话

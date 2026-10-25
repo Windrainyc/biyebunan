@@ -31,7 +31,7 @@ public class QuotaService {
  @Transactional(rollbackFor=Exception.class)
  public QuotaMapper.Hold reserve(UUID user,UUID run,UUID price,long tokens,BigDecimal amount){
   if(tokens<=0||amount.signum()<0||amount.scale()>6)throw new BusinessException(422,"RESERVATION_INVALID","预占值不合法");
-  if(mapper.user(user)==null)throw new BusinessException(403,"FORBIDDEN","学生账户不可用");var old=mapper.hold(run);
+  if(mapper.user(user)==null)throw new BusinessException(403,"FORBIDDEN","学生账户不可用");if(!mapper.runMatches(run,user,price))throw new BusinessException(404,"RESOURCE_NOT_FOUND","运行或价格归属不匹配");var old=mapper.hold(run);
   if(old!=null){if(!user.equals(mapper.owner(run))||!old.priceId().equals(price)||old.tokens()!=tokens||old.amount().compareTo(amount)!=0)throw new BusinessException(409,"RESERVATION_CONFLICT","运行预占参数不一致");return old;}
   var state=prepare(user);var a=state.account();if(state.benefit()==null)throw new BusinessException(422,"MEMBERSHIP_REQUIRED","当前没有有效会员权益");if(availableTokens(a)<tokens||availableAmount(a).compareTo(amount)<0)throw new BusinessException(422,"QUOTA_EXCEEDED","可用额度不足");
   mapper.reserve(run,a.id(),price,tokens,amount);delta(a.id(),run,"RESERVE",0,tokens,0,ZERO,amount,ZERO);return mapper.hold(run);

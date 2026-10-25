@@ -1,4 +1,10 @@
 spring:
+  task:
+    scheduling:
+      pool:
+        size: 6
   main:
     web-application-type: none
 # 后续可通过独立管理端口暴露探针；当前 worker 不启动业务HTTP。
+
+# 扫描、索引、模型调用和失联恢复使用有界调度池；生产总连接预算须乘以worker副本数。

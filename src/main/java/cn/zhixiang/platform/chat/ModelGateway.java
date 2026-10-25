@@ -3,6 +3,10 @@ import java.util.*;
 import java.util.function.Consumer;
 /** 模型供应商端口；完成必须包含真实用量，断流不等于零消耗。 */
 public interface ModelGateway {
+ /** 调用前检查部署开关与目标端点，不发送网络请求。
+ * @param endpoint 完整端点
+ * @throws Failure 配置不可用 */
+ void check(String endpoint);
  /** 同步执行供应商流；调用者必须在数据库事务外执行，回调用于短事务持久化增量。
  * @param request 固定运行上下文
  * @param delta 文本增量接收器
