@@ -10,6 +10,9 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 schemas = yaml.safe_load((root / 'contract/openapi.yaml').read_text())['components']['schemas']
 bindings = {
+    'billing/AdjustmentDtos.java': 'Adjustment',
+    'billing/UsageService.java': 'UsageEntry',
+    'chat/AvailableModelService.java': 'AvailableModel',
     'chat/RunDtos.java': 'Run',
     'chat/MessageService.java': 'Message',
     'chat/ConversationDtos.java': 'Conversation',

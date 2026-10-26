@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.10-development
+  version: 1.0.11-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -11369,7 +11369,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
-      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      x-filter-policy: q按运行ID字面模糊匹配；status为账务状态；from/to按UTC创建日期且包含首尾日期。
   /api/v1/admin/conversations:
     get:
       operationId: get_admin_conversations
@@ -11627,7 +11627,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
-      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      x-filter-policy: q按运行ID字面模糊匹配；status为账务状态；from/to按UTC创建日期且包含首尾日期。
   /api/v1/admin/usage-adjustments:
     post:
       operationId: post_admin_usage_adjustments
@@ -11642,13 +11642,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsageEntry'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
+                $ref: '#/components/schemas/Adjustment'
         '400': *id001
         '401': *id002
         '403': *id003
@@ -15438,7 +15432,10 @@ components:
       type: object
       additionalProperties: false
       properties:
-        displayName: *id011
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
         schoolId: *id010
         majorId: *id010
       required:
@@ -16059,10 +16056,30 @@ components:
       properties:
         id: *id010
         runId: *id010
-        inputTokens: *id020
-        outputTokens: *id020
-        cachedTokens: *id020
-        amount: *id022
+        inputTokens:
+          type: [integer, 'null']
+          minimum: 0
+          description: 未确认实际用量时为null，不以0推断无消耗
+        outputTokens:
+          type: [integer, 'null']
+          minimum: 0
+          description: 未确认实际用量时为null，不以0推断无消耗
+        cachedTokens:
+          type: [integer, 'null']
+          minimum: 0
+          description: 未确认实际用量时为null，不以0推断无消耗
+        amount:
+          type: [string, 'null']
+          description: 实际人民币金额十进制字符串；未知为null，确定释放为0
+          pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
+        adjustmentAmount:
+          type: string
+          description: 人工调整净额，退还为负；不修改原始amount
+          pattern: ^-?[0-9]{1,14}(\.[0-9]{1,6})?$
+        netAmount:
+          type: [string, 'null']
+          description: 原始金额加人工调整净额，未知时为null
+          pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
         currency:
           type: string
           enum:
@@ -16083,6 +16100,8 @@ components:
       - outputTokens
       - cachedTokens
       - amount
+      - adjustmentAmount
+      - netAmount
       - currency
       - priceVersionId
       - state
@@ -16833,6 +16852,30 @@ components:
       required:
       - decision
       - reason
+    Adjustment:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id010
+        runId: *id010
+        direction:
+          type: string
+          enum: [DEBIT, CREDIT]
+        amount: *id022
+        currency:
+          type: string
+          enum: [CNY]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        createdBy: *id010
+        createdAt: *id014
+      required: [id, runId, direction, amount, currency, reason, evidenceRef, createdBy, createdAt]
     UsageAdjustment:
       type: object
       additionalProperties: false
@@ -16844,8 +16887,14 @@ components:
           - DEBIT
           - CREDIT
         amount: *id022
-        reason: *id011
-        evidenceRef: *id011
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 1000
       required:
       - runId
       - direction

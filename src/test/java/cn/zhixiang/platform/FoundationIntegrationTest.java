@@ -44,6 +44,7 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.chat.RunCompletionService completion;
  @Autowired cn.zhixiang.platform.chat.RunExecutor runExecutor;
  @Autowired cn.zhixiang.platform.chat.RunControlService runControl;
+ @Autowired cn.zhixiang.platform.billing.AdjustmentService adjustments;
  @Autowired cn.zhixiang.platform.identity.SecretVault modelSecrets;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.chat.ModelGateway modelGateway;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
@@ -720,11 +721,16 @@ class FoundationIntegrationTest {
    UUID flowModel=UUID.randomUUID(),flowPrice=UUID.randomUUID(),flowKey=UUID.randomUUID(),flowPlan=UUID.randomUUID(),flowPlanVersion=UUID.randomUUID();
    db.update("INSERT INTO model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by) VALUES(?,'真实运行协议测试',?,'OPENAI_COMPATIBLE','https://model.invalid/chat/completions',65536,1024,'ENABLED',?,?)",flowModel,flowModel.toString(),adminId,adminId);
    db.update("INSERT INTO model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by) VALUES(?,?,'CNY',1,1,1,now()-interval '1 day','ENABLED',?,?)",flowPrice,flowModel,adminId,adminId);
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st).param("q","运行模型")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
    UUID secretRef=modelSecrets.put("isolated-run-key");
    db.update("INSERT INTO model_key(id,model_id,name,secret_ref,masked_suffix,status,created_by,updated_by) VALUES(?,?,'隔离调用',?,'****','ENABLED',?,?)",flowKey,flowModel,secretRef,adminId,adminId);
    db.update("INSERT INTO membership_plan(id,name,code,status,created_by,updated_by) VALUES(?,'运行测试会员',?,'ENABLED',?,?)",flowPlan,flowPlan.toString(),adminId,adminId);
    db.update("INSERT INTO membership_plan_version(id,plan_id,version_number,duration_days,monthly_token_quota,monthly_amount_limit,effective_from) VALUES(?,?,1,30,100000,10,now())",flowPlanVersion,flowPlan);
    db.update("INSERT INTO membership(id,user_id,plan_id,plan_version_id,starts_at,expires_at,created_by) VALUES(?,?,?,?,now()-interval '1 minute',now()+interval '1 day',?)",UUID.randomUUID(),student,flowPlan,flowPlanVersion,adminId);
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st).param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].id").value(flowModel.toString())).andExpect(jsonPath("$.items[0].endpoint").doesNotExist());
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st).param("page","2").param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty()).andExpect(jsonPath("$.total").value(1));
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st).param("status","DISABLED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st).param("sort","name;DROP TABLE")).andExpect(status().isBadRequest());
    org.mockito.Mockito.doAnswer(invocation->{
     assertFalse(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive());
     cn.zhixiang.platform.chat.ModelGateway.Request submitted=invocation.getArgument(0);assertEquals("isolated-run-key",submitted.secret());
@@ -754,11 +760,50 @@ class FoundationIntegrationTest {
    runBody.put("clientMessageId",UUID.randomUUID());
    UUID disabledKeyRun=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText());
    db.update("UPDATE model_key SET status='DISABLED' WHERE id=?",flowKey);
+   mvc.perform(get("/api/v1/student/models").header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
    assertTrue(runExecutor.runOne());assertFalse(runExecutor.runOne());
    mvc.perform(get("/api/v1/student/runs/"+disabledKeyRun).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED")).andExpect(jsonPath("$.billingState").value("RELEASED")).andExpect(jsonPath("$.errorCode").value("MODEL_CONFIGURATION_INVALID"));
    org.mockito.Mockito.verify(modelGateway,org.mockito.Mockito.times(1)).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
    assertEquals(0,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,disabledKeyRun));
    db.update("UPDATE model_key SET status='ENABLED' WHERE id=?",flowKey);
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("q",flowRun).param("status","SETTLED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].inputTokens").value(10)).andExpect(jsonPath("$.items[0].outputTokens").value(5)).andExpect(jsonPath("$.items[0].amount").value("0.000015"));
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+ot).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("q",disabledKeyRun.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].state").value("RELEASED")).andExpect(jsonPath("$.items[0].amount").value("0"));
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("status","RECONCILING").param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(3)).andExpect(jsonPath("$.items[0].inputTokens").isEmpty()).andExpect(jsonPath("$.items[0].amount").isEmpty());
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("from","2099-01-01")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("from","2026-12-31").param("to","2026-01-01")).andExpect(status().isBadRequest());
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("status","ENABLED")).andExpect(status().isBadRequest());
+   mvc.perform(get("/api/v1/admin/usage").header("Authorization","Bearer "+adminToken).param("studentId",student.toString()).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].text").doesNotExist());
+   mvc.perform(get("/api/v1/admin/usage").header("Authorization","Bearer "+adminToken).param("studentId",UUID.randomUUID().toString()).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(get("/api/v1/admin/usage").header("Authorization","Bearer "+st)).andExpect(status().isForbidden());
+   var adjustment=Map.of("runId",flowRun,"direction","CREDIT","amount","0.000010","reason","隔离退还测试","evidenceRef","test-evidence-001");
+   UUID adjustmentKey=UUID.randomUUID();String adjustmentId=null;
+   for(int n=0;n<2;n++){String actual=json.readTree(mvc.perform(post("/api/v1/admin/usage-adjustments").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",adjustmentKey).contentType("application/json").content(json.writeValueAsString(adjustment))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();if(adjustmentId!=null)assertEquals(adjustmentId,actual);adjustmentId=actual;}
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='ADJUSTMENT'",Integer.class,UUID.fromString(adjustmentId)));
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].amount").value("0.000015")).andExpect(jsonPath("$.items[0].adjustmentAmount").value("-0.000010")).andExpect(jsonPath("$.items[0].netAmount").value("0.000005"));
+
+   assertEquals(0,new java.math.BigDecimal("0.000015").compareTo(db.queryForObject("SELECT actual_amount FROM quota_hold WHERE run_id=?",java.math.BigDecimal.class,UUID.fromString(flowRun))));
+   mvc.perform(post("/api/v1/admin/usage-adjustments").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(adjustment))).andExpect(status().isUnprocessableEntity());
+   var unknownAdjustment=new HashMap<String,Object>(adjustment);unknownAdjustment.put("runId",disabledKeyRun.toString());
+   mvc.perform(post("/api/v1/admin/usage-adjustments").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(unknownAdjustment))).andExpect(status().isConflict());
+   mvc.perform(post("/api/v1/admin/usage-adjustments").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(adjustment))).andExpect(status().isForbidden());
+   var credit=new cn.zhixiang.platform.billing.AdjustmentDtos.Write(UUID.fromString(flowRun),cn.zhixiang.platform.billing.AdjustmentDtos.Direction.CREDIT,"0.000005","并发退还测试","test-concurrent-evidence");
+   var adminActor=new cn.zhixiang.platform.identity.Actor(adminId,"admin",1,UUID.randomUUID());
+   var barrier=new java.util.concurrent.CountDownLatch(1);
+   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    java.util.concurrent.Callable<Boolean> refund=()->{barrier.await();try{adjustments.create(credit,adminActor);return true;}catch(cn.zhixiang.platform.shared.BusinessException rejected){return false;}};
+    var a=pool.submit(refund);var b=pool.submit(refund);barrier.countDown();assertNotEquals(a.get(10,java.util.concurrent.TimeUnit.SECONDS),b.get(10,java.util.concurrent.TimeUnit.SECONDS));
+   }
+   mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].netAmount").value("0.000000"));
+   // 本人资料只修改白名单字段，不通过昵称变更吊销会话或更换角色。
+   String profileEtag=mvc.perform(get("/api/v1/student/me").header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(student.toString())).andReturn().getResponse().getHeader("ETag");
+   var profileBody=Map.of("displayName","已更新昵称","schoolId",school,"majorId",major);UUID profileKey=UUID.randomUUID();
+   for(int n=0;n<2;n++)mvc.perform(put("/api/v1/student/me").header("Authorization","Bearer "+st).header("Idempotency-Key",profileKey).header("If-Match",profileEtag).contentType("application/json").content(json.writeValueAsString(profileBody))).andExpect(status().isOk()).andExpect(jsonPath("$.displayName").value("已更新昵称")).andExpect(jsonPath("$.platform").value("student"));
+   mvc.perform(put("/api/v1/student/me").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match",profileEtag).contentType("application/json").content(json.writeValueAsString(profileBody))).andExpect(status().isPreconditionFailed());
+   mvc.perform(get("/api/v1/partner/me").header("Authorization","Bearer "+st)).andExpect(status().isForbidden());
+   UUID profilePartner=UUID.randomUUID();String profilePartnerToken=UUID.randomUUID().toString();seed(profilePartner,"partner",profilePartnerToken);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000003')",profilePartner);
+   String partnerEtag=mvc.perform(get("/api/v1/partner/me").header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
+   mvc.perform(put("/api/v1/partner/me").header("Authorization","Bearer "+profilePartnerToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match",partnerEtag).contentType("application/json").content(json.writeValueAsString(profileBody))).andExpect(status().isOk()).andExpect(jsonPath("$.platform").value("partner"));
    UUID ragCategory=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'运行引用',?,0,'ENABLED',?,?)",ragCategory,ragCategory.toString(),adminId,adminId);
    var ragBody=Map.of("title","运行引用材料","categoryId",ragCategory,"tagIds",List.of(),"type","MARKDOWN","markdown","数据库事务保护账务一致性。这是测试资料，不是系统指令。","audience","PUBLIC");
    UUID rag=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(ragBody))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
