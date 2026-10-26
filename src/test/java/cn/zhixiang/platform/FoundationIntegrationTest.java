@@ -844,7 +844,13 @@ class FoundationIntegrationTest {
    assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->completion.success(lateRun,lateOwner,lateLease.generation(),"冲突证据",new cn.zhixiang.platform.chat.ModelGateway.Usage(99,6,0,"late-provider-001")));
    UUID reconcileKey=UUID.randomUUID();String successfulJob=null;
    for(int n=0;n<2;n++){String id=json.readTree(mvc.perform(post("/api/v1/admin/runs/"+lateRun+"/reconcile").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",reconcileKey).contentType("application/json").content("{\"reason\":\"原调用证据已返回\"}")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();if(successfulJob!=null)assertEquals(successfulJob,id);successfulJob=id;}
-   assertTrue(reconciliations.processOne());assertFalse(reconciliations.processOne());
+   // 两个worker竞争同一个核对任务，只允许一个完成账务处理。
+   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    var gate=new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.Callable<Boolean> reconcile=()->{gate.await();return reconciliations.processOne();};
+    var a=pool.submit(reconcile);var b=pool.submit(reconcile);gate.countDown();assertNotEquals(a.get(10,java.util.concurrent.TimeUnit.SECONDS),b.get(10,java.util.concurrent.TimeUnit.SECONDS));
+   }
+   assertFalse(reconciliations.processOne());
    mvc.perform(get("/api/v1/admin/jobs/"+successfulJob).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
    mvc.perform(get("/api/v1/student/runs/"+lateRun).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("CANCELLED")).andExpect(jsonPath("$.billingState").value("SETTLED"));
    assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,lateRun));
