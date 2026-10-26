@@ -750,6 +750,15 @@ class FoundationIntegrationTest {
     assertEquals(action.equals("queued")?"RELEASED":"RECONCILING",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,controlled));assertFalse(runExecutor.runOne());
    }
    org.mockito.Mockito.verify(modelGateway,org.mockito.Mockito.times(1)).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   // 排队后禁用凭证必须在网络调用前拒绝，释放预占且不得消耗供应商用量。
+   runBody.put("clientMessageId",UUID.randomUUID());
+   UUID disabledKeyRun=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText());
+   db.update("UPDATE model_key SET status='DISABLED' WHERE id=?",flowKey);
+   assertTrue(runExecutor.runOne());assertFalse(runExecutor.runOne());
+   mvc.perform(get("/api/v1/student/runs/"+disabledKeyRun).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED")).andExpect(jsonPath("$.billingState").value("RELEASED")).andExpect(jsonPath("$.errorCode").value("MODEL_CONFIGURATION_INVALID"));
+   org.mockito.Mockito.verify(modelGateway,org.mockito.Mockito.times(1)).stream(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,disabledKeyRun));
+   db.update("UPDATE model_key SET status='ENABLED' WHERE id=?",flowKey);
    UUID ragCategory=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'运行引用',?,0,'ENABLED',?,?)",ragCategory,ragCategory.toString(),adminId,adminId);
    var ragBody=Map.of("title","运行引用材料","categoryId",ragCategory,"tagIds",List.of(),"type","MARKDOWN","markdown","数据库事务保护账务一致性。这是测试资料，不是系统指令。","audience","PUBLIC");
    UUID rag=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(ragBody))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
