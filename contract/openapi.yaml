@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.12-development
+  version: 1.0.13-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -12814,7 +12814,7 @@ paths:
       tags:
       - admin
       x-permission: get_admin_notifications
-      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '200':
           description: 成功
@@ -12860,8 +12860,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 已读或未读；未知状态400
+        schema:
+          type: string
+          enum: [READ, UNREAD]
       - name: sort
         in: query
         required: false
@@ -12888,7 +12890,7 @@ paths:
       tags:
       - admin
       x-permission: post_admin_notifications_id_read
-      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '204':
           description: 成功
@@ -12980,7 +12982,7 @@ paths:
       tags:
       - partner
       x-permission: get_partner_notifications
-      x-data-scope: 当前中介名下学生订单；进度无私聊和文件地址
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '200':
           description: 成功
@@ -13026,8 +13028,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 已读或未读；未知状态400
+        schema:
+          type: string
+          enum: [READ, UNREAD]
       - name: sort
         in: query
         required: false
@@ -13054,7 +13058,7 @@ paths:
       tags:
       - partner
       x-permission: post_partner_notifications_id_read
-      x-data-scope: 当前中介名下学生订单；进度无私聊和文件地址
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '204':
           description: 成功
@@ -13146,7 +13150,7 @@ paths:
       tags:
       - student
       x-permission: get_student_notifications
-      x-data-scope: 本人及已绑定项目
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '200':
           description: 成功
@@ -13192,8 +13196,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 已读或未读；未知状态400
+        schema:
+          type: string
+          enum: [READ, UNREAD]
       - name: sort
         in: query
         required: false
@@ -13220,7 +13226,7 @@ paths:
       tags:
       - student
       x-permission: post_student_notifications_id_read
-      x-data-scope: 本人及已绑定项目
+      x-data-scope: 当前登录用户本人；管理员也不得读取其他用户收件箱
       responses:
         '204':
           description: 成功

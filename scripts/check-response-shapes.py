@@ -10,6 +10,9 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 schemas = yaml.safe_load((root / 'contract/openapi.yaml').read_text())['components']['schemas']
 bindings = {
+    'notification/NotificationService.java': 'Notification',
+    'notification/TemplateDtos.java': 'NotificationTemplate',
+    'forum/BoardDtos.java': 'ForumBoard',
     'identity/PartnerStudentService.java': 'StudentSummary',
     'billing/AdjustmentDtos.java': 'Adjustment',
     'billing/UsageService.java': 'UsageEntry',

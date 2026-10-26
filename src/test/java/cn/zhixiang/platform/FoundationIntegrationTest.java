@@ -31,6 +31,8 @@ class FoundationIntegrationTest {
  @Autowired TokenDigester digester;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.identity.SmsGateway sms;
  @Autowired JsonMapper json;
+ @Autowired cn.zhixiang.platform.notification.NotificationService notifications;
+ @Autowired org.springframework.transaction.PlatformTransactionManager txManager;
  @Autowired cn.zhixiang.platform.asset.AssetValidation validation;
  @Autowired cn.zhixiang.platform.asset.AssetTaskMapper assetTasks;
  @Autowired cn.zhixiang.platform.knowledge.KnowledgeIndexer knowledgeIndexer;
@@ -80,6 +82,85 @@ class FoundationIntegrationTest {
  void seed(UUID id,String platform,String token) {
   db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,?,?,?,?,?,'ENABLED')",id,platform,"隔离测试",UUID.randomUUID().toString(),"138****0000","not-a-login-password");
   db.update("INSERT INTO auth_session(id,user_id,access_digest,refresh_digest,csrf_digest,auth_version,expires_at,refresh_expires_at,family_id) VALUES(?,?,?,?,?,1,now()+interval '15 minutes',now()+interval '7 days',?)",UUID.randomUUID(),id,digester.digest("access",token),UUID.randomUUID().toString(),UUID.randomUUID().toString(),UUID.randomUUID());
+ }
+ @Test void forumBoardCrudAndStudentVisibility() throws Exception {
+  UUID role=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
+  for(String permission:List.of("forum-boards:read","forum-boards:write","forum-boards:delete"))db.update("INSERT INTO role_permission VALUES(?,?)",role,permission);
+  String studentToken=UUID.randomUUID().toString();UUID boardStudent=UUID.randomUUID();seed(boardStudent,"student",studentToken);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",boardStudent);
+  String path="/api/v1/admin/forum-boards",code=UUID.randomUUID().toString(),key=UUID.randomUUID().toString();
+  String body=json.writeValueAsString(Map.of("name","论坛_字面%","code",code,"requiresReview",true,"sortOrder",4,"status","ENABLED"));
+  var response=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.requiresReview").value(true)).andReturn().getResponse();
+  String id=json.readTree(response.getContentAsString()).get("id").asString();
+  mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(content().json(response.getContentAsString()));
+  mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isConflict());
+  mvc.perform(get(path).header("Authorization","Bearer "+adminToken).param("q",code).param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+  mvc.perform(get(path).header("Authorization","Bearer "+adminToken).param("sort","name;DROP TABLE forum_board")).andExpect(status().isBadRequest());
+  String dict="/api/v1/student/dictionaries/forum-boards";
+  mvc.perform(get(dict).header("Authorization","Bearer "+studentToken).param("q",code)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+  mvc.perform(get(dict).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+  mvc.perform(get(path).header("Authorization","Bearer "+studentToken)).andExpect(status().isForbidden());
+  mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"99\"").contentType("application/json").content(body)).andExpect(status().isPreconditionFailed());
+  mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(body.replace("true","false"))).andExpect(status().isOk()).andExpect(jsonPath("$.requiresReview").value(false)).andExpect(header().string("ETag","\"2\""));
+  mvc.perform(post(path+"/"+id+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"status\":\"DISABLED\"}")).andExpect(status().isOk());
+  mvc.perform(get(dict).header("Authorization","Bearer "+studentToken).param("q",code)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(get(dict).header("Authorization","Bearer "+studentToken).param("status","DISABLED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(delete(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isNoContent());
+  mvc.perform(get(path+"/"+id).header("Authorization","Bearer "+adminToken)).andExpect(status().isNotFound());
+ }
+ @Test void notificationTemplateConfigurationDoesNotSend() throws Exception {
+  UUID role=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
+  for(String permission:List.of("notification-templates:read","notification-templates:write","notification-templates:delete"))db.update("INSERT INTO role_permission VALUES(?,?)",role,permission);
+  String path="/api/v1/admin/notification-templates",code=UUID.randomUUID().toString(),key=UUID.randomUUID().toString();
+  String body=json.writeValueAsString(Map.of("name","订单通知模板","code",code,"channel","SMS","providerTemplateId","isolated-test-template","status","DISABLED"));
+  var created=mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.channel").value("SMS")).andReturn().getResponse();
+  String id=json.readTree(created.getContentAsString()).get("id").asString();
+  mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(content().json(created.getContentAsString()));
+  mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isConflict());
+  mvc.perform(get(path).header("Authorization","Bearer "+adminToken).param("q",code).param("status","DISABLED").param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+  mvc.perform(get(path).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+  mvc.perform(put(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(body.replace("SMS","IN_APP"))).andExpect(status().isOk()).andExpect(jsonPath("$.channel").value("IN_APP"));
+  mvc.perform(post(path+"/"+id+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"status\":\"ENABLED\"}")).andExpect(status().isPreconditionFailed());
+  mvc.perform(post(path+"/"+id+"/status").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"status\":\"ENABLED\"}")).andExpect(status().isOk());
+  mvc.perform(delete(path+"/"+id).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isNoContent());
+  mvc.perform(get(path+"/"+id).header("Authorization","Bearer "+adminToken)).andExpect(status().isNotFound());
+ }
+ @Test void notificationsArePrivateDeduplicatedAndMonotonic() throws Exception {
+  var tx=new org.springframework.transaction.support.TransactionTemplate(txManager);
+  UUID role=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
+  for(String permission:List.of("get_admin_notifications","post_admin_notifications_id_read"))db.update("INSERT INTO role_permission VALUES(?,?)",role,permission);
+  UUID student=UUID.randomUUID(),partner=UUID.randomUUID();String st=UUID.randomUUID().toString(),pt=UUID.randomUUID().toString();seed(student,"student",st);seed(partner,"partner",pt);
+  db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000003')",partner);
+  UUID event=UUID.randomUUID();var pool=java.util.concurrent.Executors.newFixedThreadPool(2);UUID notification;
+  try{
+   var gate=new java.util.concurrent.CountDownLatch(1);
+   java.util.concurrent.Callable<UUID> delivery=()->{gate.await();return tx.execute(x->notifications.deliver(student,event,"测试通知","同事件仅投递一次"));};
+   var a=pool.submit(delivery);var b=pool.submit(delivery);gate.countDown();notification=a.get();assertEquals(notification,b.get());
+  }finally{pool.shutdownNow();}
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM in_app_notification WHERE recipient_id=? AND event_id=?",Integer.class,student,event));
+  assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->tx.execute(x->notifications.deliver(student,event,"改变文案","同事件仅投递一次")));
+  assertThrows(IllegalStateException.class,()->tx.execute(x->{notifications.deliver(partner,UUID.randomUUID(),"回滚测试","不得投递");throw new IllegalStateException("rollback");}));
+  UUID queued=UUID.randomUUID();
+  assertThrows(IllegalStateException.class,()->tx.execute(x->{notifications.enqueue(partner,queued,"回滚队列","事务不可提前投递");throw new IllegalStateException("rollback");}));
+  assertEquals(0,db.queryForObject("SELECT count(*) FROM notification_delivery_task WHERE event_id=?",Integer.class,queued));
+  tx.executeWithoutResult(x->notifications.enqueue(adminId,queued,"后台消息","仅收件人可见"));
+  tx.executeWithoutResult(x->notifications.enqueue(adminId,queued,"后台消息","仅收件人可见"));
+  var workers=java.util.concurrent.Executors.newFixedThreadPool(2);
+  try{var a=workers.submit(()->notifications.processOne());var b=workers.submit(()->notifications.processOne());a.get();b.get();}finally{workers.shutdownNow();}
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM in_app_notification WHERE recipient_id=? AND event_id=?",Integer.class,adminId,queued));
+  assertEquals("DELIVERED",db.queryForObject("SELECT state FROM notification_delivery_task WHERE recipient_id=? AND event_id=?",String.class,adminId,queued));
+  UUID adminNotice=db.queryForObject("SELECT id FROM in_app_notification WHERE recipient_id=? AND event_id=?",UUID.class,adminId,queued);
+  for(var pair:Map.of("student",st,"partner",pt,"admin",adminToken).entrySet()){
+   String root="/api/v1/"+pair.getKey()+"/notifications",token=pair.getValue();
+   mvc.perform(get(root).header("Authorization","Bearer "+token)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(pair.getKey().equals("partner")?0:1));
+   if(!pair.getKey().equals("student"))mvc.perform(post(root+"/"+notification+"/read").header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isNotFound());
+  }
+  String path="/api/v1/student/notifications",read=path+"/"+notification+"/read",key=UUID.randomUUID().toString();
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("status","ENABLED")).andExpect(status().isBadRequest());
+  for(int i=0;i<3;i++)mvc.perform(post(read).header("Authorization","Bearer "+st).header("Idempotency-Key",i==2?UUID.randomUUID().toString():key)).andExpect(status().isNoContent());
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("status","UNREAD")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("status","READ")).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].read").value(true));
+  assertEquals(1,db.queryForObject("SELECT count(*) FROM audit_event WHERE resource_id=? AND action='READ'",Integer.class,notification));
+  mvc.perform(post("/api/v1/student/notifications/"+adminNotice+"/read").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isNotFound());
  }
  @Test void disabledSchoolPreventsMajorEnable() throws Exception {
   String schoolBody=json.writeValueAsString(Map.of("name","停用保护院校","code",UUID.randomUUID().toString(),"region","浙江","status","ENABLED"));
@@ -917,6 +998,8 @@ class FoundationIntegrationTest {
     mvc.perform(post("/api/v1/student/assets/"+asset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
     String publish="/api/v1/admin/deliveries/"+delivery+"/publish";
     mvc.perform(post(publish).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"reason\":\"审核通过\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("PUBLISHED"));
+    while(notifications.processOne()){}
+    mvc.perform(get("/api/v1/student/notifications").header("Authorization","Bearer "+st).param("q","项目资料已更新")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(n));
     mvc.perform(get(studentPath).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].versionNumber").value(n));
     mvc.perform(get(studentPath).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
     mvc.perform(post("/api/v1/student/assets/"+asset+"/download").header("Authorization","Bearer "+st)).andExpect(status().isOk());
