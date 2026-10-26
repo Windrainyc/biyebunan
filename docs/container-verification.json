@@ -2,7 +2,7 @@
   "readiness": "UP",
   "/actuator/health/liveness": 200,
   "/api/v1/auth/me": 401,
-  "image": "zhixiang/platform:0.10.0-dev",
+  "image": "zhixiang/platform:0.11.0-dev",
   "user": "10001",
   "readOnlyRoot": true,
   "multiNodeVerified": false

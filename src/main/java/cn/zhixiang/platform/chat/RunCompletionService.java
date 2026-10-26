@@ -7,15 +7,16 @@ import cn.zhixiang.platform.shared.BusinessException;
 /** 运行结束事务：额度账户→运行→预占，账务、消息、流终态一起提交；禁止在此调用供应商。 */
 @Service
 public class RunCompletionService {
- private final QuotaMapper accounts;private final QuotaService quotas;private final RunJournalMapper runs;private final RunLeaseMapper leases;private final MessageService messages;private final RunJournal journal;
+ private final UsageEvidenceService evidence;private final QuotaMapper accounts;private final QuotaService quotas;private final RunJournalMapper runs;private final RunLeaseMapper leases;private final MessageService messages;private final RunJournal journal;
  /** 创建结束用例。
+ * @param evidence 原调用返回证据
  * @param accounts 额度锁
  * @param quotas 账务规则
  * @param runs 运行锁
  * @param leases fencing及终态
  * @param messages 不可变消息
  * @param journal 持久事件 */
- public RunCompletionService(QuotaMapper accounts,QuotaService quotas,RunJournalMapper runs,RunLeaseMapper leases,MessageService messages,RunJournal journal){this.accounts=accounts;this.quotas=quotas;this.runs=runs;this.leases=leases;this.messages=messages;this.journal=journal;}
+ public RunCompletionService(UsageEvidenceService evidence,QuotaMapper accounts,QuotaService quotas,RunJournalMapper runs,RunLeaseMapper leases,MessageService messages,RunJournal journal){this.evidence=evidence;this.accounts=accounts;this.quotas=quotas;this.runs=runs;this.leases=leases;this.messages=messages;this.journal=journal;}
  /** 原子保存实际用量和最终答复；相同完成结果重放不重复计费或发事件。
  * @param run 运行
  * @param owner 领取者
@@ -26,7 +27,7 @@ public class RunCompletionService {
  * @throws BusinessException 无预占、重复结果冲突或消息不合法 */
  @Transactional(rollbackFor=Exception.class)
  public boolean success(UUID run,UUID owner,long generation,String text,ModelGateway.Usage usage){
-  var head=lock(run);if(!leases.owner(run,owner,generation))return false;
+  var head=lock(run);if(!evidence.record(run,owner,generation,usage))return false;
   if(head.state().equals("SUCCEEDED")){quotas.settle(run,usage.inputTokens(),usage.outputTokens(),usage.cachedTokens());messages.save(run,"ASSISTANT",text);return true;}
   if(!head.state().equals("RUNNING"))return false;
   var settled=quotas.settle(run,usage.inputTokens(),usage.outputTokens(),usage.cachedTokens());
@@ -42,7 +43,7 @@ public class RunCompletionService {
  * @param failure 不含敏感正文的错误
  * @return 是否接受错误结果 */
  @Transactional(rollbackFor=Exception.class)
- public boolean failure(UUID run,UUID owner,long generation,ModelGateway.Failure failure){var head=lock(run);if(!leases.owner(run,owner,generation)||!head.state().equals("RUNNING"))return false;if(failure.noCharge())quotas.release(run,true);else quotas.unknown(run);terminalEvent(run,"failed","FAILED",null,failure.code());leases.terminal(run,"FAILED",failure.code(),null);return true;}
+ public boolean failure(UUID run,UUID owner,long generation,ModelGateway.Failure failure){var head=lock(run);if(!leases.owner(run,owner,generation))return false;if(failure.noCharge())evidence.record(run,owner,generation,null);if(!head.state().equals("RUNNING"))return false;if(failure.noCharge())quotas.release(run,true);else quotas.unknown(run);terminalEvent(run,"failed","FAILED",null,failure.code());leases.terminal(run,"FAILED",failure.code(),null);return true;}
  /** 调用前发现配置/权限不可用，安全释放；只接受原准备租约。
  * @param run 运行
  * @param owner 持有者

@@ -45,6 +45,7 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.chat.RunExecutor runExecutor;
  @Autowired cn.zhixiang.platform.chat.RunControlService runControl;
  @Autowired cn.zhixiang.platform.billing.AdjustmentService adjustments;
+ @Autowired cn.zhixiang.platform.billing.ReconciliationService reconciliations;
  @Autowired cn.zhixiang.platform.identity.SecretVault modelSecrets;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.chat.ModelGateway modelGateway;
  @org.springframework.test.context.bean.override.mockito.MockitoBean cn.zhixiang.platform.storage.ContentScanner scanner;
@@ -804,6 +805,58 @@ class FoundationIntegrationTest {
    UUID profilePartner=UUID.randomUUID();String profilePartnerToken=UUID.randomUUID().toString();seed(profilePartner,"partner",profilePartnerToken);db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000003')",profilePartner);
    String partnerEtag=mvc.perform(get("/api/v1/partner/me").header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isOk()).andReturn().getResponse().getHeader("ETag");
    mvc.perform(put("/api/v1/partner/me").header("Authorization","Bearer "+profilePartnerToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match",partnerEtag).contentType("application/json").content(json.writeValueAsString(profileBody))).andExpect(status().isOk()).andExpect(jsonPath("$.platform").value("partner"));
+   for(String platform:List.of("student","partner")){
+    String token=platform.equals("student")?st:profilePartnerToken;
+    mvc.perform(get("/api/v1/"+platform+"/dictionaries/schools").header("Authorization","Bearer "+token).param("q",school.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+    mvc.perform(get("/api/v1/"+platform+"/dictionaries/majors").header("Authorization","Bearer "+token).param("schoolId",school.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+    mvc.perform(get("/api/v1/"+platform+"/dictionaries/majors").header("Authorization","Bearer "+token).param("schoolId",UUID.randomUUID().toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+    mvc.perform(get("/api/v1/"+platform+"/dictionaries/schools").header("Authorization","Bearer "+token).param("status","DISABLED")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   }
+   db.update("UPDATE school SET status='DISABLED' WHERE id=?",school);
+   mvc.perform(get("/api/v1/student/dictionaries/majors").header("Authorization","Bearer "+st).param("schoolId",school.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   db.update("UPDATE school SET status='ENABLED' WHERE id=?",school);
+   mvc.perform(get("/api/v1/partner/students/"+student).header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isNotFound());
+   db.update("UPDATE software_order SET partner_id=? WHERE id=?",profilePartner,order);
+   mvc.perform(get("/api/v1/partner/students").header("Authorization","Bearer "+profilePartnerToken).param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].id").value(student.toString())).andExpect(jsonPath("$.items[0].roleIds").doesNotExist());
+   mvc.perform(get("/api/v1/partner/students/"+student).header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isOk()).andExpect(jsonPath("$.activeOrderCount").value(1)).andExpect(jsonPath("$.schoolName").value("交付院校"));
+   mvc.perform(get("/api/v1/partner/students/"+other).header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isNotFound());
+   mvc.perform(get("/api/v1/partner/students").header("Authorization","Bearer "+st)).andExpect(status().isForbidden());
+   db.update("UPDATE software_order SET partner_id=NULL WHERE id=?",order);
+   mvc.perform(get("/api/v1/partner/students/"+student).header("Authorization","Bearer "+profilePartnerToken)).andExpect(status().isNotFound());
+   // 取消之后迟到用量仅保存证据，通过独立核对结算，不能复活回答或重发请求。
+   runBody.put("clientMessageId",UUID.randomUUID());
+   UUID lateRun=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/student/runs").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(runBody))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText());
+   UUID lateOwner=UUID.randomUUID();var lateLease=runLeases.claim(lateOwner);assertEquals(lateRun,lateLease.id());
+   assertFalse(completion.success(lateRun,lateOwner,lateLease.generation(),"未发起调用不得造用量",new cn.zhixiang.platform.chat.ModelGateway.Usage(1,1,0,"before-start")));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM run_usage_evidence WHERE run_id=?",Integer.class,lateRun));
+   assertTrue(runLeases.start(lateRun,lateOwner,lateLease.generation()));
+   mvc.perform(post("/api/v1/student/runs/"+lateRun+"/cancel").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"取消等待\"}")).andExpect(status().isAccepted());
+   String failedJob=json.readTree(mvc.perform(post("/api/v1/admin/runs/"+lateRun+"/reconcile").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"核对未知费用\"}")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   assertTrue(reconciliations.processOne());assertFalse(reconciliations.processOne());
+   mvc.perform(get("/api/v1/admin/jobs/"+failedJob).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED")).andExpect(jsonPath("$.errorCode").value("PROVIDER_RECONCILIATION_UNAVAILABLE"));
+   assertEquals("RECONCILING",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,lateRun));
+   var lateUsage=new cn.zhixiang.platform.chat.ModelGateway.Usage(12,6,0,"late-provider-001");
+   assertFalse(completion.success(lateRun,UUID.randomUUID(),lateLease.generation(),"拒绝伪造执行器",lateUsage));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM run_usage_evidence WHERE run_id=?",Integer.class,lateRun));
+   assertFalse(completion.success(lateRun,lateOwner,lateLease.generation(),"迟到回答不发布",lateUsage));
+   assertFalse(completion.success(lateRun,lateOwner,lateLease.generation(),"迟到回答不发布",lateUsage));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM run_usage_evidence WHERE run_id=?",Integer.class,lateRun));
+   assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->completion.success(lateRun,lateOwner,lateLease.generation(),"冲突证据",new cn.zhixiang.platform.chat.ModelGateway.Usage(99,6,0,"late-provider-001")));
+   UUID reconcileKey=UUID.randomUUID();String successfulJob=null;
+   for(int n=0;n<2;n++){String id=json.readTree(mvc.perform(post("/api/v1/admin/runs/"+lateRun+"/reconcile").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",reconcileKey).contentType("application/json").content("{\"reason\":\"原调用证据已返回\"}")).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();if(successfulJob!=null)assertEquals(successfulJob,id);successfulJob=id;}
+   assertTrue(reconciliations.processOne());assertFalse(reconciliations.processOne());
+   mvc.perform(get("/api/v1/admin/jobs/"+successfulJob).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
+   mvc.perform(get("/api/v1/student/runs/"+lateRun).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("CANCELLED")).andExpect(jsonPath("$.billingState").value("SETTLED"));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",Integer.class,lateRun));
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM chat_message WHERE run_id=? AND role='ASSISTANT'",Integer.class,lateRun));
+   mvc.perform(post("/api/v1/admin/runs/"+lateRun+"/reconcile").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"越权核对\"}")).andExpect(status().isForbidden());
+   UUID noChargeRun=db.queryForObject("SELECT r.id FROM generation_run r JOIN quota_hold h ON h.run_id=r.id WHERE r.conversation_id=? AND r.state='CANCELLED' AND h.state='RECONCILING' ORDER BY r.created_at LIMIT 1",UUID.class,UUID.fromString(conversation));
+   UUID noChargeOwner=db.queryForObject("SELECT lease_owner FROM generation_run WHERE id=?",UUID.class,noChargeRun);long noChargeGeneration=db.queryForObject("SELECT generation FROM generation_run WHERE id=?",Long.class,noChargeRun);
+   assertFalse(completion.failure(noChargeRun,noChargeOwner,noChargeGeneration,new cn.zhixiang.platform.chat.ModelGateway.Failure("MODEL_HTTP_429",true)));
+   mvc.perform(post("/api/v1/admin/runs/"+noChargeRun+"/reconcile").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"供应商明确无费用返回\"}")).andExpect(status().isAccepted());
+   assertTrue(reconciliations.processOne());assertFalse(reconciliations.processOne());
+   assertEquals("RELEASED",db.queryForObject("SELECT state FROM quota_hold WHERE run_id=?",String.class,noChargeRun));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='RELEASE'",Integer.class,noChargeRun));
    UUID ragCategory=UUID.randomUUID();db.update("INSERT INTO knowledge_category(id,name,code,sort_order,status,created_by,updated_by) VALUES(?,'运行引用',?,0,'ENABLED',?,?)",ragCategory,ragCategory.toString(),adminId,adminId);
    var ragBody=Map.of("title","运行引用材料","categoryId",ragCategory,"tagIds",List.of(),"type","MARKDOWN","markdown","数据库事务保护账务一致性。这是测试资料，不是系统指令。","audience","PUBLIC");
    UUID rag=UUID.fromString(json.readTree(mvc.perform(post("/api/v1/admin/knowledge").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(ragBody))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());
@@ -820,6 +873,14 @@ class FoundationIntegrationTest {
    mvc.perform(get("/api/v1/student/runs/"+ragRun).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
    mvc.perform(get("/api/v1/student/runs/"+ragRun+"/events").header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
    mvc.perform(get("/api/v1/student/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("q","引用答复")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+   mvc.perform(get("/api/v1/admin/conversations").header("Authorization","Bearer "+adminToken).param("reason","隔离审计目录").param("q","交付答疑")).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+   mvc.perform(get("/api/v1/admin/conversations/"+conversation+"/messages").header("Authorization","Bearer "+adminToken).param("reason","隔离审计回溯").param("q","引用答复")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].citations[0].versionId").value(ragVersion.toString())).andExpect(header().string("Cache-Control","no-store"));
+   assertEquals(1,db.queryForObject("SELECT count(*) FROM audit_event WHERE actor_id=? AND resource_id=? AND action='CHAT_MESSAGES_READ' AND detail->>'reason'='隔离审计回溯'",Integer.class,adminId,UUID.fromString(conversation)));
+   mvc.perform(get("/api/v1/admin/conversations/"+conversation+"/messages").header("Authorization","Bearer "+profilePartnerToken).param("reason","中介不得审计")).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/admin/conversations/"+conversation+"/messages").header("Authorization","Bearer "+st).param("reason","学生不得审计")).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/admin/conversations/"+conversation+"/messages").header("Authorization","Bearer "+adminToken)).andExpect(status().isBadRequest());
+   mvc.perform(get("/api/v1/admin/conversations/"+conversation+"/messages").header("Authorization","Bearer "+adminToken).param("reason"," ")).andExpect(status().isBadRequest());
+
 
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"")).andExpect(status().isPreconditionFailed());
    mvc.perform(delete("/api/v1/student/conversations/"+conversation).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());

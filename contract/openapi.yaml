@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.11-development
+  version: 1.0.12-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -6855,6 +6855,11 @@ paths:
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+      - name: schoolId
+        in: query
+        required: false
+        description: 仅返回该启用院校下的启用专业
+        schema: *id010
       - name: X-Request-ID
         in: header
         required: false
@@ -7082,6 +7087,11 @@ paths:
           - createdAt:desc
           - createdAt:asc
           - updatedAt:desc
+      - name: schoolId
+        in: query
+        required: false
+        description: 仅返回该启用院校下的启用专业
+        schema: *id010
       - name: X-Request-ID
         in: header
         required: false
@@ -8143,12 +8153,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StudentSummary'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -11443,6 +11447,7 @@ paths:
           type: string
           description: ''
           minLength: 1
+          maxLength: 1000
       - name: X-Request-ID
         in: header
         required: false
@@ -11451,7 +11456,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
-      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      x-filter-policy: 目录q检索标题，消息q检索正文；status不支持；必须提供审计原因，结果禁止缓存。管理员审计包含用户隐藏会话与历史引用，不适用学生访问范围。
   /api/v1/admin/conversations/{id}/messages:
     get:
       operationId: get_admin_conversations_id_messages
@@ -11530,6 +11535,7 @@ paths:
           type: string
           description: ''
           minLength: 1
+          maxLength: 1000
       - name: X-Request-ID
         in: header
         required: false
@@ -11538,7 +11544,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
-      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      x-filter-policy: 目录q检索标题，消息q检索正文；status不支持；必须提供审计原因，结果禁止缓存。管理员审计包含用户隐藏会话与历史引用，不适用学生访问范围。
   /api/v1/admin/usage:
     get:
       operationId: get_admin_usage
@@ -15420,7 +15426,9 @@ components:
         id: *id010
         displayName: *id011
         phoneMasked: *id011
-        schoolName: *id011
+        schoolName:
+          type: [string, 'null']
+          description: 学生个人资料院校名，尚未设置时为null
         activeOrderCount: *id020
       required:
       - id

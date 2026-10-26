@@ -28,6 +28,12 @@ public interface RunLeaseMapper {
  * @param generation 代次
  * @return 是否匹配 */
  @Select("SELECT EXISTS(SELECT 1 FROM generation_run WHERE id=#{run} AND lease_owner=#{owner} AND generation=#{generation})") boolean owner(UUID run,UUID owner,long generation);
+ /** 可信用量必须属于已持久化调用起点的原执行器。
+ * @param run 运行
+ * @param owner 执行器
+ * @param generation 代次
+ * @return 已开始且身份匹配 */
+ @Select("SELECT EXISTS(SELECT 1 FROM generation_run WHERE id=#{run} AND lease_owner=#{owner} AND generation=#{generation} AND call_started_at IS NOT NULL)") boolean calledOwner(UUID run,UUID owner,long generation);
  /** 在运行锁内保存终态；调用者同时提交账务和终态事件。
  * @param run 运行
  * @param state SUCCEEDED/FAILED
