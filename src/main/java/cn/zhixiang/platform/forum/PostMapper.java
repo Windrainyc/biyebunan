@@ -71,6 +71,22 @@ public interface PostMapper {
   * @param user 作者
   * @return 数量 */
  @Select("SELECT count(*) FROM forum_post WHERE author_id=#{user} AND created_at>now()-interval '1 minute'") long recent(UUID user);
+ /** 当前帖子附件。
+  * @param id 帖子
+  * @return 资产ID */
+ @Select("SELECT asset_id FROM forum_post_asset WHERE post_id=#{id} ORDER BY asset_id") List<UUID> assets(UUID id);
+ /** 清除当前附件关系；资产本体保留，旧授权最多等待签名到期。
+  * @param id 帖子 */
+ @Delete("DELETE FROM forum_post_asset WHERE post_id=#{id}") void clearAssets(UUID id);
+ /** 绑定已锁定并验证READY同帖的资产。
+  * @param id 帖子
+  * @param asset 资产 */
+ @Insert("INSERT INTO forum_post_asset VALUES(#{id},#{asset})") void asset(UUID id,UUID asset);
+ /** 判断资产是否在当前正文里。
+  * @param id 帖子
+  * @param asset 资产
+  * @return 是否引用 */
+ @Select("SELECT EXISTS(SELECT 1 FROM forum_post_asset WHERE post_id=#{id} AND asset_id=#{asset})") boolean hasAsset(UUID id,UUID asset);
  /** 持久化行。
   * @param id 标识
   * @param boardId 板块

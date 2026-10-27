@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.14-development
+  version: 1.0.15-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -16191,7 +16191,7 @@ components:
       - body
       - tagIds
       - assetIds
-      description: 正文论坛已实现；论坛附件归属链路尚未启用，assetIds非空返回503 FORUM_ASSETS_UNAVAILABLE，不忽略附件。
+      description: 先以空assetIds创建帖子，再向本人可编辑帖子上传FORUM文件，校验扫描READY后通过更新帖子关联附件。最多20个同帖附件，发布时复核；隐藏、停用和撤下关联后拒绝新的学生下载授权。
     Post:
       type: object
       additionalProperties: false
@@ -16390,6 +16390,7 @@ components:
       - state
       - storageId
     UploadRequest:
+      description: 学生只允许向本人可编辑帖子申请FORUM上传；管理员其他归属类型须具备对应业务权限。先建帖再上传，隔离校验扫描READY后关联正文。
       type: object
       additionalProperties: false
       properties:

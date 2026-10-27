@@ -10,7 +10,7 @@ public final class PostDtos {
   * @param title 非空标题
   * @param body Markdown或纯文本，不超过20000字
   * @param tagIds 最多20个启用标签
-  * @param assetIds 附件ID；附件归属尚未接入时非空明确拒绝 */
+  * @param assetIds 最多20个属于当前帖子且READY的私有附件；先建帖再上传关联 */
  public record Write(@NotNull UUID boardId,@NotBlank @Size(max=200) String title,@NotBlank @Size(max=20000) String body,@NotNull @Size(max=20) List<@NotNull UUID> tagIds,@NotNull @Size(max=20) List<@NotNull UUID> assetIds) {}
  /** 审核动作必须携带依据。
   * @param action APPROVE/HIDE/LOCK/UNLOCK/PIN/UNPIN

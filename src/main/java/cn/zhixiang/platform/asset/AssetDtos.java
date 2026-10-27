@@ -6,8 +6,8 @@ import jakarta.validation.constraints.*;
 public final class AssetDtos {
  private AssetDtos() {}
  /** 上传申请。
- * @param ownerType PROJECT或RECEIPT，其他模块未启用时显式拒绝
- * @param ownerId 所属项目或订单
+ * @param ownerType PROJECT/RECEIPT/KNOWLEDGE/FORUM；学生仅允许FORUM
+ * @param ownerId 所属项目、订单、知识内容或已存在帖子
  * @param filename 原文件名，不作为对象键
  * @param size 字节大小
  * @param sha256 内容摘要

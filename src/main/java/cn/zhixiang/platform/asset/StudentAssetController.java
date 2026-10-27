@@ -6,7 +6,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import cn.zhixiang.platform.identity.Actor;
 import cn.zhixiang.platform.shared.Versions;
-/** 学生私有文件访问入口，只允许本人项目当前发布版。 */
+/** 学生私有文件访问入口，按项目、知识和论坛当前业务权限过滤。 */
 @RestController
 @RequestMapping("/api/v1/student/assets")
 public class StudentAssetController {

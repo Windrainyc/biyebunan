@@ -13,8 +13,10 @@ import cn.zhixiang.platform.shared.*;
 /** 资产用例；所属业务权限与资产通用权限叠加，不仅检查上传者。 */
 @Service
 public class AssetService {
+ private final cn.zhixiang.platform.forum.ForumFileAccess forum;
  private final cn.zhixiang.platform.knowledge.ContentMapper contents;private final AssetMapper mapper;private final StorageMapper stores;private final OrderMapper orders;private final ProjectMapper projects;private final ObjectStorage storage;private final WriteMapper writes;private final String configured;
  /** 构造用例。
+ * @param forum 论坛文件归属
  * @param contents 知识授权
  * @param mapper 资产端口
  * @param stores 配置端口
@@ -23,10 +25,10 @@ public class AssetService {
  * @param storage 统一存储端口
  * @param writes 审计事件
  * @param configured 指定上传存储配置ID，未设置时显式503 */
- public AssetService(cn.zhixiang.platform.knowledge.ContentMapper contents,AssetMapper mapper,StorageMapper stores,OrderMapper orders,ProjectMapper projects,ObjectStorage storage,WriteMapper writes,@Value("${ZX_UPLOAD_STORAGE_ID:}") String configured){this.contents=contents;this.mapper=mapper;this.stores=stores;this.orders=orders;this.projects=projects;this.storage=storage;this.writes=writes;this.configured=configured;}
+ public AssetService(cn.zhixiang.platform.forum.ForumFileAccess forum,cn.zhixiang.platform.knowledge.ContentMapper contents,AssetMapper mapper,StorageMapper stores,OrderMapper orders,ProjectMapper projects,ObjectStorage storage,WriteMapper writes,@Value("${ZX_UPLOAD_STORAGE_ID:}") String configured){this.forum=forum;this.contents=contents;this.mapper=mapper;this.stores=stores;this.orders=orders;this.projects=projects;this.storage=storage;this.writes=writes;this.configured=configured;}
  /** 创建上传会话。签名由已配置区域和固定凭证在本地生成，不发送存储请求。
  * @param w 文件材料
- * @param actor 管理员
+ * @param actor 管理员或获准的论坛作者
  * @return 五分钟签名授权 */
  @Transactional(rollbackFor=Exception.class)
  public AssetDtos.Grant create(AssetDtos.Upload w,Actor actor){
@@ -59,9 +61,9 @@ public class AssetService {
  * @param actor 身份 */
  @Transactional(rollbackFor=Exception.class)
  public void delete(UUID id,long version,Actor actor){var found=visible(id,actor);authorize(found.ownerType(),owner(found),actor,true);var r=mapper.lock(id);live(r);if(r.version()!=version)throw new BusinessException(412,"VERSION_CONFLICT","资产已更新");if(mapper.referenced(id))throw new BusinessException(409,"RESOURCE_REFERENCED","资产已作为业务凭证引用，不能删除");mapper.delete(id,actor.id());audit(id,actor.id(),"DELETED");}
- private AssetMapper.Row visible(UUID id,Actor actor){var r=mapper.get(id);live(r);if(actor.platform().equals("student")){if(!mapper.studentVisible(id,actor.id()))missing();}else authorize(r.ownerType(),owner(r),actor,false);return r;}
- private UUID owner(AssetMapper.Row r){return r.projectId()!=null?r.projectId():r.receiptOrderId()!=null?r.receiptOrderId():r.contentId();}
- private void authorize(String type,UUID id,Actor actor,boolean write){if(!"admin".equals(actor.platform()))missing();String permission;
+ private AssetMapper.Row visible(UUID id,Actor actor){var r=mapper.get(id);live(r);if(r.ownerType().equals("FORUM")){forum.read(r.forumPostId(),id,actor);return r;}if(actor.platform().equals("student")){if(!mapper.studentVisible(id,actor.id()))missing();}else authorize(r.ownerType(),owner(r),actor,false);return r;}
+ private UUID owner(AssetMapper.Row r){return r.forumPostId()!=null?r.forumPostId():r.projectId()!=null?r.projectId():r.receiptOrderId()!=null?r.receiptOrderId():r.contentId();}
+ private void authorize(String type,UUID id,Actor actor,boolean write){if(type.equals("FORUM")){if(!write)throw new IllegalStateException("论坛读取必须使用资产标识验权");forum.write(id,actor);return;}if(!"admin".equals(actor.platform()))missing();String permission;
   if(type.equals("PROJECT")){permission=write?"post_admin_projects_id_deliveries":"get_admin_projects_id_deliveries";if(projects.get(id,actor)==null)missing();}
   else if(type.equals("RECEIPT")){permission="finance:confirm";if(orders.get(id,actor)==null)missing();}
   else if(type.equals("KNOWLEDGE")){permission=write?"put_admin_knowledge_id":"get_admin_knowledge_id";if(contents.get(id,true,actor.id())==null)missing();}

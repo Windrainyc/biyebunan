@@ -719,13 +719,51 @@ class FoundationIntegrationTest {
   mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
  }
 
+ @Test void studentForumUploadRequiresOwnershipScanAndPublishedAssociation() throws Exception {
+  db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')",adminId);
+  UUID author=UUID.randomUUID(),other=UUID.randomUUID(),board=UUID.randomUUID();String st=UUID.randomUUID().toString(),ot=UUID.randomUUID().toString();seed(author,"student",st);seed(other,"student",ot);
+  for(UUID u:List.of(author,other))db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",u);
+  db.update("INSERT INTO forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by) VALUES(?,'附件测试',?,true,0,'ENABLED',?,?)",board,board.toString(),adminId,adminId);
+  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?) ON CONFLICT(id) DO NOTHING",UPLOAD_STORE,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  var target=new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE",System.getenv("ZX_S3_ENDPOINT"),System.getenv("ZX_S3_REGION"),"zx-quarantine-private","local-minio");
+  UUID asset=null;String objectKey=null,objectVersion=null;
+  try {
+   var body=new HashMap<String,Object>(Map.of("boardId",board,"title","附件问题","body","请查看附件","tagIds",List.of(),"assetIds",List.of()));
+   String id=json.readTree(mvc.perform(post("/api/v1/student/posts").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   byte[] bytes="学生隔离附件".getBytes(java.nio.charset.StandardCharsets.UTF_8);String sha=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+   var input=new HashMap<String,Object>(Map.of("ownerType","FORUM","ownerId",id,"filename","说明.txt","size",bytes.length,"sha256",sha,"mimeType","text/plain"));
+   mvc.perform(post("/api/v1/student/uploads").header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isNotFound());
+   input.put("ownerType","PROJECT");mvc.perform(post("/api/v1/student/uploads").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isNotFound());input.put("ownerType","FORUM");
+   var grant=json.readTree(mvc.perform(post("/api/v1/student/uploads").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(input))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+   asset=UUID.fromString(grant.get("assetId").asText());objectKey=grant.get("objectKey").asText();body.put("assetIds",List.of(asset));
+   mvc.perform(put("/api/v1/student/posts/"+id).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   var client=java.net.http.HttpClient.newHttpClient();var req=java.net.http.HttpRequest.newBuilder(java.net.URI.create(grant.get("url").asText())).PUT(java.net.http.HttpRequest.BodyPublishers.ofByteArray(bytes));
+   grant.get("headers").properties().forEach(e->{if(!e.getKey().equalsIgnoreCase("Content-Length"))req.header(e.getKey(),e.getValue().asText());});assertEquals(200,client.send(req.build(),java.net.http.HttpResponse.BodyHandlers.discarding()).statusCode());objectVersion=storage.stat(target,objectKey).versionId();
+   String complete="/api/v1/student/uploads/"+grant.get("uploadId").asText()+"/complete";
+   mvc.perform(post(complete).header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isNotFound());
+   mvc.perform(post(complete).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isAccepted());
+   org.mockito.Mockito.doReturn(true).when(scanner).clean(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.anyLong());assertTrue(validation.runOne());
+   String download="/api/v1/student/assets/"+asset+"/download";
+   mvc.perform(post(download).header("Authorization","Bearer "+st)).andExpect(status().isOk());mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+   mvc.perform(put("/api/v1/student/posts/"+id).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isOk()).andExpect(jsonPath("$.assetIds[0]").value(asset.toString()));
+   forumModeration(id,2,"APPROVE").andExpect(status().isOk());
+   var signed=json.readTree(mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());assertArrayEquals(bytes,client.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(signed.get("url").asText())).GET().build(),java.net.http.HttpResponse.BodyHandlers.ofByteArray()).body());
+   mvc.perform(delete("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isConflict());
+   forumModeration(id,3,"HIDE").andExpect(status().isOk());mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());mvc.perform(post(download).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+  } finally {
+   if(asset!=null){var row=db.queryForMap("SELECT private_key,object_version FROM asset WHERE id=?",asset);if(row.get("private_key")!=null)storage.remove(target,(String)row.get("private_key"),(String)row.get("object_version"));}
+   if(objectKey!=null&&objectVersion!=null)storage.remove(target,objectKey,objectVersion);
+   db.update("DELETE FROM user_role WHERE user_id=? AND role_id='00000000-0000-4000-8000-000000000001'",adminId);
+  }
+ }
+
  @Test void assetQuarantineScanDownloadAndDeletion() throws Exception {
   UUID superRole=UUID.fromString("00000000-0000-4000-8000-000000000001");db.update("INSERT INTO user_role VALUES(?,?)",adminId,superRole);
   UUID school=UUID.randomUUID(),major=UUID.randomUUID(),order=UUID.randomUUID();
   db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'资产院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
   db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'资产专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
   db.update("INSERT INTO software_order(id,order_no,title,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by) VALUES(?,?,'资产订单',?,'test-only',100,'CNY','STANDARD','MANUAL',?,?,'CONFIRMED',?,?)",order,order.toString(),UUID.randomUUID().toString(),school,major,adminId,adminId);
-  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)",UPLOAD_STORE,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?) ON CONFLICT(id) DO NOTHING",UPLOAD_STORE,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
   var target=new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE",System.getenv("ZX_S3_ENDPOINT"),System.getenv("ZX_S3_REGION"),"zx-quarantine-private","local-minio");
   byte[] bytes="隔离资产校验".getBytes(java.nio.charset.StandardCharsets.UTF_8);String sha=HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
   var client=java.net.http.HttpClient.newHttpClient();
