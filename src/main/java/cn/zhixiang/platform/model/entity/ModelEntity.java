@@ -2,8 +2,6 @@ package cn.zhixiang.platform.model.entity;
 
 import cn.zhixiang.platform.model.dto.ModelDtos;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**

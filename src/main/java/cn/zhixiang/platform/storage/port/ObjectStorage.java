@@ -126,6 +126,15 @@ public interface ObjectStorage {
     void remove(Target target, String key, String versionId);
 
     /**
+     * 清理业务已永久退休的唯一对象键，包括历史版本；禁止传入目录前缀。
+     *
+     * @param target 固定配置
+     * @param key 已登记完整键
+     * @return 本批已清空；false表示版本超过单批上限，需要继续
+     */
+    boolean purge(Target target, String key);
+
+    /**
      * 打开固定版本/ETag的流，供扫描适配器使用，调用者必须关闭。
      *
      * @param target 位置

@@ -1,7 +1,5 @@
 package cn.zhixiang.platform.knowledge.entity;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**
@@ -10,5 +8,6 @@ import java.util.*;
  * @param title 标题
  * @param type 类型
  * @param markdown 正文
+ * @param assetId 不可变快照引用资产
  */
-public record IndexSourceEntity(String title, String type, String markdown) {}
+public record IndexSourceEntity(String title, String type, String markdown, UUID assetId) {}

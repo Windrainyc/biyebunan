@@ -2,8 +2,6 @@ package cn.zhixiang.platform.configuration.entity;
 
 import cn.zhixiang.platform.configuration.dto.StorageDtos;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**

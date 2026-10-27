@@ -2,8 +2,6 @@ package cn.zhixiang.platform.forum.entity;
 
 import cn.zhixiang.platform.forum.dto.BoardDtos;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**

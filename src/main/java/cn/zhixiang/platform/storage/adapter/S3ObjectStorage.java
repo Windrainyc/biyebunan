@@ -307,6 +307,43 @@ public class S3ObjectStorage implements ObjectStorage {
         }
     }
 
+    /**
+     * 精确匹配对象键，最多移除一千个历史版本；相似前缀对象不处理。
+     *
+     * @param target 存储位置
+     * @param key 永久退休的完整对象键
+     * @return 是否完成本键所有版本清理
+     */
+    @Override
+    public boolean purge(Target target, String key) {
+        check(target, key);
+        try {
+            int removed = 0;
+            var versions =
+                    client.listObjects(
+                            ListObjectsArgs.builder()
+                                    .bucket(target.bucket())
+                                    .prefix(key)
+                                    .recursive(true)
+                                    .includeVersions(true)
+                                    .build());
+            for (var result : versions) {
+                var item = result.get();
+                if (!key.equals(item.objectName())) continue;
+                client.removeObject(
+                        RemoveObjectArgs.builder()
+                                .bucket(target.bucket())
+                                .object(key)
+                                .versionId(item.versionId())
+                                .build());
+                if (++removed >= 1000) return false;
+            }
+            return true;
+        } catch (Exception exception) {
+            throw failure(exception);
+        }
+    }
+
     private void check(Target t, String key) {
         if (client == null || !"S3_COMPATIBLE".equals(t.provider()))
             throw new BusinessException(503, "STORAGE_UNAVAILABLE", "对应对象存储适配器尚未配置");

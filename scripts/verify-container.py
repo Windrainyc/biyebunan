@@ -24,9 +24,9 @@ for line in source.read_text().splitlines():
         loaded[key] = shlex.split(value)[0] if value else ''
 names = ['ZX_DB_USER', 'ZX_DB_PASSWORD', 'ZX_REDIS_USER', 'ZX_REDIS_PASSWORD', 'ZX_RABBIT_USER', 'ZX_RABBIT_PASSWORD', 'ZX_RABBIT_VHOST', 'ZX_S3_ACCESS_KEY', 'ZX_S3_SECRET_KEY', 'ZX_S3_REGION']
 env = {key: loaded[key] for key in names}
-env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false')
+env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
 name = 'zx-api-verify-' + uuid.uuid4().hex[:12]
-image = 'zhixiang/platform:0.19.0-dev'
+image = 'zhixiang/platform:0.22.0-dev'
 command = ['docker', '--context', 'colima-zhixiang']
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]

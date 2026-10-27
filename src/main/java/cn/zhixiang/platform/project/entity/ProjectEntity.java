@@ -1,7 +1,5 @@
 package cn.zhixiang.platform.project.entity;
 
-import org.apache.ibatis.annotations.*;
-
 import java.time.*;
 import java.util.*;
 

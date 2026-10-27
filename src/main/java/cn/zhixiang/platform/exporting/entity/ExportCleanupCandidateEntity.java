@@ -1,7 +1,5 @@
 package cn.zhixiang.platform.exporting.entity;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.UUID;
 
 /**

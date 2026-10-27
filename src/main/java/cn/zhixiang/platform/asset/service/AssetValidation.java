@@ -2,6 +2,7 @@ package cn.zhixiang.platform.asset.service;
 
 import cn.zhixiang.platform.asset.entity.AssetEntity;
 import cn.zhixiang.platform.asset.entity.AssetTaskJobEntity;
+import cn.zhixiang.platform.asset.mapper.AssetGcMapper;
 import cn.zhixiang.platform.asset.mapper.AssetMapper;
 import cn.zhixiang.platform.asset.mapper.AssetTaskMapper;
 import cn.zhixiang.platform.configuration.dto.StorageDtos;
@@ -20,6 +21,7 @@ import java.util.UUID;
 @Service
 public class AssetValidation {
     private final AssetTaskMapper tasks;
+    private final AssetGcMapper garbage;
     private final AssetMapper assets;
     private final StorageMapper stores;
     private final ObjectStorage storage;
@@ -30,6 +32,7 @@ public class AssetValidation {
     /**
      * 创建验证器。
      *
+     * @param garbage 副本目标登记
      * @param tasks 租约端口
      * @param assets 资产端口
      * @param stores 配置端口
@@ -39,6 +42,7 @@ public class AssetValidation {
      * @param writes 审计事件
      */
     public AssetValidation(
+            AssetGcMapper garbage,
             AssetTaskMapper tasks,
             AssetMapper assets,
             StorageMapper stores,
@@ -46,6 +50,7 @@ public class AssetValidation {
             ContentScanner scanner,
             TransactionTemplate tx,
             WriteMapper writes) {
+        this.garbage = garbage;
         this.tasks = tasks;
         this.assets = assets;
         this.stores = stores;
@@ -99,6 +104,9 @@ public class AssetValidation {
                 }
             }
             privateKey = "verified/" + row.id() + "/" + job.generation() + "-" + UUID.randomUUID();
+            String attemptedKey = privateKey;
+            tx.executeWithoutResult(
+                    s -> garbage.track(row.id(), row.storageId(), attemptedKey, job.generation()));
             copy = storage.promote(target, row.uploadKey(), meta, privateKey);
             String key = privateKey, version = copy.versionId();
             boolean saved =

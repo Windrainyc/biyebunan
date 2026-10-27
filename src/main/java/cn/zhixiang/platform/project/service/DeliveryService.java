@@ -124,8 +124,7 @@ public class DeliveryService {
         if (publish) {
             var p = projects.get(row.projectId(), actor);
             var o = orders.get(p.orderId(), actor);
-            if (o.studentId() != null)
-                notifications.enqueue(o.studentId(), event, "项目资料已更新", "您有新的项目资料，请前往项目页面查看。");
+            if (o.studentId() != null) notifications.enqueueDelivery(o.studentId(), event);
         }
         return view(mapper.get(id));
     }

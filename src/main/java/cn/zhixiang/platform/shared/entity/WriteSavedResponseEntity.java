@@ -1,7 +1,5 @@
 package cn.zhixiang.platform.shared.entity;
 
-import org.apache.ibatis.annotations.*;
-
 /**
  * 幂等写入的已提交响应记录。
  *

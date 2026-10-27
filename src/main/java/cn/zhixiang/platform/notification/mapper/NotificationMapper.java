@@ -146,4 +146,33 @@ public interface NotificationMapper {
                 + " 'DELIVERED' END,error_code=CASE WHEN #{failed} THEN 'RECIPIENT_MISSING' ELSE"
                 + " NULL END,finished_at=now() WHERE event_id=#{event} AND recipient_id=#{user}")
     void delivered(UUID user, UUID event, boolean failed);
+
+    /**
+     * 追加受控渲染快照；禁用或未知渲染器以失败记录保留原因。
+     *
+     * @param user 接收者
+     * @param event 领域事件
+     * @param title 固定安全标题
+     * @param body 固定安全正文
+     * @param template 模板标识，可空表示内置
+     * @param version 配置版本，可空
+     * @param renderer 受控渲染版本
+     * @param error 安全错误码，可空
+     */
+    @Insert(
+            "INSERT INTO"
+                + " notification_delivery_task(event_id,recipient_id,title,body,template_id,template_version,renderer_code,state,error_code,finished_at)"
+                + " VALUES(#{event},#{user},#{title},#{body},#{template},#{version},#{renderer},CASE"
+                + " WHEN CAST(#{error} AS text) IS NULL THEN 'QUEUED' ELSE 'FAILED'"
+                + " END,#{error},CASE WHEN CAST(#{error} AS text) IS NULL THEN NULL ELSE now() END)"
+                + " ON CONFLICT DO NOTHING")
+    void enqueueTemplate(
+            UUID user,
+            UUID event,
+            String title,
+            String body,
+            UUID template,
+            Long version,
+            String renderer,
+            String error);
 }

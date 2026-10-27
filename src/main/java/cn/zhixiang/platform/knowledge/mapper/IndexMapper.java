@@ -62,12 +62,12 @@ public interface IndexMapper {
     IndexTaskEntity claim();
 
     /**
-     * 获取不可变Markdown或元信息；非Markdown当前明确不可抽取。
+     * 获取不可变正文及文件引用。
      *
      * @param id 快照
      * @return 内容
      */
-    @Select("SELECT title,type,markdown FROM knowledge_version WHERE id=#{id}")
+    @Select("SELECT title,type,markdown,asset_id FROM knowledge_version WHERE id=#{id}")
     IndexSourceEntity source(UUID id);
 
     /**

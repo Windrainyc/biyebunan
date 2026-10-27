@@ -2,8 +2,6 @@ package cn.zhixiang.platform.notification.entity;
 
 import cn.zhixiang.platform.notification.dto.TemplateDtos;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**

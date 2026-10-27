@@ -112,4 +112,15 @@ public interface TemplateMapper {
      */
     @Delete("DELETE FROM notification_template WHERE id=#{id} AND version=#{version}")
     int delete(UUID id, long version);
+
+    /**
+     * 按业务代码选择站内模板并固定版本，不依赖客户端指定模板。
+     *
+     * @param code 领域事件模板代码
+     * @return 配置或空
+     */
+    @Select(
+            "SELECT id,version,created_at,updated_at,name,code,channel,provider_template_id,status"
+                + " FROM notification_template WHERE code=#{code} AND channel='IN_APP' FOR SHARE")
+    cn.zhixiang.platform.notification.entity.TemplateEntity byCode(String code);
 }

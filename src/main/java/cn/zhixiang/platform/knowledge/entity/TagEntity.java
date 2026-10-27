@@ -2,8 +2,6 @@ package cn.zhixiang.platform.knowledge.entity;
 
 import cn.zhixiang.platform.knowledge.dto.TagDtos;
 
-import org.apache.ibatis.annotations.*;
-
 import java.util.*;
 
 /**

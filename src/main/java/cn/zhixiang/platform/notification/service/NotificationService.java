@@ -18,16 +18,22 @@ import java.util.*;
 @Service
 public class NotificationService {
     private final NotificationMapper mapper;
+    private final cn.zhixiang.platform.notification.mapper.TemplateMapper templates;
     private final WriteMapper writes;
 
     /**
      * 注入持久化与审计端口。
      *
+     * @param templates 模板目录
      * @param mapper 通知数据
      * @param writes 事务审计
      */
-    public NotificationService(NotificationMapper mapper, WriteMapper writes) {
+    public NotificationService(
+            NotificationMapper mapper,
+            WriteMapper writes,
+            cn.zhixiang.platform.notification.mapper.TemplateMapper templates) {
         this.mapper = mapper;
+        this.templates = templates;
         this.writes = writes;
     }
 
@@ -140,6 +146,41 @@ public class NotificationService {
         if (!missing) deliver(task.recipientId(), task.eventId(), task.title(), task.body());
         mapper.delivered(task.recipientId(), task.eventId(), missing);
         return true;
+    }
+
+    /**
+     * 交付发布的受控模板渲染；只使用通用安全文案，不嵌入项目私密材料。 未配置时采用正式内置默认；显式禁用时记录失败而不投递。
+     *
+     * @param recipient 服务端接收者快照
+     * @param event 领域事件标识
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void enqueueDelivery(UUID recipient, UUID event) {
+        if (mapper.task(recipient, event) != null) return;
+        var template = templates.byCode("DELIVERY_PUBLISHED");
+        String renderer =
+                template == null ? "delivery-published-v1" : template.providerTemplateId();
+        String error = null;
+        if (template != null
+                && template.status()
+                        != cn.zhixiang.platform.notification.dto.TemplateDtos.Status.ENABLED)
+            error = "TEMPLATE_DISABLED";
+        if (!Set.of("delivery-published-v1", "delivery-published-brief-v1").contains(renderer))
+            error = "TEMPLATE_RENDERER_UNAVAILABLE";
+        String title = "项目资料已更新";
+        String body =
+                renderer.equals("delivery-published-brief-v1")
+                        ? "新资料已发布，请查看项目。"
+                        : "您有新的项目资料，请前往项目页面查看。";
+        mapper.enqueueTemplate(
+                recipient,
+                event,
+                title,
+                body,
+                template == null ? null : template.id(),
+                template == null ? null : template.version(),
+                renderer,
+                error);
     }
 
     private NotificationResponse view(NotificationEntity r) {

@@ -1,7 +1,5 @@
 package cn.zhixiang.platform.forum.entity;
 
-import org.apache.ibatis.annotations.*;
-
 import java.time.OffsetDateTime;
 import java.util.*;
 

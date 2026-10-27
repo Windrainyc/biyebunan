@@ -168,6 +168,199 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.configuration.mapper.StorageMapper callbackStores;
     @Autowired cn.zhixiang.platform.shared.mapper.WriteMapper callbackWrites;
 
+    @Autowired cn.zhixiang.platform.asset.service.AssetGarbageCollector assetGc;
+    @Autowired cn.zhixiang.platform.asset.mapper.AssetGcMapper gcTasks;
+
+    @Test
+    void controlledNotificationTemplateSnapshotsAndSuppression() throws Exception {
+        UUID template = UUID.randomUUID(),
+                event = UUID.randomUUID(),
+                disabled = UUID.randomUUID(),
+                unsupported = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " notification_template(id,name,code,channel,provider_template_id,status,created_by,updated_by)"
+                    + " VALUES(?,'交付通知','DELIVERY_PUBLISHED','IN_APP','delivery-published-brief-v1','ENABLED',?,?)",
+                template,
+                adminId,
+                adminId);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tx.executeWithoutResult(s -> notifications.enqueueDelivery(adminId, event));
+        assertEquals(
+                1L,
+                db.queryForObject(
+                        "SELECT template_version FROM notification_delivery_task WHERE event_id=?",
+                        Long.class,
+                        event));
+        db.update(
+                "UPDATE notification_template SET"
+                        + " provider_template_id='delivery-published-v1',version=2 WHERE id=?",
+                template);
+        tx.executeWithoutResult(s -> notifications.enqueueDelivery(adminId, event));
+        assertTrue(notifications.processOne());
+        assertEquals(
+                "新资料已发布，请查看项目。",
+                db.queryForObject(
+                        "SELECT body FROM in_app_notification WHERE event_id=?",
+                        String.class,
+                        event));
+        db.update(
+                "UPDATE notification_template SET status='DISABLED',version=3 WHERE id=?",
+                template);
+        tx.executeWithoutResult(s -> notifications.enqueueDelivery(adminId, disabled));
+        assertEquals(
+                "TEMPLATE_DISABLED",
+                db.queryForObject(
+                        "SELECT error_code FROM notification_delivery_task WHERE event_id=?",
+                        String.class,
+                        disabled));
+        db.update(
+                "UPDATE notification_template SET"
+                        + " status='ENABLED',provider_template_id='unregistered-renderer',version=4"
+                        + " WHERE id=?",
+                template);
+        tx.executeWithoutResult(s -> notifications.enqueueDelivery(adminId, unsupported));
+        assertEquals(
+                "TEMPLATE_RENDERER_UNAVAILABLE",
+                db.queryForObject(
+                        "SELECT error_code FROM notification_delivery_task WHERE event_id=?",
+                        String.class,
+                        unsupported));
+        assertEquals(
+                0,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification WHERE event_id IN (?,?)",
+                        Integer.class,
+                        disabled,
+                        unsupported));
+        assertThrows(
+                org.springframework.dao.DataIntegrityViolationException.class,
+                () -> db.update("DELETE FROM notification_template WHERE id=?", template));
+        db.update("DELETE FROM in_app_notification WHERE event_id=?", event);
+        db.update("DELETE FROM notification_delivery_task WHERE template_id=?", template);
+        db.update("DELETE FROM notification_template WHERE id=?", template);
+    }
+
+    @Test
+    void garbageCollectionOnlyRemovesRetiredExactKeys() throws Exception {
+        UUID board = UUID.randomUUID(),
+                postId = UUID.randomUUID(),
+                asset = UUID.randomUUID(),
+                upload = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'回收隔离',?,true,0,'ENABLED',?,?)",
+                board,
+                board.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO forum_post(id,board_id,author_id,title,body,state)"
+                        + " VALUES(?,?,?,'回收测试','隔离内容','PENDING')",
+                postId,
+                board,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)"
+                    + " ON CONFLICT(id) DO NOTHING",
+                UPLOAD_STORE,
+                System.getenv("ZX_S3_REGION"),
+                System.getenv("ZX_S3_ENDPOINT"),
+                adminId,
+                adminId);
+        String key = "quarantine/" + asset + "/" + upload,
+                neighbor = key + "-keep",
+                attempt = "verified/" + asset + "/orphan";
+        var target =
+                new cn.zhixiang.platform.storage.port.ObjectStorage.Target(
+                        "S3_COMPATIBLE",
+                        System.getenv("ZX_S3_ENDPOINT"),
+                        System.getenv("ZX_S3_REGION"),
+                        "zx-quarantine-private",
+                        "local-minio");
+        storage.write(target, key, new byte[] {1, 2, 3}, "application/octet-stream");
+        storage.write(target, neighbor, new byte[] {1, 2, 3}, "application/octet-stream");
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,forum_post_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'FORUM',?,?,'gc.txt',3,?,'application/octet-stream',?,now()-interval"
+                    + " '2 days',?,?)",
+                asset,
+                upload,
+                postId,
+                UPLOAD_STORE,
+                "a".repeat(64),
+                key,
+                adminId,
+                adminId);
+        try {
+            assertTrue(assetGc.runOne());
+            assertThrows(
+                    cn.zhixiang.platform.shared.exception.BusinessException.class,
+                    () -> storage.stat(target, key));
+            assertEquals(3, storage.stat(target, neighbor).size());
+            assertNotNull(
+                    db.queryForObject(
+                            "SELECT completed_at FROM asset_object_gc WHERE asset_id=? AND"
+                                    + " kind='UPLOAD'",
+                            java.sql.Timestamp.class,
+                            asset));
+            storage.write(target, attempt, new byte[] {1, 2, 3}, "application/octet-stream");
+            gcTasks.track(asset, UPLOAD_STORE, attempt, 1);
+            db.update(
+                    "INSERT INTO asset_validation_task(asset_id,state,generation,lease_until)"
+                            + " VALUES(?,'RUNNING',1,now()+interval '5 minutes')",
+                    asset);
+            db.update(
+                    "UPDATE asset_object_gc SET next_attempt_at=now()-interval '1 second' WHERE"
+                            + " asset_id=? AND kind='ATTEMPT'",
+                    asset);
+            assertTrue(assetGc.runOne());
+            assertEquals(3, storage.stat(target, attempt).size());
+            assertEquals(
+                    "GC_NOT_RETIRED",
+                    db.queryForObject(
+                            "SELECT error_code FROM asset_object_gc WHERE asset_id=? AND"
+                                    + " kind='ATTEMPT'",
+                            String.class,
+                            asset));
+            db.update(
+                    "UPDATE asset_validation_task SET state='FAILED',lease_until=NULL WHERE"
+                            + " asset_id=?",
+                    asset);
+            db.update(
+                    "UPDATE asset_object_gc SET next_attempt_at=now()-interval '1 second' WHERE"
+                            + " asset_id=? AND kind='ATTEMPT'",
+                    asset);
+            assertTrue(assetGc.runOne());
+            assertThrows(
+                    cn.zhixiang.platform.shared.exception.BusinessException.class,
+                    () -> storage.stat(target, attempt));
+            storage.write(target, attempt, new byte[] {4, 5, 6}, "application/octet-stream");
+            db.update(
+                    "UPDATE asset_object_gc SET next_attempt_at=now()-interval '1 second' WHERE"
+                            + " asset_id=? AND kind='ATTEMPT'",
+                    asset);
+            assertTrue(assetGc.runOne());
+            assertThrows(
+                    cn.zhixiang.platform.shared.exception.BusinessException.class,
+                    () -> storage.stat(target, attempt));
+            assertEquals(3, storage.stat(target, neighbor).size());
+        } finally {
+            storage.purge(target, key);
+            storage.purge(target, neighbor);
+            storage.purge(target, attempt);
+            db.update("DELETE FROM asset_object_gc WHERE asset_id=?", asset);
+            db.update("DELETE FROM asset_validation_task WHERE asset_id=?", asset);
+            db.update("DELETE FROM asset WHERE id=?", asset);
+            db.update("DELETE FROM forum_post WHERE id=?", postId);
+            db.update("DELETE FROM forum_board WHERE id=?", board);
+        }
+    }
+
     @Test
     void ossCallbackUsesRealTransactionAndKeepsQuarantine() throws Exception {
         mvc.perform(
@@ -6225,7 +6418,7 @@ class FoundationIntegrationTest {
                         .andExpect(status().isOk());
             assertTrue(knowledgeIndexer.runOne());
             assertEquals(
-                    "CONTENT_EXTRACTION_UNAVAILABLE",
+                    "ASSET_OBJECT_MISSING",
                     db.queryForObject(
                             "SELECT error_code FROM knowledge_index_task WHERE content_id=?",
                             String.class,
