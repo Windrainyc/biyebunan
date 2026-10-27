@@ -22,6 +22,9 @@ for (method, path), route in implemented.items():
     if path in ('/api/v1/health/live', '/api/v1/health/ready'):
         if spec.get('security') != [] or route['permission']:
             failures.append(f'{method.upper()} {path}: 健康接口必须显式公开且不配置方法权限')
+    elif path == '/api/v1/callbacks/oss':
+        if spec.get('security') != [] or route['permission']:
+            failures.append('OSS回调必须使用独立供应商签名而非用户权限')
     elif not path.startswith('/api/v1/auth/'):
         match = re.fullmatch(r"hasAuthority\('([^']+)'\)", route['permission'])
         if not match or match[1] != spec.get('x-permission'):

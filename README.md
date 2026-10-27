@@ -4,7 +4,7 @@
 
 [开发进度与接续](docs/开发进度.md) · [接口覆盖](docs/接口实现覆盖矩阵.md) · [本轮验证](docs/本轮验证-20261027凌晨.md) · [初始化管理员](docs/管理员初始化与邀请.md)
 
-截至2026-10-27下午，57项完整本地测试通过，242/243接口已映射；论坛学生附件上传、扫描隔离与私有下载已接通。当前阶段V45迁移与0.18.1-dev镜像验证见开发进度。测试账户仅存在于隔离schema，正式环境没有默认账户。
+截至2026-10-27下午，60项完整本地测试通过，243/243接口已映射；论坛学生附件上传、扫描隔离与私有下载已接通。当前阶段V46迁移与0.19.0-dev镜像验证见开发进度。测试账户仅存在于隔离schema，正式环境没有默认账户。
 
 ## 本地运行
 
@@ -18,7 +18,7 @@ python3 scripts/run-local.py worker
 python3 scripts/run-local.py test
 ```
 
-API为127.0.0.1:18080。脚本仅从受保护文件读取凭证，不将凭证写入仓库。Docker构建用`docker --context colima-zhixiang build -t zhixiang/platform:0.18.1-dev .`，随后运行`python3 scripts/verify-container.py`验证并清理自身容器。
+API为127.0.0.1:18080。脚本仅从受保护文件读取凭证，不将凭证写入仓库。Docker构建用`docker --context colima-zhixiang build -t zhixiang/platform:0.19.0-dev .`，随后运行`python3 scripts/verify-container.py`验证并清理自身容器。
 
 已接入订单一次性绑定、项目主体/里程碑、中介进度摘要和真实MinIO端口。本轮新增资产隔离扫描流程、私有下载、全额收款核验、不可变交付版本与项目阶段/学生验收。尚缺真实扫描服务部署、对象GC、进行中取消补偿、知识向量召回、供应商外部账单查询、论坛帖子评论举报及统计等。保存模型/存储/域名配置不代表对应外部服务已验证或部署。
 

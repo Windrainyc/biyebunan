@@ -163,6 +163,128 @@ class FoundationIntegrationTest {
                 UUID.randomUUID());
     }
 
+    @Autowired cn.zhixiang.platform.callback.mapper.OssCallbackMapper callbackReceipts;
+    @Autowired cn.zhixiang.platform.asset.mapper.AssetMapper callbackAssets;
+    @Autowired cn.zhixiang.platform.configuration.mapper.StorageMapper callbackStores;
+    @Autowired cn.zhixiang.platform.shared.mapper.WriteMapper callbackWrites;
+
+    @Test
+    void ossCallbackUsesRealTransactionAndKeepsQuarantine() throws Exception {
+        mvc.perform(
+                        post("/api/v1/callbacks/oss")
+                                .contentType("application/x-www-form-urlencoded")
+                                .content("size=3"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("OSS_CALLBACK_UNCONFIGURED"));
+        mvc.perform(
+                        post("/api/v1/callbacks/oss")
+                                .contentType("application/x-www-form-urlencoded")
+                                .content("x".repeat(16385)))
+                .andExpect(status().isPayloadTooLarge());
+        UUID board = UUID.randomUUID(),
+                postId = UUID.randomUUID(),
+                store = UUID.randomUUID(),
+                asset = UUID.randomUUID(),
+                upload = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'回调隔离',?,true,0,'ENABLED',?,?)",
+                board,
+                board.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO forum_post(id,board_id,author_id,title,body,state)"
+                        + " VALUES(?,?,?,'回调测试','隔离内容','PENDING')",
+                postId,
+                board,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'回调隔离','ALIYUN_OSS',?,'test','https://oss.example.test','test-only','PRIVATE','ENABLED',?,?)",
+                store,
+                store.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,forum_post_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'FORUM',?,?,'test.txt',3,?,'text/plain',?,now()+interval '5"
+                    + " minutes',?,?)",
+                asset,
+                upload,
+                postId,
+                store,
+                "a".repeat(64),
+                "quarantine/" + asset,
+                adminId,
+                adminId);
+        try {
+            var signature =
+                    org.mockito.Mockito.mock(
+                            cn.zhixiang.platform.callback.security.OssCallbackSignature.class);
+            var external =
+                    org.mockito.Mockito.mock(cn.zhixiang.platform.storage.port.ObjectStorage.class);
+            org.mockito.Mockito.when(
+                            external.stat(
+                                    org.mockito.ArgumentMatchers.any(),
+                                    org.mockito.ArgumentMatchers.anyString()))
+                    .thenReturn(
+                            new cn.zhixiang.platform.storage.port.ObjectStorage.Metadata(
+                                    3, "etag", "version-1", "text/plain"));
+            var callbacks =
+                    new cn.zhixiang.platform.callback.service.OssCallbackService(
+                            signature,
+                            callbackReceipts,
+                            callbackAssets,
+                            callbackStores,
+                            external,
+                            callbackWrites,
+                            txManager);
+            byte[] body =
+                    ("uploadId="
+                                    + upload
+                                    + "&bucket="
+                                    + store
+                                    + "&object=quarantine%2F"
+                                    + asset
+                                    + "&size=3&etag=etag")
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            assertEquals(
+                    "QUARANTINED", callbacks.receive(body, "fixture", "fixture", null).state());
+            assertEquals(
+                    "QUARANTINED", callbacks.receive(body, "fixture", "fixture", null).state());
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM oss_callback_receipt WHERE asset_id=?",
+                            Integer.class,
+                            asset));
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM asset_validation_task WHERE asset_id=?",
+                            Integer.class,
+                            asset));
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM audit_event WHERE resource_id=? AND"
+                                    + " action='OSS_CALLBACK_VERIFIED'",
+                            Integer.class,
+                            asset));
+        } finally {
+            db.update("DELETE FROM oss_callback_receipt WHERE asset_id=?", asset);
+            db.update("DELETE FROM asset_validation_task WHERE asset_id=?", asset);
+            db.update("DELETE FROM asset WHERE id=?", asset);
+            db.update("DELETE FROM forum_post WHERE id=?", postId);
+            db.update("DELETE FROM forum_board WHERE id=?", board);
+            db.update("DELETE FROM storage_config WHERE id=?", store);
+        }
+    }
+
     @Test
     void configurationProbeVersionLeaseAndRealStorage() throws Exception {
         UUID role =

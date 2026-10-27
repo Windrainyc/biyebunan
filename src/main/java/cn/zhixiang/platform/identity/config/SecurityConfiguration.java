@@ -52,7 +52,8 @@ public class SecurityConfiguration {
                                                 "/actuator/health",
                                                 "/actuator/health/**",
                                                 "/api/v1/health/live",
-                                                "/api/v1/health/ready")
+                                                "/api/v1/health/ready",
+                                                "/api/v1/callbacks/oss")
                                         .permitAll()
                                         .requestMatchers(
                                                 "/api/v1/auth/partner/activate",

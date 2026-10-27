@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.19
+  version: 1.0.20
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -9926,7 +9926,6 @@ paths:
       summary: OSS 上传回调验签
       tags:
       - callback
-      x-permission: post_callbacks_oss
       x-data-scope: 供应商签名
       responses:
         '200':
@@ -9990,7 +9989,7 @@ paths:
               - size
               - etag
               - uploadId
-      description: 只能验签官方回调，验真对象 HEAD 后进入隔离；重复 uploadId+objectVersion 返回原结果。
+      description: 部署固定官方公钥验签原文；表单不超过16KiB，HEAD验真后进入隔离。相同uploadId原文摘要重放返回当前资产状态，不同原文返回409；公钥或OSS适配未配置返回503。
   /api/v1/admin/knowledge:
     get:
       operationId: get_admin_knowledge
