@@ -27,7 +27,7 @@ env = {key: loaded[key] for key in names}
 env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
 name = 'zx-api-verify-' + uuid.uuid4().hex[:12]
 worker_mode = '--worker' in __import__('sys').argv
-image = 'zhixiang/worker:0.27.0-dev' if worker_mode else 'zhixiang/platform:0.27.0-dev'
+image = 'zhixiang/worker:0.28.0-dev' if worker_mode else 'zhixiang/platform:0.28.0-dev'
 command = ['docker', '--context', 'colima-zhixiang']
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix='zx-container-') as directory:
             time.sleep(1)
         else: raise RuntimeError('容器未在45秒内就绪；请检查中间件连通性')
         results = {'readiness': 'UP'}
-        for endpoint, expected in [('/actuator/health/liveness',200),('/api/v1/auth/me',401)]:
+        for endpoint, expected in [('/actuator/health/liveness',200),('/api/v1/auth/me',401),('/actuator/prometheus',401)]:
             try:
                 with urllib.request.urlopen(base+endpoint, timeout=3) as response: status = response.status
             except urllib.error.HTTPError as error: status = error.code

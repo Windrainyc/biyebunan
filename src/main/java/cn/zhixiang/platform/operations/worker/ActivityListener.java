@@ -12,14 +12,18 @@ import org.springframework.stereotype.Component;
 @Profile("worker")
 public class ActivityListener {
     private final ActivityInbox inbox;
+    private final cn.zhixiang.platform.shared.observability.Telemetry telemetry;
 
     /**
      * 创建监听器。
      *
+     * @param telemetry 消息父Span恢复
      * @param inbox 事务去重用例
      */
-    public ActivityListener(ActivityInbox inbox) {
+    public ActivityListener(
+            ActivityInbox inbox, cn.zhixiang.platform.shared.observability.Telemetry telemetry) {
         this.inbox = inbox;
+        this.telemetry = telemetry;
     }
 
     /**
@@ -29,6 +33,18 @@ public class ActivityListener {
      */
     @RabbitListener(queues = "zx.activity", containerFactory = "activityListenerFactory")
     public void receive(Message message) {
-        inbox.consume(message);
+        Object parent = message.getMessageProperties().getHeaders().get("traceparent");
+        try (var trace =
+                telemetry.start(
+                        "activity.consume",
+                        parent instanceof String s ? s : null,
+                        message.getMessageProperties().getMessageId())) {
+            try {
+                inbox.consume(message);
+            } catch (RuntimeException ex) {
+                trace.error("INBOX_FAILED");
+                throw ex;
+            }
+        }
     }
 }

@@ -163,6 +163,7 @@ class FoundationIntegrationTest {
                 UUID.randomUUID());
     }
 
+    @Autowired cn.zhixiang.platform.shared.observability.Telemetry telemetry;
     @Autowired cn.zhixiang.platform.order.service.OrderService cancellationOrders;
     @Autowired cn.zhixiang.platform.callback.mapper.OssCallbackMapper callbackReceipts;
     @Autowired cn.zhixiang.platform.asset.mapper.AssetMapper callbackAssets;
@@ -834,6 +835,41 @@ class FoundationIntegrationTest {
         db.update("DELETE FROM in_app_notification WHERE event_id=?", event);
         db.update("DELETE FROM notification_delivery_task WHERE template_id=?", template);
         db.update("DELETE FROM notification_template WHERE id=?", template);
+    }
+
+    @Test
+    void metricsRequireOperationalPermissionAndOutboxRetainsTrace() throws Exception {
+        mvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/actuator/prometheus").header("Authorization", "Bearer " + partnerToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/actuator/prometheus").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isForbidden());
+        var role =
+                db.queryForObject(
+                        "SELECT role_id FROM user_role WHERE user_id=?", UUID.class, adminId);
+        db.update("INSERT INTO role_permission VALUES(?,'get_admin_statistics')", role);
+        mvc.perform(get("/actuator/prometheus").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        try (var provider = io.opentelemetry.sdk.trace.SdkTracerProvider.builder().build()) {
+            var local =
+                    new cn.zhixiang.platform.shared.observability.Telemetry(
+                            io.opentelemetry.sdk.OpenTelemetrySdk.builder()
+                                    .setTracerProvider(provider)
+                                    .build());
+            UUID event = UUID.randomUUID();
+            String parent;
+            try (var trace = local.start("test.outbox", null, event.toString())) {
+                parent = cn.zhixiang.platform.shared.observability.Telemetry.currentParent();
+                callbackWrites.event(event, UUID.randomUUID(), "test.trace", "{}");
+            }
+            assertEquals(
+                    parent,
+                    db.queryForObject(
+                            "SELECT traceparent FROM outbox_event WHERE id=?",
+                            String.class,
+                            event));
+            db.update("DELETE FROM outbox_event WHERE id=?", event);
+        }
     }
 
     @Test
@@ -2388,7 +2424,7 @@ class FoundationIntegrationTest {
                     UUID.randomUUID(),
                     "test.probe");
             new cn.zhixiang.platform.operations.worker.OutboxPublisher(
-                            outbox, rabbit, json, name, "test")
+                            telemetry, outbox, rabbit, json, name, "test")
                     .publish();
             assertEquals(
                     "SENT",

@@ -46,10 +46,23 @@ server:
     include-message: never
     include-stacktrace: never
 management:
+  tracing:
+    sampling:
+      probability: ${ZX_TRACE_SAMPLE_RATE:0.1}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          enabled: ${ZX_OTLP_ENABLED:false}
+          endpoint: ${ZX_OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+  otlp:
+    metrics:
+      export:
+        enabled: false # 指标采用受保护Prometheus抓取，不重复外发。
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
@@ -67,4 +80,4 @@ mybatis:
 # 请求关联ID用于定位HTTP、业务错误与审计，禁止在日志中输出凭证。
 logging:
   pattern:
-    level: "%5p [requestId=%X{requestId:-}]"
+    level: "%5p [requestId=%X{requestId:-} traceId=%X{traceId:-} spanId=%X{spanId:-}]"

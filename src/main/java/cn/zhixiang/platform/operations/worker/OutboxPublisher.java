@@ -23,12 +23,14 @@ public class OutboxPublisher {
     private final OutboxMapper mapper;
     private final RabbitTemplate rabbit;
     private final JsonMapper json;
+    private final cn.zhixiang.platform.shared.observability.Telemetry telemetry;
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(OutboxPublisher.class);
 
     /**
      * 初始化模块组件，所需端口和配置由构造器注入。
      *
+     * @param telemetry 异步链路上下文
      * @param mapper outbox数据
      * @param rabbit 启用confirm/mandatory的客户端
      * @param json JSON编码器
@@ -36,6 +38,7 @@ public class OutboxPublisher {
      * @param routingKey 路由键
      */
     public OutboxPublisher(
+            cn.zhixiang.platform.shared.observability.Telemetry telemetry,
             OutboxMapper mapper,
             RabbitTemplate rabbit,
             JsonMapper json,
@@ -43,6 +46,7 @@ public class OutboxPublisher {
                     String exchange,
             @org.springframework.beans.factory.annotation.Value("${ZX_EVENT_ROUTING_KEY:task}")
                     String routingKey) {
+        this.telemetry = telemetry;
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.mapper = mapper;
@@ -55,7 +59,8 @@ public class OutboxPublisher {
     @Scheduled(fixedDelayString = "${ZX_OUTBOX_DELAY_MS:2000}")
     public void publish() {
         for (var e : mapper.claim()) {
-            try {
+            try (var trace =
+                    telemetry.start("outbox.publish", e.traceparent(), e.id().toString())) {
                 byte[] body =
                         json.writeValueAsBytes(
                                 Map.of(
@@ -68,6 +73,9 @@ public class OutboxPublisher {
                                         "data",
                                         json.readTree(e.payload())));
                 MessageProperties props = new MessageProperties();
+                String traceparent =
+                        cn.zhixiang.platform.shared.observability.Telemetry.currentParent();
+                if (traceparent != null) props.setHeader("traceparent", traceparent);
                 props.setContentType("application/json");
                 props.setMessageId(e.id().toString());
                 props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);

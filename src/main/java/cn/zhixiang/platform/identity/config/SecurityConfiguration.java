@@ -48,7 +48,9 @@ public class SecurityConfiguration {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(
                         a ->
-                                a.requestMatchers(
+                                a.requestMatchers("/actuator/prometheus")
+                                        .hasAuthority("get_admin_statistics")
+                                        .requestMatchers(
                                                 "/actuator/health",
                                                 "/actuator/health/**",
                                                 "/api/v1/health/live",

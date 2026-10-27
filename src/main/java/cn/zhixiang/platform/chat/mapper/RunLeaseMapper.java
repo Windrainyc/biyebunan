@@ -24,7 +24,8 @@ public interface RunLeaseMapper {
                         + " LOCKED LIMIT 1) UPDATE generation_run r SET"
                         + " lease_owner=#{owner},lease_until=clock_timestamp()+interval '30"
                         + " seconds',generation=generation+1,version=version+1,updated_at=now()"
-                        + " FROM candidate c WHERE r.id=c.id RETURNING r.id,r.generation",
+                        + " FROM candidate c WHERE r.id=c.id RETURNING"
+                        + " r.id,r.generation,r.traceparent",
             affectData = true)
     RunLeaseLeaseEntity claim(UUID owner);
 

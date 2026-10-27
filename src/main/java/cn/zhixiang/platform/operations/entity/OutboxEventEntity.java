@@ -9,7 +9,13 @@ import java.util.*;
  * @param aggregateId 聚合标识
  * @param eventType 类型
  * @param payload JSON数据
+ * @param traceparent 创建事件时的W3C父标识，可空
  * @param generation fencing代数
  */
 public record OutboxEventEntity(
-        UUID id, UUID aggregateId, String eventType, String payload, long generation) {}
+        UUID id,
+        UUID aggregateId,
+        String eventType,
+        String payload,
+        long generation,
+        String traceparent) {}

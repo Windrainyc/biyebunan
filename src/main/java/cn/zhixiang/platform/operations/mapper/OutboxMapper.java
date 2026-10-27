@@ -22,7 +22,7 @@ WITH candidates AS (
 )
 UPDATE outbox_event e SET status='SENDING',lease_until=now()+interval '120 seconds',
 generation=generation+1,attempts=attempts+1 FROM candidates c WHERE e.id=c.id
-RETURNING e.id,e.aggregate_id,e.event_type,e.payload::text,e.generation
+RETURNING e.id,e.aggregate_id,e.event_type,e.payload::text,e.generation,e.traceparent
 """)
     List<OutboxEventEntity> claim();
 

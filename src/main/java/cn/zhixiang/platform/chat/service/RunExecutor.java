@@ -14,20 +14,24 @@ public class RunExecutor {
     private final RunExecution execution;
     private final RunCompletionService completion;
     private final ModelGateway gateway;
+    private final cn.zhixiang.platform.shared.observability.Telemetry telemetry;
 
     /**
      * 创建执行器。
      *
+     * @param telemetry 运行链路上下文
      * @param leases 领取/起点
      * @param execution 上下文和增量
      * @param completion 结束事务
      * @param gateway 外部HTTP
      */
     public RunExecutor(
+            cn.zhixiang.platform.shared.observability.Telemetry telemetry,
             RunLeaseService leases,
             RunExecution execution,
             RunCompletionService completion,
             ModelGateway gateway) {
+        this.telemetry = telemetry;
         this.leases = leases;
         this.execution = execution;
         this.completion = completion;
@@ -44,10 +48,25 @@ public class RunExecutor {
     public boolean runOne() {
         var lease = leases.claim(owner);
         if (lease == null) return false;
+        try (var trace =
+                telemetry.start("model.execute", lease.traceparent(), lease.id().toString())) {
+            try {
+                return execute(lease, trace);
+            } catch (RuntimeException ex) {
+                trace.error("RUN_INFRASTRUCTURE_FAILED");
+                throw ex;
+            }
+        }
+    }
+
+    private boolean execute(
+            cn.zhixiang.platform.chat.entity.RunLeaseLeaseEntity lease,
+            cn.zhixiang.platform.shared.observability.Telemetry.TraceScope trace) {
         ModelGateway.Request request;
         try {
             request = execution.prepare(lease.id());
         } catch (ModelGateway.Failure failure) {
+            trace.error(failure.code());
             completion.rejectBeforeCall(lease.id(), owner, lease.generation(), failure.code());
             return true;
         }
@@ -79,6 +98,7 @@ public class RunExecutor {
                             });
             completion.success(lease.id(), owner, lease.generation(), output.toString(), usage);
         } catch (ModelGateway.Failure failure) {
+            trace.error(failure.code());
             completion.failure(lease.id(), owner, lease.generation(), failure);
         }
         return true;

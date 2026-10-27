@@ -130,8 +130,26 @@ public interface WriteMapper {
      * @param type 事件类型
      * @param payload 安全 JSON 内容
      */
+    default void event(UUID id, UUID target, String type, String payload) {
+        insertEvent(
+                id,
+                target,
+                type,
+                payload,
+                cn.zhixiang.platform.shared.observability.Telemetry.currentParent());
+    }
+
+    /**
+     * 写入带持久化父Span标识的事件。
+     *
+     * @param id 事件ID
+     * @param target 聚合ID
+     * @param type 固定类型
+     * @param payload 安全JSON
+     * @param traceparent W3C标识，可空
+     */
     @Insert(
-            "INSERT INTO outbox_event(id,aggregate_id,event_type,payload)"
-                    + " VALUES(#{id},#{target},#{type},CAST(#{payload} AS jsonb))")
-    void event(UUID id, UUID target, String type, String payload);
+            "INSERT INTO outbox_event(id,aggregate_id,event_type,payload,traceparent)"
+                    + " VALUES(#{id},#{target},#{type},CAST(#{payload} AS jsonb),#{traceparent})")
+    void insertEvent(UUID id, UUID target, String type, String payload, String traceparent);
 }

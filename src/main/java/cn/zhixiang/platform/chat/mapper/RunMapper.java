@@ -67,13 +67,20 @@ public interface RunMapper {
      * @param student 学生
      * @param w 输入
      * @param hash 固定请求摘要
+     * @param traceparent 创建请求父Span，可空
      * @param price 价格
      */
     @Insert(
             "INSERT INTO"
-                + " generation_run(id,student_id,conversation_id,client_message_id,request_hash,model_id,price_id)"
-                + " VALUES(#{id},#{student},#{w.conversationId},#{w.clientMessageId},#{hash},#{w.modelId},#{price})")
-    void insert(UUID id, UUID student, @Param("w") RunDtos.Create w, String hash, UUID price);
+                + " generation_run(id,student_id,conversation_id,client_message_id,request_hash,model_id,price_id,traceparent)"
+                + " VALUES(#{id},#{student},#{w.conversationId},#{w.clientMessageId},#{hash},#{w.modelId},#{price},#{traceparent})")
+    void insert(
+            UUID id,
+            UUID student,
+            @Param("w") RunDtos.Create w,
+            String hash,
+            UUID price,
+            String traceparent);
 
     /**
      * 保存调用上下文。

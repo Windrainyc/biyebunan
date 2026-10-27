@@ -209,7 +209,13 @@ public class RunService {
                         new BigDecimal(price.outputPerMillion()),
                         BigDecimal.ZERO);
         UUID run = UUID.randomUUID();
-        mapper.insert(run, actor.id(), w, hash, priceId);
+        mapper.insert(
+                run,
+                actor.id(),
+                w,
+                hash,
+                priceId,
+                cn.zhixiang.platform.shared.observability.Telemetry.currentParent());
         quotas.reserve(actor.id(), run, priceId, input + w.maxOutputTokens(), amount);
         mapper.context(
                 run,
