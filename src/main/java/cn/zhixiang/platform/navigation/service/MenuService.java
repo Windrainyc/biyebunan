@@ -69,6 +69,20 @@ public class MenuService {
     }
 
     /**
+     * 返回当前平台的配置状态与可见菜单，使用同一数据库快照避免全部停用后错误回退。
+     *
+     * @param q 分页与搜索参数
+     * @param actor 服务端认证主体，平台不得由客户端选择
+     * @return 配置状态与经过权限过滤的导航页
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public MenuDtos.Navigation navigation(MenuDtos.Query q, Actor actor) {
+        boolean configured =
+                menus.count(new MenuDtos.Query(1, 1, null, null, null), actor.platform()) > 0;
+        return new MenuDtos.Navigation(configured, visible(q, actor));
+    }
+
+    /**
      * 返回元数据。
      *
      * @param id 菜单

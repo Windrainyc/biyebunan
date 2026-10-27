@@ -4,6 +4,8 @@ import base64
 import json
 import os
 from pathlib import Path
+import shutil
+import uuid
 import shlex
 import subprocess
 import urllib.parse
@@ -11,6 +13,13 @@ import urllib.request
 root = Path(__file__).resolve().parents[1]
 state = json.loads((root / 'docs/ui-verification-state.json').read_text())
 assert state['isolatedDatabase'] and state['database'].startswith('zx_ui_')
+directory = Path(state['credentialFile']).parent
+existing_state = directory / 'worker-state.json'
+if existing_state.exists():
+    existing = json.loads(existing_state.read_text())
+    current = subprocess.run(['ps', '-p', str(existing['pid']), '-o', 'command='], capture_output=True, text=True)
+    if current.returncode == 0 and '--spring.profiles.active=worker' in current.stdout:
+        raise SystemExit('当前验证worker仍在运行，请先按记录核对并停止，拒绝重复启动')
 env = os.environ.copy()
 for line in Path('/Users/chuanchuan/Documents/知项平台本地环境/.env.local').read_text().splitlines():
     if line.strip() and not line.lstrip().startswith('#'):
@@ -42,8 +51,10 @@ env.update(ZX_OTLP_ENABLED="false", ZX_RABBIT_VHOST=vhost,
            ZX_AUTH_HMAC_KEY=hmac_key.read_text().strip())
 directory = Path(state['credentialFile']).parent
 os.umask(0o077)
+runtime_jar = directory / ('worker-runtime-' + uuid.uuid4().hex + '.jar')
+shutil.copyfile(root / 'target/platform-0.1.0-SNAPSHOT.jar', runtime_jar)
 with (directory / 'worker.log').open('w') as log:
-    process = subprocess.Popen(['java', '-jar', 'target/platform-0.1.0-SNAPSHOT.jar',
+    process = subprocess.Popen(['java', '-jar', str(runtime_jar),
                                 '--spring.profiles.active=worker'], cwd=root, env=env,
                                stdout=log, stderr=log)
     (directory / 'worker-state.json').write_text(json.dumps(dict(pid=process.pid, database=vhost, vhost=vhost)))
@@ -56,3 +67,5 @@ with (directory / 'worker.log').open('w') as log:
             process.wait(timeout=30)
         except subprocess.TimeoutExpired:
             process.kill()
+            process.wait()
+        runtime_jar.unlink(missing_ok=True)

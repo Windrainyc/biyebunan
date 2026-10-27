@@ -25,6 +25,23 @@ public class MenuDictionaryController {
     }
 
     /**
+     * 三端通用的当前账户导航，不要求管理员具有菜单配置管理权限。
+     *
+     * @param page 页码，从1开始
+     * @param size 每页数量，最大100
+     * @param actor 服务端认证主体
+     * @return 当前平台配置状态和可见菜单页
+     */
+    @GetMapping("/auth/navigation")
+    @PreAuthorize("isAuthenticated()")
+    public MenuDtos.Navigation navigation(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "100") int size,
+            @AuthenticationPrincipal Actor actor) {
+        return service.navigation(new MenuDtos.Query(page, size, null, null, null), actor);
+    }
+
+    /**
      * 返回可见菜单。
      *
      * @param page 页码

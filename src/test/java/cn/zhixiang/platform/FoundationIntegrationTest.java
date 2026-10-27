@@ -3497,6 +3497,11 @@ class FoundationIntegrationTest {
                                     .param("q", unique))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.total").value(0));
+            mvc.perform(get("/api/v1/auth/navigation").header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.configured").value(true))
+                    .andExpect(jsonPath("$.menus.total").value(0));
+            mvc.perform(get("/api/v1/auth/navigation")).andExpect(status().isUnauthorized());
             child.put("permissionCode", "menus:write");
             mvc.perform(
                             post("/api/v1/admin/menus")

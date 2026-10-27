@@ -12,6 +12,15 @@ public final class MenuDtos {
     private MenuDtos() {}
 
     /**
+     * 当前平台的导航快照；空的可见列表不能误判为未配置。
+     *
+     * @param configured 平台存在任意菜单配置（包括停用项），为true时禁止回退默认导航
+     * @param menus 当前账户可见菜单页，完整祖先链经过服务端权限过滤
+     */
+    public record Navigation(
+            boolean configured, cn.zhixiang.platform.shared.dto.PageResult<View> menus) {}
+
+    /**
      * 已验证业务写入请求，字段不含服务端生成的标识或版本。
      *
      * @param name 中文显示名

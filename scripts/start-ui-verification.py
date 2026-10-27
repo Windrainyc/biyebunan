@@ -41,7 +41,11 @@ if '--test-sms' in sys.argv:
  sms_fixture=SmsFixture(directory)
  env.update(ZX_SMS_ENABLED='true',ZX_SMS_ENDPOINT='https://localhost:18443/messages',ZX_SMS_KEY=sms_fixture.key,ZX_TERMS_VERSION='ui-test-nonbinding')
  java_options=[f'-Djavax.net.ssl.trustStore={sms_fixture.truststore}','-Djavax.net.ssl.trustStorePassword=changeit']
-command=['java',*java_options,'-jar','target/platform-0.1.0-SNAPSHOT.jar']
+# 每个验证进程使用独立构建快照，避免后续Maven打包破坏正在运行的懒加载类。
+import shutil
+runtime_jar=directory/('api-runtime-'+uuid.uuid4().hex+'.jar')
+shutil.copyfile(root/'target/platform-0.1.0-SNAPSHOT.jar',runtime_jar)
+command=['java',*java_options,'-jar',str(runtime_jar)]
 log=open(directory/'runtime.log','w');os.chmod(directory/'runtime.log',0o600)
 for profile in ([] if resume else ['migrate','bootstrap']):
  subprocess.run(command+['--spring.profiles.active='+profile],cwd=root,env=env,stdout=log,stderr=log,check=True)
@@ -74,6 +78,9 @@ try:
 finally:
  process.terminate()
  try:process.wait(timeout=30)
- except subprocess.TimeoutExpired:process.kill()
+ except subprocess.TimeoutExpired:
+  process.kill()
+  process.wait()
+ runtime_jar.unlink(missing_ok=True)
  log.close()
  if sms_fixture:sms_fixture.close()
