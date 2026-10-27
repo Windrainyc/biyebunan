@@ -70,6 +70,19 @@ public interface ObjectStorage {
     Metadata write(Target target, String key, byte[] bytes, String mime);
 
     /**
+     * 流式写入服务端转码产物，最大1GiB，调用者必须分配新键并登记回收。
+     *
+     * @param target 私有位置
+     * @param key 唯一键
+     * @param input 由调用者关闭的内容流
+     * @param size 确定字节数
+     * @param mime 媒体类型
+     * @return 固定版本元数据
+     */
+    Metadata writeStream(
+            Target target, String key, java.io.InputStream input, long size, String mime);
+
+    /**
      * 只读探测目标桶存在且当前凭证能访问，不代表写入权限已验证。
      *
      * @param target 固定部署白名单配置

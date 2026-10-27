@@ -174,6 +174,215 @@ class FoundationIntegrationTest {
     @Autowired
     cn.zhixiang.platform.notification.service.NotificationRetentionService notificationRetention;
 
+    @Autowired cn.zhixiang.platform.media.mapper.VideoMapper videoTasks;
+    @Autowired cn.zhixiang.platform.operations.service.JobService operationJobs;
+    @Autowired cn.zhixiang.platform.asset.service.AssetService assetAccess;
+
+    @Test
+    void realVideoLifecycleKeepsOriginalAndAuthorizesPlayback() throws Exception {
+        String ffmpeg = "/opt/homebrew/bin/ffmpeg", ffprobe = "/opt/homebrew/bin/ffprobe";
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                java.nio.file.Files.isExecutable(java.nio.file.Path.of(ffmpeg)));
+        UUID board = UUID.randomUUID(), post = UUID.randomUUID(), asset = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'视频隔离',?,true,0,'ENABLED',?,?)",
+                board,
+                board.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO forum_post(id,board_id,author_id,title,body,state)"
+                        + " VALUES(?,?,?,'视频测试','内容','PENDING')",
+                post,
+                board,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)"
+                    + " ON CONFLICT(id) DO NOTHING",
+                UPLOAD_STORE,
+                System.getenv("ZX_S3_REGION"),
+                System.getenv("ZX_S3_ENDPOINT"),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,p FROM"
+                    + " user_role CROSS JOIN"
+                    + " unnest(ARRAY['get_admin_posts_id','post_admin_assets_id_download']) p WHERE"
+                    + " user_id=? ON CONFLICT DO NOTHING",
+                adminId);
+        var target =
+                new cn.zhixiang.platform.storage.port.ObjectStorage.Target(
+                        "S3_COMPATIBLE",
+                        System.getenv("ZX_S3_ENDPOINT"),
+                        System.getenv("ZX_S3_REGION"),
+                        "zx-quarantine-private",
+                        "local-minio");
+        String original = "verified/" + asset + "/original";
+        var fixture = java.nio.file.Files.createTempFile("zx-lifecycle-", ".mp4");
+        String output = null;
+        try {
+            var command =
+                    new ProcessBuilder(
+                                    ffmpeg,
+                                    "-nostdin",
+                                    "-v",
+                                    "error",
+                                    "-y",
+                                    "-f",
+                                    "lavfi",
+                                    "-i",
+                                    "color=c=blue:s=160x120:d=1",
+                                    "-c:v",
+                                    "libx264",
+                                    fixture.toString())
+                            .redirectError(ProcessBuilder.Redirect.DISCARD)
+                            .start();
+            assertTrue(command.waitFor(20, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(0, command.exitValue());
+            byte[] bytes = java.nio.file.Files.readAllBytes(fixture);
+            var saved = storage.write(target, original, bytes, "video/mp4");
+            db.update(
+                    "INSERT INTO"
+                        + " asset(id,upload_id,owner_type,forum_post_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,object_version,state,upload_expires_at,created_by,updated_by)"
+                        + " VALUES(?,?,'FORUM',?,?,'录屏.mp4',?,?,'video/mp4',?,?,?,'READY',now(),?,?)",
+                    asset,
+                    UUID.randomUUID(),
+                    post,
+                    UPLOAD_STORE,
+                    bytes.length,
+                    "0".repeat(64),
+                    "quarantine/" + asset,
+                    original,
+                    saved.versionId(),
+                    adminId,
+                    adminId);
+            db.update(
+                    "INSERT INTO video_task(asset_id,created_at) VALUES(?,now()-interval '1 day')",
+                    asset);
+            var env =
+                    new org.springframework.mock.env.MockEnvironment()
+                            .withProperty("ZX_VIDEO_ENABLED", "true")
+                            .withProperty("ZX_FFMPEG_PATH", ffmpeg)
+                            .withProperty("ZX_FFPROBE_PATH", ffprobe);
+            var processor = new cn.zhixiang.platform.media.adapter.FfmpegVideoProcessor(env, json);
+            var worker =
+                    new cn.zhixiang.platform.media.service.VideoService(
+                            videoTasks,
+                            callbackAssets,
+                            assetAccess,
+                            callbackStores,
+                            storage,
+                            processor,
+                            new org.springframework.transaction.support.TransactionTemplate(
+                                    txManager),
+                            gcTasks);
+            assertTrue(worker.runOne());
+            var result = videoTasks.get(asset);
+            assertEquals("SUCCEEDED", result.state());
+            output = result.outputKey();
+            assertNotEquals(original, output);
+            assertEquals("video/mp4", storage.stat(target, output).contentType());
+            try (var stream = storage.open(target, original, saved)) {
+                assertArrayEquals(bytes, stream.readAllBytes());
+            }
+            mvc.perform(
+                            post("/api/v1/admin/assets/" + asset + "/download?variant=PLAYBACK")
+                                    .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk());
+            mvc.perform(
+                            post("/api/v1/admin/assets/" + asset + "/download?variant=PLAYBACK")
+                                    .header("Authorization", "Bearer " + partnerToken))
+                    .andExpect(status().isForbidden());
+            var gcId =
+                    db.queryForObject(
+                            "SELECT id FROM asset_object_gc WHERE object_key=?",
+                            UUID.class,
+                            output);
+            assertFalse(
+                    gcTasks.eligible(
+                            new cn.zhixiang.platform.asset.entity.AssetGcEntity(
+                                    gcId,
+                                    asset,
+                                    UPLOAD_STORE,
+                                    output,
+                                    "MEDIA",
+                                    result.generation(),
+                                    1)));
+            UUID category = UUID.randomUUID(),
+                    content = UUID.randomUUID(),
+                    snapshot = UUID.randomUUID();
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_category(id,name,code,sort_order,status,created_by,updated_by)"
+                        + " VALUES(?,'视频分类',?,0,'ENABLED',?,?)",
+                    category,
+                    category.toString(),
+                    adminId,
+                    adminId);
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_content(id,title,category_id,type,asset_id,audience,state,index_state,index_generation,created_by,updated_by)"
+                        + " VALUES(?,'视频标题检索',?,'VIDEO',?,'PUBLIC','PUBLISHED','PENDING',1,?,?)",
+                    content,
+                    category,
+                    asset,
+                    adminId,
+                    adminId);
+            db.update(
+                    "UPDATE asset SET owner_type='KNOWLEDGE',forum_post_id=NULL,content_id=? WHERE"
+                            + " id=?",
+                    content,
+                    asset);
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_version(id,content_id,version_number,title,category_id,type,asset_id,audience,created_by)"
+                        + " VALUES(?,?,1,'视频标题检索',?,'VIDEO',?,'PUBLIC',?)",
+                    snapshot,
+                    content,
+                    category,
+                    asset,
+                    adminId);
+            db.update(
+                    "UPDATE knowledge_content SET published_version_id=? WHERE id=?",
+                    snapshot,
+                    content);
+            indexes.enqueue(UUID.randomUUID(), content);
+            db.update(
+                    "UPDATE knowledge_index_task SET next_attempt_at=now()-interval '1 day' WHERE"
+                            + " content_id=?",
+                    content);
+            assertTrue(knowledgeIndexer.runOne());
+            assertEquals(
+                    "视频标题检索",
+                    db.queryForObject(
+                                    "SELECT body FROM knowledge_chunk WHERE content_id=?",
+                                    String.class,
+                                    content)
+                            .strip());
+            db.update(
+                    "UPDATE video_task SET"
+                            + " state='FAILED',version=version+1,error_code='TEST_FAILURE' WHERE"
+                            + " asset_id=?",
+                    asset);
+            UUID job =
+                    db.queryForObject(
+                            "SELECT id FROM video_task WHERE asset_id=?", UUID.class, asset);
+            long version = operationJobs.get(job).version();
+            assertEquals("QUEUED", operationJobs.retry(job, version, "验证显式恢复", adminId).state());
+            assertThrows(
+                    cn.zhixiang.platform.shared.exception.BusinessException.class,
+                    () -> operationJobs.retry(job, version, "旧版本恢复", adminId));
+        } finally {
+            java.nio.file.Files.deleteIfExists(fixture);
+            storage.purge(target, original);
+            if (output != null) storage.purge(target, output);
+        }
+    }
+
     @Autowired cn.zhixiang.platform.knowledge.mapper.EmbeddingMapper embeddingMapper;
     @Autowired cn.zhixiang.platform.knowledge.mapper.SemanticSearchMapper semanticMapper;
 

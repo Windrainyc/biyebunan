@@ -88,6 +88,13 @@ public class KnowledgeIndexer {
                 try (var input = storage.open(target, asset.privateKey(), metadata)) {
                     text = extractor.extract(input, asset.size(), asset.mimeType());
                 }
+            } else if (source.type().equals("VIDEO")) {
+                // 视频仅建立发布标题的元数据索引；不能将标题命中冒充语音或画面转写。
+                var asset = source.assetId() == null ? null : assets.get(source.assetId());
+                if (asset == null || asset.deletedAt() != null || !asset.state().equals("READY"))
+                    throw new cn.zhixiang.platform.shared.exception.BusinessException(
+                            422, "VIDEO_ASSET_UNAVAILABLE", "视频资产不可用");
+                text = "";
             } else
                 throw new cn.zhixiang.platform.shared.exception.BusinessException(
                         503, "CONTENT_EXTRACTION_UNAVAILABLE", "该内容类型的文本提取尚未配置");

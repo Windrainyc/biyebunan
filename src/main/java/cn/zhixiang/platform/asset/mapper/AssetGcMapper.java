@@ -55,6 +55,11 @@ public interface AssetGcMapper {
             "SELECT COALESCE(CASE WHEN #{task.kind}='UPLOAD' THEN"
                 + " a.upload_expires_at<now()-interval '1 day' AND (a.state IN"
                 + " ('UPLOADING','READY','REJECTED') OR a.deleted_at IS NOT NULL) WHEN"
+                + " #{task.kind}='MEDIA' THEN (a.deleted_at<now()-interval '7 days' OR NOT"
+                + " EXISTS(SELECT 1 FROM video_task v WHERE v.asset_id=a.id AND v.state='SUCCEEDED'"
+                + " AND v.output_key=#{task.objectKey})) AND NOT EXISTS(SELECT 1 FROM video_task v"
+                + " WHERE v.asset_id=a.id AND v.generation=#{task.attemptGeneration} AND"
+                + " v.state='RUNNING' AND v.lease_until>clock_timestamp()) WHEN"
                 + " #{task.kind}='ATTEMPT' THEN (a.deleted_at<now()-interval '7 days' OR"
                 + " a.private_key IS DISTINCT FROM #{task.objectKey}) AND NOT EXISTS(SELECT 1 FROM"
                 + " asset_validation_task t WHERE t.asset_id=a.id AND"
@@ -93,4 +98,30 @@ public interface AssetGcMapper {
                     + " interval '1 day' ELSE interval '10 minutes' END WHERE id=#{id} AND"
                     + " generation=#{generation} AND lease_until>clock_timestamp()")
     int finish(UUID id, long generation, String error);
+
+    /**
+     * 上传媒体副本之前持久登记键，便于回收崩溃遗留文件。
+     *
+     * @param asset 源资产
+     * @param store 存储
+     * @param key 新键
+     * @param generation 处理代次
+     */
+    @Insert(
+            "INSERT INTO"
+                + " asset_object_gc(asset_id,storage_id,object_key,kind,attempt_generation,next_attempt_at)"
+                + " VALUES(#{asset},#{store},#{key},'MEDIA',#{generation},now()+interval '1 day')"
+                + " ON CONFLICT DO NOTHING")
+    void trackMedia(UUID asset, UUID store, String key, long generation);
+
+    /**
+     * 当前播放副本引用保护。
+     *
+     * @param task 回收任务
+     * @return 是否为成功任务当前副本
+     */
+    @Select(
+            "SELECT EXISTS(SELECT 1 FROM video_task WHERE asset_id=#{task.assetId} AND"
+                    + " state='SUCCEEDED' AND output_key=#{task.objectKey})")
+    boolean currentMedia(@Param("task") AssetGcEntity task);
 }

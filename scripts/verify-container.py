@@ -26,7 +26,8 @@ names = ['ZX_DB_USER', 'ZX_DB_PASSWORD', 'ZX_REDIS_USER', 'ZX_REDIS_PASSWORD', '
 env = {key: loaded[key] for key in names}
 env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
 name = 'zx-api-verify-' + uuid.uuid4().hex[:12]
-image = 'zhixiang/platform:0.24.0-dev'
+worker_mode = '--worker' in __import__('sys').argv
+image = 'zhixiang/worker:0.26.0-dev' if worker_mode else 'zhixiang/platform:0.26.0-dev'
 command = ['docker', '--context', 'colima-zhixiang']
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
@@ -39,8 +40,24 @@ with tempfile.TemporaryDirectory(prefix='zx-container-') as directory:
             writer.write(f'{key}={value}\n')
     started = False
     try:
-        subprocess.run(command + ['run', '-d', '--name', name, '--network', 'zhixiang-local-middleware', '--env-file', str(config), '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=128m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '-p', f'127.0.0.1:{port}:18080', image], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(command + ['run', '-d', '--name', name, '--network', 'zhixiang-local-middleware', '--env-file', str(config), '--read-only', '--tmpfs', ('/tmp:rw,nosuid,nodev,size=1536m' if worker_mode else '/tmp:rw,nosuid,nodev,size=128m'), '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '-p', f'127.0.0.1:{port}:18080', image], check=True, stdout=subprocess.DEVNULL)
         started = True
+        if worker_mode:
+            for _ in range(45):
+                state = subprocess.check_output(command+['inspect','--format','{{.State.Running}}',name],text=True).strip()
+                if state != 'true': raise RuntimeError('worker进程提前退出')
+                logs = subprocess.check_output(command+['logs',name],stderr=subprocess.STDOUT,text=True)
+                if 'Started PlatformApplication' in logs: break
+                time.sleep(1)
+            else: raise RuntimeError('worker未在45秒内启动')
+            time.sleep(3)
+            state = subprocess.check_output(command+['inspect','--format','{{.State.Running}}',name],text=True).strip()
+            if state != 'true': raise RuntimeError('worker启动后退出')
+            version = subprocess.check_output(command+['exec',name,'ffmpeg','-version'],text=True).splitlines()[0]
+            result = {'image':image,'workerStarted':True,'ffmpeg':version,'productionClusterVerified':False}
+            (root/'docs/worker-container-verification.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+            print(json.dumps(result,ensure_ascii=False))
+            raise SystemExit(0)
         base = f'http://127.0.0.1:{port}'
         for _ in range(45):
             try:

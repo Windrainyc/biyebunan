@@ -138,6 +138,35 @@ public class S3ObjectStorage implements ObjectStorage {
     }
 
     /**
+     * 流式写入独立视频副本，不在堆内加载整段录屏。
+     *
+     * @param target 固定私有配置
+     * @param key 新键
+     * @param input 内容流
+     * @param size 实际长度，最多1GiB
+     * @param mime 媒体类型
+     * @return 存储元数据
+     */
+    @Override
+    public Metadata writeStream(
+            Target target, String key, java.io.InputStream input, long size, String mime) {
+        check(target, key);
+        if (size < 1 || size > 1073741824L || !"video/mp4".equals(mime))
+            throw new BusinessException(422, "VIDEO_SIZE_LIMIT", "播放副本大小或类型非法");
+        try {
+            client.putObject(
+                    PutObjectArgs.builder().bucket(target.bucket()).object(key).stream(
+                                    input, size, 10485760L)
+                            .contentType(mime)
+                            .extraHeaders(Map.of("If-None-Match", "*"))
+                            .build());
+            return stat(target, key);
+        } catch (Exception e) {
+            throw failure(e);
+        }
+    }
+
+    /**
      * HEAD桶存在性检查，不创建对象、不改变桶权限。
      *
      * @param target 私有位置

@@ -17,14 +17,18 @@ import java.util.UUID;
 @RequestMapping("/api/v1/student/assets")
 public class StudentAssetController {
     private final AssetService service;
+    private final cn.zhixiang.platform.media.service.VideoService videos;
 
     /**
      * 创建入口。
      *
+     * @param videos 私有播放副本用例
      * @param service 授权用例
      */
-    public StudentAssetController(AssetService service) {
+    public StudentAssetController(
+            AssetService service, cn.zhixiang.platform.media.service.VideoService videos) {
         this.service = service;
+        this.videos = videos;
     }
 
     /**
@@ -45,6 +49,7 @@ public class StudentAssetController {
     /**
      * 每次重新授权签发一分钟下载。
      *
+     * @param variant ORIGINAL原件，PLAYBACK独立转码副本
      * @param id 资产
      * @param actor 学生
      * @return 下载授权
@@ -52,9 +57,17 @@ public class StudentAssetController {
     @PostMapping("/{id}/download")
     @PreAuthorize("hasAuthority('post_student_assets_id_download')")
     public ResponseEntity<AssetDtos.Download> download(
-            @PathVariable UUID id, @AuthenticationPrincipal Actor actor) {
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "ORIGINAL") String variant,
+            @AuthenticationPrincipal Actor actor) {
+        if (!java.util.Set.of("ORIGINAL", "PLAYBACK").contains(variant))
+            throw new cn.zhixiang.platform.shared.exception.BusinessException(
+                    400, "INVALID_FILTER", "文件版本类型非法");
         return ResponseEntity.ok()
                 .cacheControl(org.springframework.http.CacheControl.noStore())
-                .body(service.download(id, actor));
+                .body(
+                        variant.equals("PLAYBACK")
+                                ? videos.playback(id, actor)
+                                : service.download(id, actor));
     }
 }

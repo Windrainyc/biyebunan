@@ -20,16 +20,22 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin")
 public class AdminAssetController {
     private final AssetService service;
+    private final cn.zhixiang.platform.media.service.VideoService videos;
     private final IdempotentWrites writes;
 
     /**
      * 初始化接口。
      *
+     * @param videos 私有播放副本用例
      * @param service 资产用例
      * @param writes 幂等事务
      */
-    public AdminAssetController(AssetService service, IdempotentWrites writes) {
+    public AdminAssetController(
+            AssetService service,
+            IdempotentWrites writes,
+            cn.zhixiang.platform.media.service.VideoService videos) {
         this.service = service;
+        this.videos = videos;
         this.writes = writes;
     }
 
@@ -100,6 +106,7 @@ public class AdminAssetController {
     /**
      * 下载签名是短时授权，不允许缓存。
      *
+     * @param variant ORIGINAL原件，PLAYBACK独立转码副本
      * @param id 资产
      * @param actor 身份
      * @return 下载授权
@@ -107,10 +114,18 @@ public class AdminAssetController {
     @PostMapping("/assets/{id}/download")
     @PreAuthorize("hasAuthority('post_admin_assets_id_download')")
     public ResponseEntity<AssetDtos.Download> download(
-            @PathVariable UUID id, @AuthenticationPrincipal Actor actor) {
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "ORIGINAL") String variant,
+            @AuthenticationPrincipal Actor actor) {
+        if (!java.util.Set.of("ORIGINAL", "PLAYBACK").contains(variant))
+            throw new cn.zhixiang.platform.shared.exception.BusinessException(
+                    400, "INVALID_FILTER", "文件版本类型非法");
         return ResponseEntity.ok()
                 .cacheControl(org.springframework.http.CacheControl.noStore())
-                .body(service.download(id, actor));
+                .body(
+                        variant.equals("PLAYBACK")
+                                ? videos.playback(id, actor)
+                                : service.download(id, actor));
     }
 
     /**

@@ -1,0 +1,12 @@
+# 视频worker使用独立镜像；API仍使用不含媒体工具的Dockerfile。
+FROM eclipse-temurin:21.0.11_10-jre-jammy@sha256:8208b3a3733529f42c4b565bfcbf16d914eb628f3ead8488b6b4d6363fcbe7cf
+USER root
+# 固定Ubuntu安全仓库实际可用版本，构建失败时不能静默改用latest。
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg=7:4.4.2-0ubuntu0.22.04.1 && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --chown=10001:10001 target/platform-0.1.0-SNAPSHOT.jar /app/platform.jar
+USER 10001:10001
+ENV ZX_VIDEO_ENABLED=true ZX_FFMPEG_PATH=/usr/bin/ffmpeg ZX_FFPROBE_PATH=/usr/bin/ffprobe
+# 编排为/tmp提供有容量限制的临时卷，为worker设置CPU/内存上限。
+ENTRYPOINT ["java","-XX:MaxRAMPercentage=40","-jar","/app/platform.jar"]
+CMD ["--spring.profiles.active=worker"]

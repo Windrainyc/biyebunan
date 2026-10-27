@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.21
+  version: 1.0.22
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -9709,6 +9709,14 @@ paths:
         '429': *id008
         '503': *id009
       parameters:
+      - name: variant
+        in: query
+        required: false
+        description: ORIGINAL为不可变原件；PLAYBACK为已扫描视频的独立转码副本，未就绪503。
+        schema:
+          type: string
+          enum: [ORIGINAL, PLAYBACK]
+          default: ORIGINAL
       - name: id
         in: path
         required: true
@@ -9906,6 +9914,14 @@ paths:
         '429': *id008
         '503': *id009
       parameters:
+      - name: variant
+        in: query
+        required: false
+        description: ORIGINAL为不可变原件；PLAYBACK为已扫描视频的独立转码副本，未就绪503。
+        schema:
+          type: string
+          enum: [ORIGINAL, PLAYBACK]
+          default: ORIGINAL
       - name: id
         in: path
         required: true

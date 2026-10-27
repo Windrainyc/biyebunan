@@ -67,6 +67,8 @@ public class AssetGarbageCollector {
                                                         && !java.util.Objects.equals(
                                                                 job.objectKey(),
                                                                 asset.privateKey()))
+                                                && !(job.kind().equals("MEDIA")
+                                                        && !mapper.currentMedia(job))
                                                 && assets.referenced(job.assetId()))
                                     throw new BusinessException(
                                             409, "GC_NOT_RETIRED", "对象尚未退休或仍被引用");

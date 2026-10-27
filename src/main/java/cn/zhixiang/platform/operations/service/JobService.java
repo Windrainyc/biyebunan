@@ -17,15 +17,25 @@ import java.util.UUID;
 public class JobService {
     private final JobMapper mapper;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.media.mapper.VideoMapper videos;
+    private final cn.zhixiang.platform.asset.mapper.AssetMapper assets;
 
     /**
      * 创建用例。
      *
+     * @param videos 视频任务
+     * @param assets 源资产锁
      * @param mapper 任务端口
      * @param writes 审计事件
      */
-    public JobService(JobMapper mapper, WriteMapper writes) {
+    public JobService(
+            JobMapper mapper,
+            WriteMapper writes,
+            cn.zhixiang.platform.media.mapper.VideoMapper videos,
+            cn.zhixiang.platform.asset.mapper.AssetMapper assets) {
         this.mapper = mapper;
+        this.videos = videos;
+        this.assets = assets;
         this.writes = writes;
     }
 
@@ -71,6 +81,17 @@ public class JobService {
     public JobDtos.View retry(UUID id, long version, String reason, UUID actor) {
         var kind = mapper.get(id);
         if (kind == null) missing();
+        if (kind.kind().equals("VIDEO_TRANSCODE")) {
+            UUID source = videos.assetForJob(id);
+            if (source == null || assets.lock(source) == null) missing();
+            var current = mapper.get(id);
+            if (current.version() != version)
+                throw new BusinessException(412, "VERSION_CONFLICT", "任务状态已更新");
+            if (videos.retry(id, version) != 1)
+                throw new BusinessException(422, "JOB_NOT_RETRYABLE", "视频任务不是可恢复状态");
+            writes.auditReason(UUID.randomUUID(), actor, "RETRY", "video_job", id, reason);
+            return get(id);
+        }
         if (kind.kind().equals("BILLING_RECONCILIATION"))
             throw new BusinessException(
                     422, "JOB_RECONCILIATION_REQUIRED", "账务核对须通过运行核对接口重新发起，以重新检查证据和账务状态");
