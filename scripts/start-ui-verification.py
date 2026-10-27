@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """创建独立UI验证数据库并通过正式初始化/激活流程准备管理员。仅限本机验证。
-凭据输出到0600文件；不写业务库，不发送短信，不调用模型。Ctrl+C关闭自己启动的API。
+凭据输出到0600文件；不写业务库，不发送短信，默认不调用模型，显式--test-model仅连接本机隔离协议服务。Ctrl+C关闭自己启动的API。
 验证库保留用于复核，清理由记录中的确切数据库名执行，禁止匹配删除其他库。
 """
 import os,shlex,subprocess,json,uuid,time,urllib.request,urllib.parse,base64,hmac,hashlib,struct,secrets,socket,sys
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 os.umask(0o077)
-if set(sys.argv[1:]) - {'--test-sms','--resume'}:raise SystemExit('仅支持--test-sms和--resume')
+if set(sys.argv[1:]) - {'--test-sms','--resume','--test-model'}:raise SystemExit('仅支持--test-sms、--test-model和--resume')
 env=os.environ.copy()
 # 已有API占用端口时拒绝初始化，避免把请求送到其他运行环境。
 with socket.socket() as probe:
@@ -34,6 +34,7 @@ if overrides.exists():
  values=json.loads(overrides.read_text())
  if set(values)-{'ZX_UPLOAD_STORAGE_ID'}:raise SystemExit('不支持的运行覆盖配置')
  env.update(values)
+env.update(ZX_MODEL_CALLS_ENABLED='false',ZX_MODEL_ALLOWED_HOSTS='')
 sms_fixture=None
 java_options=[]
 if '--test-sms' in sys.argv:
@@ -41,6 +42,9 @@ if '--test-sms' in sys.argv:
  sms_fixture=SmsFixture(directory)
  env.update(ZX_SMS_ENABLED='true',ZX_SMS_ENDPOINT='https://localhost:18443/messages',ZX_SMS_KEY=sms_fixture.key,ZX_TERMS_VERSION='ui-test-nonbinding')
  java_options=[f'-Djavax.net.ssl.trustStore={sms_fixture.truststore}','-Djavax.net.ssl.trustStorePassword=changeit']
+if '--test-model' in sys.argv:
+ if not sms_fixture:raise SystemExit('--test-model必须同时指定--test-sms以加载隔离TLS信任库')
+ env.update(ZX_MODEL_CALLS_ENABLED='true',ZX_MODEL_ALLOWED_HOSTS='localhost')
 # 每个验证进程使用独立构建快照，避免后续Maven打包破坏正在运行的懒加载类。
 import shutil
 runtime_jar=directory/('api-runtime-'+uuid.uuid4().hex+'.jar')
