@@ -8,6 +8,7 @@ import cn.zhixiang.platform.identity.model.Actor;
 import cn.zhixiang.platform.identity.security.TokenDigester;
 import cn.zhixiang.platform.order.dto.OrderDtos;
 import cn.zhixiang.platform.order.entity.OrderEntity;
+import cn.zhixiang.platform.order.mapper.OrderCancellationMapper;
 import cn.zhixiang.platform.order.mapper.OrderMapper;
 import cn.zhixiang.platform.shared.dto.PageResult;
 import cn.zhixiang.platform.shared.exception.BusinessException;
@@ -23,6 +24,7 @@ import java.util.UUID;
 @Service
 public class OrderService {
     private final OrderMapper mapper;
+    private final OrderCancellationMapper cancellation;
     private final SchoolMapper schools;
     private final MajorMapper majors;
     private final WriteMapper writes;
@@ -32,6 +34,7 @@ public class OrderService {
     /**
      * 构造订单用例。
      *
+     * @param cancellation 取消补偿持久层
      * @param mapper 订单数据端口
      * @param schools 院校端口
      * @param majors 专业端口
@@ -41,12 +44,14 @@ public class OrderService {
      */
     public OrderService(
             OrderMapper mapper,
+            OrderCancellationMapper cancellation,
             SchoolMapper schools,
             MajorMapper majors,
             WriteMapper writes,
             SecretCipher cipher,
             TokenDigester digester) {
         this.mapper = mapper;
+        this.cancellation = cancellation;
         this.schools = schools;
         this.majors = majors;
         this.writes = writes;
@@ -282,11 +287,12 @@ public class OrderService {
                 r.schoolId(),
                 r.majorId(),
                 r.source(),
-                r.note());
+                r.note(),
+                r.status().equals("CANCELLED") && r.receiptStatus().equals("CONFIRMED"));
     }
 
     /**
-     * 按状态机流转；确认是人工核实，不能等同收款。进行中取消需后续补偿流程。
+     * 按状态机流转；确认是人工核实，不能等同收款。取消先阻止新运行，再检查未决账务并暂停项目；收款历史保留。
      *
      * @param id 订单
      * @param version CAS版本
@@ -321,9 +327,21 @@ public class OrderService {
                         yield "COMPLETED";
                     }
                     case "CANCEL" -> {
-                        if (!java.util.Set.of("DRAFT", "CONFIRMED").contains(old.status()))
+                        if (!java.util.Set.of("DRAFT", "CONFIRMED", "ACTIVE")
+                                .contains(old.status()))
+                            throw new BusinessException(422, "ORDER_CANCEL_BLOCKED", "当前订单状态不允许取消");
+                        // 创建运行也先锁订单；持有此锁后不会再出现新的预占。
+                        if (cancellation.unsettled(id))
                             throw new BusinessException(
-                                    422, "ORDER_CANCEL_BLOCKED", "仅草稿或未启动订单可直接取消，进行中订单需要补偿流程");
+                                    422, "ORDER_CANCEL_UNSETTLED", "请先处理运行中的答疑及待核对费用");
+                        cancellation.pause(id, actor.id(), w.reason());
+                        cancellation.invalidate(id);
+                        cancellation.record(
+                                id,
+                                old.status(),
+                                old.receiptStatus().equals("CONFIRMED"),
+                                actor.id(),
+                                w.reason());
                         yield "CANCELLED";
                     }
                     case "ARCHIVE" -> {

@@ -114,6 +114,7 @@ public final class OrderDtos {
      * @param schoolId 院校标识
      * @param majorId 专业标识
      * @param source 创建来源，不可修改
+     * @param cancellationFinancialReviewRequired 取消且已收款时为true，不表示退款完成
      * @param note 订单备注
      * @param packageCode 套餐代码
      */
@@ -134,7 +135,8 @@ public final class OrderDtos {
             UUID schoolId,
             UUID majorId,
             String source,
-            String note) {}
+            String note,
+            boolean cancellationFinancialReviewRequired) {}
 
     /**
      * 订单分页查询，状态与基础配置启停状态分别校验。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.22
+  version: 1.0.23
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -15590,6 +15590,9 @@ components:
           - COMPLETED
           - CANCELLED
           - ARCHIVED
+        cancellationFinancialReviewRequired:
+          type: boolean
+          description: 取消且已确认收款时为true，必须另行财务核对，不代表退款。
         receiptStatus:
           type: string
           enum:
@@ -16874,7 +16877,7 @@ components:
       required:
       - action
       - reason
-      description: CONFIRM为人工核实，不代表收款。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。直接CANCEL仅DRAFT/CONFIRMED；ACTIVE取消补偿流程尚未实现。
+      description: CONFIRM为人工核实，不代表收款。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。CANCEL允许DRAFT/CONFIRMED/ACTIVE，但存在运行中答疑或未决预占时返回ORDER_CANCEL_UNSETTLED；同事务暂停未完成项目、失效挑战并记录快照，已收款保留财务核对标记，不自动退款。
     Receipt:
       description: 已确认未收款订单全额核验；流水号全局唯一，凭证须属于订单且READY，核验记录不可覆盖，不支持分期与退款。
       type: object

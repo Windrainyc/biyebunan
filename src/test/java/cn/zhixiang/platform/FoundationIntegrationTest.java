@@ -163,6 +163,7 @@ class FoundationIntegrationTest {
                 UUID.randomUUID());
     }
 
+    @Autowired cn.zhixiang.platform.order.service.OrderService cancellationOrders;
     @Autowired cn.zhixiang.platform.callback.mapper.OssCallbackMapper callbackReceipts;
     @Autowired cn.zhixiang.platform.asset.mapper.AssetMapper callbackAssets;
     @Autowired cn.zhixiang.platform.configuration.mapper.StorageMapper callbackStores;
@@ -5614,6 +5615,42 @@ class FoundationIntegrationTest {
                     UUID.randomUUID(),
                     journalAccount,
                     journalRun);
+            // RESERVED运行即使未发请求也阻止订单取消；失败事务不得留下补偿快照。
+            var cancellationActor =
+                    new cn.zhixiang.platform.identity.model.Actor(
+                            adminId, "admin", 1, UUID.randomUUID());
+            var cancelFailure =
+                    assertThrows(
+                            cn.zhixiang.platform.shared.exception.BusinessException.class,
+                            () ->
+                                    cancellationOrders.transition(
+                                            order,
+                                            1,
+                                            new cn.zhixiang.platform.order.dto.OrderDtos.Transition(
+                                                    "CANCEL", "运行未结束"),
+                                            cancellationActor));
+            assertEquals("ORDER_CANCEL_UNSETTLED", cancelFailure.code());
+            assertEquals(
+                    0,
+                    db.queryForObject(
+                            "SELECT count(*) FROM order_cancellation WHERE order_id=?",
+                            Integer.class,
+                            order));
+            db.update("UPDATE generation_run SET state='FAILED' WHERE id=?", journalRun);
+            db.update("UPDATE quota_hold SET state='RECONCILING' WHERE run_id=?", journalRun);
+            var unknownFailure =
+                    assertThrows(
+                            cn.zhixiang.platform.shared.exception.BusinessException.class,
+                            () ->
+                                    cancellationOrders.transition(
+                                            order,
+                                            1,
+                                            new cn.zhixiang.platform.order.dto.OrderDtos.Transition(
+                                                    "CANCEL", "未知用量仍冻结"),
+                                            cancellationActor));
+            assertEquals("ORDER_CANCEL_UNSETTLED", unknownFailure.code());
+            db.update("UPDATE generation_run SET state='RESERVED' WHERE id=?", journalRun);
+            db.update("UPDATE quota_hold SET state='RESERVED' WHERE run_id=?", journalRun);
             UUID worker1 = UUID.randomUUID(), worker2 = UUID.randomUUID();
             var lease1 = runLeases.claim(worker1);
             assertEquals(journalRun, lease1.id());
@@ -8250,6 +8287,48 @@ class FoundationIntegrationTest {
                                     .header("Authorization", "Bearer " + st))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.progress").value(0));
+            // 此夹具模拟进入ACTIVE；取消不能伪造收款撤回或退款。
+            db.update(
+                    "UPDATE software_order SET status='ACTIVE',receipt_status='CONFIRMED' WHERE"
+                            + " id=?",
+                    UUID.fromString(order));
+            String cancelPath = "/api/v1/admin/orders/" + order + "/transition",
+                    cancelKey = UUID.randomUUID().toString();
+            for (int attempt = 0; attempt < 2; attempt++) {
+                mvc.perform(
+                                post(cancelPath)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", cancelKey)
+                                        .header("If-Match", "\"2\"")
+                                        .contentType("application/json")
+                                        .content("{\"action\":\"CANCEL\",\"reason\":\"终止项目服务\"}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("CANCELLED"))
+                        .andExpect(jsonPath("$.receiptStatus").value("CONFIRMED"))
+                        .andExpect(jsonPath("$.cancellationFinancialReviewRequired").value(true));
+            }
+            assertEquals(
+                    "PAUSED",
+                    db.queryForObject(
+                            "SELECT stage FROM software_project WHERE id=?",
+                            String.class,
+                            UUID.fromString(project)));
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM order_cancellation WHERE order_id=?",
+                            Integer.class,
+                            UUID.fromString(order)));
+            assertThrows(
+                    org.springframework.dao.DataIntegrityViolationException.class,
+                    () ->
+                            db.update(
+                                    "DELETE FROM order_cancellation WHERE order_id=?",
+                                    UUID.fromString(order)));
+            mvc.perform(
+                            get("/api/v1/student/projects/" + project)
+                                    .header("Authorization", "Bearer " + st))
+                    .andExpect(status().isNotFound());
         } finally {
             db.update(
                     "DELETE FROM user_role WHERE user_id IN (?,?) AND role_id=?",
