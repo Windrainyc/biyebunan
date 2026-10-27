@@ -897,6 +897,11 @@ class FoundationIntegrationTest {
 
     @Test
     void metricsRequireOperationalPermissionAndOutboxRetainsTrace() throws Exception {
+        mvc.perform(get("/api/v1/auth/permissions")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/v1/auth/permissions").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasItem("schools:read")))
+                .andExpect(header().string("Cache-Control", "no-store"));
         mvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
         mvc.perform(get("/actuator/prometheus").header("Authorization", "Bearer " + partnerToken))
                 .andExpect(status().isForbidden());

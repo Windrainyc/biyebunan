@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.24
+  version: 1.0.25
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -14931,6 +14931,21 @@ paths:
           minimum: 1
           maximum: 100
           default: 20
+  /api/v1/auth/permissions:
+    get:
+      operationId: get_auth_permissions
+      summary: 当前会话有效权限
+      tags: [auth]
+      description: 仅用于前端入口可见性，不能替代服务端授权；不接收角色或用户参数。
+      responses:
+        '200':
+          description: 当前启用角色授予权限，Cache-Control为no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {type: string}
+        '401': {description: 会话无效}
 components:
   securitySchemes:
     bearerAuth:

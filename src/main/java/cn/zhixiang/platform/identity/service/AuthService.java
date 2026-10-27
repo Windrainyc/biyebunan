@@ -4,6 +4,7 @@ import cn.zhixiang.platform.identity.dto.AuthDtos;
 import cn.zhixiang.platform.identity.entity.AuthAccountEntity;
 import cn.zhixiang.platform.identity.entity.AuthSessionRowEntity;
 import cn.zhixiang.platform.identity.mapper.AuthMapper;
+import cn.zhixiang.platform.identity.mapper.IdentityMapper;
 import cn.zhixiang.platform.identity.model.Actor;
 import cn.zhixiang.platform.identity.security.Passwords;
 import cn.zhixiang.platform.identity.security.TokenDigester;
@@ -22,6 +23,7 @@ import java.util.*;
 public class AuthService {
     private final TotpVerifier mfa;
     private final AuthMapper mapper;
+    private final IdentityMapper identity;
     private final TokenDigester digester;
     private final TransactionTemplate tx;
     private final Passwords passwords;
@@ -31,6 +33,7 @@ public class AuthService {
     /**
      * 初始化模块组件，所需端口和配置由构造器注入。
      *
+     * @param identity 当前权限查询
      * @param mapper 认证数据库访问
      * @param digester 摘要
      * @param tx 短事务执行器
@@ -39,10 +42,12 @@ public class AuthService {
      */
     public AuthService(
             AuthMapper mapper,
+            IdentityMapper identity,
             TokenDigester digester,
             TransactionTemplate tx,
             TotpVerifier mfa,
             Passwords passwords) {
+        this.identity = identity;
         this.passwords = passwords;
         this.dummy = passwords.encode("dummy-never-a-real-user-password");
         this.mfa = mfa;
@@ -194,6 +199,16 @@ public class AuthService {
                         null));
         return new AuthDtos.Issued(
                 new AuthDtos.Session(access, 900, a.platform(), view(a), csrf), refresh);
+    }
+
+    /**
+     * 当前会话的有效权限；仅用于前端隐藏不可操作入口，服务端继续逐请求强制授权。
+     *
+     * @param actor 服务端认证身份
+     * @return 当前启用角色授予的权限代码
+     */
+    public java.util.List<String> permissions(cn.zhixiang.platform.identity.model.Actor actor) {
+        return identity.permissions(actor.id());
     }
 
     private AuthDtos.User view(AuthAccountEntity a) {

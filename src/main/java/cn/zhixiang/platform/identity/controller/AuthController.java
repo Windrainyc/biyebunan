@@ -102,6 +102,19 @@ public class AuthController {
     }
 
     /**
+     * 返回当前身份权限，不接收账户ID或角色参数。
+     *
+     * @param actor 服务端会话身份
+     * @return 禁止缓存的权限目录
+     */
+    @GetMapping("/permissions")
+    public ResponseEntity<List<String>> permissions(@AuthenticationPrincipal Actor actor) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(service.permissions(actor));
+    }
+
+    /**
      * 返回202挑战，短信失败返回503。
      *
      * @param actor 可选认证身份，订单用途必须为学生
