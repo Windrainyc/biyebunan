@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.15-development
+  version: 1.0.16
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -9723,7 +9723,6 @@ paths:
           description: ''
           maxLength: 128
       description: 每次重新校验资产与所属业务权限，签发一分钟只读授权；不创建业务资源，不缓存幂等响应，过期后可重新申请。
-
   /api/v1/student/uploads:
     post:
       operationId: post_student_uploads
@@ -9921,7 +9920,6 @@ paths:
           description: ''
           maxLength: 128
       description: 每次重新校验所属学生及当前发布版本，一分钟只读签名；撤回后不再签发，已签发链接最多残余一分钟。
-
   /api/v1/callbacks/oss:
     post:
       operationId: post_callbacks_oss
@@ -10073,7 +10071,10 @@ paths:
         required: false
         schema:
           type: string
-          enum: [VIDEO, DOCUMENT, MARKDOWN]
+          enum:
+          - VIDEO
+          - DOCUMENT
+          - MARKDOWN
       - name: X-Request-ID
         in: header
         required: false
@@ -10378,7 +10379,10 @@ paths:
         required: false
         schema:
           type: string
-          enum: [VIDEO, DOCUMENT, MARKDOWN]
+          enum:
+          - VIDEO
+          - DOCUMENT
+          - MARKDOWN
       - name: X-Request-ID
         in: header
         required: false
@@ -10684,7 +10688,7 @@ paths:
         description: 当前内容强ETag，重建使旧代次立即不可检索
         schema:
           type: string
-          pattern: '^"[0-9]+"$'
+          pattern: ^"[0-9]+"$
       - name: X-Request-ID
         in: header
         required: false
@@ -11797,7 +11801,11 @@ paths:
         description: 资源状态；未知值400
         schema:
           type: string
-          enum: [PENDING, PUBLISHED, HIDDEN, LOCKED]
+          enum:
+          - PENDING
+          - PUBLISHED
+          - HIDDEN
+          - LOCKED
       - name: sort
         in: query
         required: false
@@ -11927,7 +11935,9 @@ paths:
         description: 资源状态；未知值400
         schema:
           type: string
-          enum: [PUBLISHED, HIDDEN]
+          enum:
+          - PUBLISHED
+          - HIDDEN
       - name: sort
         in: query
         required: false
@@ -12003,7 +12013,11 @@ paths:
         description: 资源状态；未知值400
         schema:
           type: string
-          enum: [PENDING, PUBLISHED, HIDDEN, LOCKED]
+          enum:
+          - PENDING
+          - PUBLISHED
+          - HIDDEN
+          - LOCKED
       - name: sort
         in: query
         required: false
@@ -12302,7 +12316,9 @@ paths:
         description: 资源状态；未知值400
         schema:
           type: string
-          enum: [PUBLISHED, HIDDEN]
+          enum:
+          - PUBLISHED
+          - HIDDEN
       - name: sort
         in: query
         required: false
@@ -12681,7 +12697,10 @@ paths:
         description: 资源状态；未知值400
         schema:
           type: string
-          enum: [OPEN, RESOLVED, DISMISSED]
+          enum:
+          - OPEN
+          - RESOLVED
+          - DISMISSED
       - name: sort
         in: query
         required: false
@@ -12873,7 +12892,9 @@ paths:
         description: 已读或未读；未知状态400
         schema:
           type: string
-          enum: [READ, UNREAD]
+          enum:
+          - READ
+          - UNREAD
       - name: sort
         in: query
         required: false
@@ -13041,7 +13062,9 @@ paths:
         description: 已读或未读；未知状态400
         schema:
           type: string
-          enum: [READ, UNREAD]
+          enum:
+          - READ
+          - UNREAD
       - name: sort
         in: query
         required: false
@@ -13209,7 +13232,9 @@ paths:
         description: 已读或未读；未知状态400
         schema:
           type: string
-          enum: [READ, UNREAD]
+          enum:
+          - READ
+          - UNREAD
       - name: sort
         in: query
         required: false
@@ -13701,7 +13726,7 @@ paths:
         description: 任务详情的强ETag；仅恢复FAILED且资产仍隔离的技术失败
         schema:
           type: string
-          pattern: '^"[0-9]+"$'
+          pattern: ^"[0-9]+"$
       - name: X-Request-ID
         in: header
         required: false
@@ -13766,11 +13791,6 @@ paths:
           type: string
           description: ''
           maxLength: 100
-      - name: status
-        in: query
-        required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
       - name: sort
         in: query
         required: false
@@ -13780,7 +13800,6 @@ paths:
           enum:
           - createdAt:desc
           - createdAt:asc
-          - updatedAt:desc
       - name: X-Request-ID
         in: header
         required: false
@@ -13790,6 +13809,7 @@ paths:
           description: ''
           maxLength: 128
       x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      description: 只读追加审计元数据；无chat:audit时过滤私聊资源记录；不返回detail原文，响应no-store。
   /api/v1/health/live:
     get:
       operationId: get_health_live
@@ -15453,7 +15473,9 @@ components:
         displayName: *id011
         phoneMasked: *id011
         schoolName:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           description: 学生个人资料院校名，尚未设置时为null
         activeOrderCount: *id020
       required:
@@ -16091,19 +16113,27 @@ components:
         id: *id010
         runId: *id010
         inputTokens:
-          type: [integer, 'null']
+          type:
+          - integer
+          - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         outputTokens:
-          type: [integer, 'null']
+          type:
+          - integer
+          - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         cachedTokens:
-          type: [integer, 'null']
+          type:
+          - integer
+          - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         amount:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           description: 实际人民币金额十进制字符串；未知为null，确定释放为0
           pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
         adjustmentAmount:
@@ -16111,7 +16141,9 @@ components:
           description: 人工调整净额，退还为负；不修改原始amount
           pattern: ^-?[0-9]{1,14}(\.[0-9]{1,6})?$
         netAmount:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           description: 原始金额加人工调整净额，未知时为null
           pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
         currency:
@@ -16507,9 +16539,20 @@ components:
         actorId: *id010
         action: *id011
         targetId: *id011
-        reason: *id011
-        traceId: *id011
+        reason:
+          type:
+          - string
+          - 'null'
+          description: 不存在时为null，不伪造历史记录
+        traceId:
+          type:
+          - string
+          - 'null'
+          description: 不存在时为null，不伪造历史记录
         createdAt: *id014
+        resourceType:
+          type: string
+          description: 资源类型，不返回通用detail原文
       required:
       - id
       - actorId
@@ -16518,6 +16561,7 @@ components:
       - reason
       - traceId
       - createdAt
+      - resourceType
     Statistics:
       type: object
       additionalProperties: false
@@ -16905,11 +16949,14 @@ components:
         runId: *id010
         direction:
           type: string
-          enum: [DEBIT, CREDIT]
+          enum:
+          - DEBIT
+          - CREDIT
         amount: *id022
         currency:
           type: string
-          enum: [CNY]
+          enum:
+          - CNY
         reason:
           type: string
           minLength: 1
@@ -16920,7 +16967,16 @@ components:
           maxLength: 1000
         createdBy: *id010
         createdAt: *id014
-      required: [id, runId, direction, amount, currency, reason, evidenceRef, createdBy, createdAt]
+      required:
+      - id
+      - runId
+      - direction
+      - amount
+      - currency
+      - reason
+      - evidenceRef
+      - createdBy
+      - createdAt
     UsageAdjustment:
       type: object
       additionalProperties: false

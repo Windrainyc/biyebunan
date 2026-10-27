@@ -719,6 +719,21 @@ class FoundationIntegrationTest {
   mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
  }
 
+ @Test void auditPaginationDoesNotExposeChatMetadataWithoutExtraPermission() throws Exception {
+  UUID auditor=UUID.randomUUID(),role=UUID.randomUUID(),target=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(auditor,"admin",token);
+  db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'admin','ALL','ENABLED')",role,role.toString(),"只读审计");db.update("INSERT INTO user_role VALUES(?,?)",auditor,role);db.update("INSERT INTO role_permission VALUES(?,'get_admin_audits')",role);
+  db.update("INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,detail) VALUES(?,?,'TEST_AUDIT','school',?,'{\"reason\":\"测试依据\",\"secret\":\"NEVER_RETURN\"}')",UUID.randomUUID(),adminId,target);
+  db.update("INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,detail) VALUES(?,?,'CHAT_MESSAGES_READ','conversation',?,'{}')",UUID.randomUUID(),adminId,target);
+  String path="/api/v1/admin/audits";
+  var response=mvc.perform(get(path).header("Authorization","Bearer "+token).param("q",target.toString()).param("size","1").param("sort","createdAt:asc")).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.items[0].resourceType").value("school")).andExpect(jsonPath("$.items[0].traceId").isEmpty()).andReturn().getResponse().getContentAsString();assertFalse(response.contains("NEVER_RETURN"));
+  mvc.perform(get(path).header("Authorization","Bearer "+token).param("q",target.toString()).param("page","2").param("size","1")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+  mvc.perform(get(path).header("Authorization","Bearer "+token).param("sort","updatedAt:desc")).andExpect(status().isBadRequest());
+  mvc.perform(get(path).header("Authorization","Bearer "+token).param("status","ENABLED")).andExpect(status().isBadRequest());
+  mvc.perform(get(path).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+  db.update("INSERT INTO role_permission VALUES(?,'chat:audit')",role);
+  mvc.perform(get(path).header("Authorization","Bearer "+token).param("q",target.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+ }
+
  @Test void studentForumUploadRequiresOwnershipScanAndPublishedAssociation() throws Exception {
   db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')",adminId);
   UUID author=UUID.randomUUID(),other=UUID.randomUUID(),board=UUID.randomUUID();String st=UUID.randomUUID().toString(),ot=UUID.randomUUID().toString();seed(author,"student",st);seed(other,"student",ot);
@@ -750,6 +765,22 @@ class FoundationIntegrationTest {
    var signed=json.readTree(mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());assertArrayEquals(bytes,client.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(signed.get("url").asText())).GET().build(),java.net.http.HttpResponse.BodyHandlers.ofByteArray()).body());
    mvc.perform(delete("/api/v1/admin/assets/"+asset).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isConflict());
    forumModeration(id,3,"HIDE").andExpect(status().isOk());mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());mvc.perform(post(download).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+   forumModeration(id,4,"APPROVE").andExpect(status().isOk());body.put("assetIds",List.of());
+   mvc.perform(put("/api/v1/student/posts/"+id).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"5\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isOk());forumModeration(id,6,"APPROVE").andExpect(status().isOk());
+   mvc.perform(post(download).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());mvc.perform(post(download).header("Authorization","Bearer "+st)).andExpect(status().isOk());
+   String otherPost=json.readTree(mvc.perform(post("/api/v1/student/posts").header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();body.put("assetIds",List.of(asset));
+   mvc.perform(put("/api/v1/student/posts/"+otherPost).header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content(json.writeValueAsString(body))).andExpect(status().isUnprocessableEntity());
+   assertEquals(0,db.queryForObject("SELECT count(*) FROM forum_post_asset WHERE post_id=?",Integer.class,UUID.fromString(otherPost)));
+   // 两个不同账户并发关联和删除同一资产，帖子锁必须使二者形成单一先后顺序。
+   String attachmentBody=json.writeValueAsString(body),assetId=asset.toString();var gate=new java.util.concurrent.CountDownLatch(1);
+   try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)){
+    var attach=pool.submit(()->{gate.await();return mvc.perform(put("/api/v1/student/posts/"+id).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"7\"").contentType("application/json").content(attachmentBody)).andReturn().getResponse().getStatus();});
+    var remove=pool.submit(()->{gate.await();return mvc.perform(delete("/api/v1/admin/assets/"+assetId).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andReturn().getResponse().getStatus();});
+    gate.countDown();int a=attach.get(),d=remove.get();assertTrue((a==200&&d==409)||(a==422&&d==204),"关联/删除必须互斥，实际="+a+"/"+d);
+    assertEquals(0,db.queryForObject("SELECT count(*) FROM forum_post_asset f JOIN asset a ON a.id=f.asset_id WHERE a.id=? AND a.deleted_at IS NOT NULL",Integer.class,UUID.fromString(assetId)));
+   }
+
+
   } finally {
    if(asset!=null){var row=db.queryForMap("SELECT private_key,object_version FROM asset WHERE id=?",asset);if(row.get("private_key")!=null)storage.remove(target,(String)row.get("private_key"),(String)row.get("object_version"));}
    if(objectKey!=null&&objectVersion!=null)storage.remove(target,objectKey,objectVersion);
