@@ -4,6 +4,7 @@
 不测试真实云供应商、生产集群或故障转移。
 """
 import json
+import sys
 import http.client
 import os
 from pathlib import Path
@@ -25,9 +26,17 @@ for line in source.read_text().splitlines():
 names = ['ZX_DB_USER', 'ZX_DB_PASSWORD', 'ZX_REDIS_USER', 'ZX_REDIS_PASSWORD', 'ZX_RABBIT_USER', 'ZX_RABBIT_PASSWORD', 'ZX_RABBIT_VHOST', 'ZX_S3_ACCESS_KEY', 'ZX_S3_SECRET_KEY', 'ZX_S3_REGION']
 env = {key: loaded[key] for key in names}
 env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
+# 验证容器必须使用当前UI隔离库与对应vhost，禁止消费公共业务队列。
+ui = json.loads((root/'docs/ui-verification-state.json').read_text())
+if not ui['isolatedDatabase'] or not ui['database'].startswith('zx_ui_'):
+    raise SystemExit('容器验证要求已准备的隔离UI环境')
+env.update(ZX_DB_URL=f"jdbc:postgresql://postgres:5432/{ui['database']}?currentSchema=app",
+           ZX_RABBIT_VHOST=ui['database'],
+           ZX_AUTH_HMAC_KEY=(Path(ui['credentialFile']).parent/'auth-hmac').read_text().strip(),
+           ZX_MODEL_CALLS_ENABLED='false', ZX_OTLP_ENABLED='false')
 name = 'zx-api-verify-' + uuid.uuid4().hex[:12]
 worker_mode = '--worker' in __import__('sys').argv
-image = 'zhixiang/worker:0.30.0-dev' if worker_mode else 'zhixiang/platform:0.30.0-dev'
+image = 'zhixiang/worker:0.31.0-dev' if worker_mode else 'zhixiang/platform:0.31.0-dev'
 command = ['docker', '--context', 'colima-zhixiang']
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]

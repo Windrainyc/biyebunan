@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "student_own_messages": 200,
+    "partner_rejected_student_messages": 403,
+    "partner_rejected_admin_audit": 403,
+    "student_rejected_admin_users": 403,
+    "anonymous_rejected_messages": 401,
+    "partner_assigned_project": 200,
+    "partner_rejected_student_asset_download": 403
+  },
+  "isolatedDatabase": true,
+  "realSms": false,
+  "paidModelCalls": false
+}

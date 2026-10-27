@@ -7,7 +7,7 @@ import os,shlex,subprocess,json,uuid,time,urllib.request,urllib.parse,base64,hma
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 os.umask(0o077)
-if set(sys.argv[1:]) - {'--test-sms','--resume','--test-model'}:raise SystemExit('仅支持--test-sms、--test-model和--resume')
+if set(sys.argv[1:]) - {'--test-sms','--resume','--test-model','--container-frontends'}:raise SystemExit('仅支持--test-sms、--test-model、--container-frontends和--resume')
 env=os.environ.copy()
 # 已有API占用端口时拒绝初始化，避免把请求送到其他运行环境。
 with socket.socket() as probe:
@@ -29,6 +29,9 @@ if resume and not hmac_file.exists():raise SystemExit('旧验证库缺少原始H
 if not hmac_file.exists():hmac_file.write_text(secrets.token_hex(32))
 hmac_file.chmod(0o600)
 env.update(ZX_DB_URL=f'jdbc:postgresql://127.0.0.1:15432/{db}?currentSchema=app',ZX_AUTH_HMAC_KEY=hmac_file.read_text().strip(),ZX_STUDENT_ORIGIN='http://127.0.0.1:18770',ZX_ADMIN_ORIGIN='http://127.0.0.1:18771',ZX_PARTNER_ORIGIN='http://127.0.0.1:18772',ZX_SMS_ENABLED='false',ZX_BOOTSTRAP_PHONE='13900009991',ZX_BOOTSTRAP_NAME='本地验证管理员',ZX_BOOTSTRAP_OUTPUT=str(directory/'invitation.json'))
+# 容器与开发入口择一允许，不使用通配Origin或信任代理伪造来源。
+if '--container-frontends' in sys.argv:
+ env.update(ZX_STUDENT_ORIGIN='http://127.0.0.1:18780',ZX_ADMIN_ORIGIN='http://127.0.0.1:18781',ZX_PARTNER_ORIGIN='http://127.0.0.1:18782')
 overrides=directory/'runtime-overrides.json'
 if overrides.exists():
  values=json.loads(overrides.read_text())
@@ -76,7 +79,7 @@ try:
   password=secrets.token_urlsafe(24)
   post('/auth/admin/activate',{'invitationToken':token,'password':password,'mfaEnrollmentId':enrollment['enrollmentId'],'mfaCode':code})
   credentials=directory/'credentials.json';credentials.write_text(json.dumps({'phone':env['ZX_BOOTSTRAP_PHONE'],'password':password,'totpSecret':secret,'database':db,'apiPid':process.pid}));credentials.chmod(0o600)
- (root/'docs/ui-verification-state.json').write_text(json.dumps({'database':db,'credentialFile':str(credentials),'apiPid':process.pid,'isolatedDatabase':True,'paidCalls':False,'smsFixture':bool(sms_fixture),'hmacPersisted':True},ensure_ascii=False,indent=2))
+ (root/'docs/ui-verification-state.json').write_text(json.dumps({'database':db,'credentialFile':str(credentials),'apiPid':process.pid,'isolatedDatabase':True,'paidCalls':False,'smsFixture':bool(sms_fixture),'hmacPersisted':True,'modelFixture':'--test-model' in sys.argv,'containerFrontends':'--container-frontends' in sys.argv},ensure_ascii=False,indent=2))
  print('隔离UI验证API已恢复，保留既有账户与持久密钥。' if resume else '隔离UI验证API已就绪，管理员通过正式邀请与MFA激活。',flush=True)
  process.wait()
 finally:
