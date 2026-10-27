@@ -20,6 +20,9 @@ if not secret.exists():
 env['ZX_AUTH_HMAC_KEY'] = secret.read_text().strip()
 profile = sys.argv[1] if len(sys.argv) > 1 else 'api'
 if profile == 'test':
+    import subprocess
+    subprocess.run([sys.executable, str(root / 'scripts/format-java.py')], check=True)
+    subprocess.run([sys.executable, str(root / 'scripts/check-java-layout.py')], check=True)
     env['ZX_INTEGRATION'] = 'true'
     env['ZX_TEST_ADMIN_PASSWORD'] = (source.parent / 'secrets/postgres_admin_password').read_text().strip()
     os.chdir(root)

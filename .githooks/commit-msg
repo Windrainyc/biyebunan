@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""提交标题必须包含中文业务说明；只约束本仓库后续提交，不改写历史。"""
+import pathlib
+import re
+import sys
+lines = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+title = next((line.strip() for line in lines if line.strip() and not line.startswith('#')), '')
+if not re.search(r'[\u4e00-\u9fff]', title):
+    raise SystemExit('提交失败：标题须包含中文说明，例如：重构：规范Java分层目录与代码格式')
