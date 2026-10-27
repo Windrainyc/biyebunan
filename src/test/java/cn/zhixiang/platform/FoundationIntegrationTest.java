@@ -719,6 +719,29 @@ class FoundationIntegrationTest {
   mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(binding)).andExpect(status().isUnauthorized());
  }
 
+ @Test void statisticsUseCurrentOwnershipAndBeijingDateBoundaries() throws Exception {
+  UUID student=UUID.randomUUID(),partner=UUID.randomUUID(),school=UUID.randomUUID(),major=UUID.randomUUID(),order=UUID.randomUUID();String st=UUID.randomUUID().toString(),pt=UUID.randomUUID().toString();seed(student,"student",st);seed(partner,"partner",pt);
+  db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')",adminId);
+  db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",student);
+  UUID partnerRole=UUID.randomUUID();db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'partner','OWNED','ENABLED')",partnerRole,partnerRole.toString(),"统计测试中介");db.update("INSERT INTO user_role VALUES(?,?)",partner,partnerRole);db.update("INSERT INTO role_permission VALUES(?,'get_partner_statistics')",partnerRole);
+  try {
+   db.update("INSERT INTO school(id,name,code,region,status,created_by,updated_by) VALUES(?,'统计院校',?,'浙江','ENABLED',?,?)",school,school.toString(),adminId,adminId);
+   db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'统计专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
+   db.update("INSERT INTO software_order(id,order_no,title,student_id,partner_id,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by,created_at) VALUES(?,?,'统计订单',?,?,?,'test-only',123.456789,'CNY','STANDARD','MANUAL',?,?,'DRAFT',?,?,'2020-02-01T16:00:00Z')",order,order.toString(),student,partner,UUID.randomUUID().toString(),school,major,adminId,adminId);
+   for(int n=0;n<2;n++)db.update("INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,created_at) VALUES(?,?,'CREATED','forum_post',?,'2020-02-01T16:00:00Z')",UUID.randomUUID(),student,UUID.randomUUID());
+   var view=json.readTree(mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")).andReturn().getResponse().getContentAsString());
+   var values=new HashMap<String,String>();view.get("items").forEach(x->{values.put(x.get("metric").asText(),x.get("value").asText());assertEquals("2020-02-02",x.get("bucket").asText());});assertEquals("1",values.get("orders_created"));assertEquals("123.456789",values.get("orders_face_amount"));assertEquals("1",values.get("active_students"));assertFalse(values.containsKey("receipts_confirmed_amount"));
+   mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-02-01").param("to","2020-02-01")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+   var pv=json.readTree(mvc.perform(get("/api/v1/partner/statistics").header("Authorization","Bearer "+pt).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());assertEquals(2,pv.get("items").size());
+   db.update("UPDATE software_order SET partner_id=NULL WHERE id=?",order);
+   mvc.perform(get("/api/v1/partner/statistics").header("Authorization","Bearer "+pt).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+   mvc.perform(get("/api/v1/admin/statistics").header("Authorization","Bearer "+adminToken).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isOk());
+   mvc.perform(get("/api/v1/admin/statistics").header("Authorization","Bearer "+st).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isForbidden());
+   mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-02-02").param("to","2020-02-01")).andExpect(status().isBadRequest());
+   mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-01-01").param("to","2022-01-01")).andExpect(status().isBadRequest());
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id='00000000-0000-4000-8000-000000000001'",adminId);}
+ }
+
  @Test void auditPaginationDoesNotExposeChatMetadataWithoutExtraPermission() throws Exception {
   UUID auditor=UUID.randomUUID(),role=UUID.randomUUID(),target=UUID.randomUUID();String token=UUID.randomUUID().toString();seed(auditor,"admin",token);
   db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'admin','ALL','ENABLED')",role,role.toString(),"只读审计");db.update("INSERT INTO user_role VALUES(?,?)",auditor,role);db.update("INSERT INTO role_permission VALUES(?,'get_admin_audits')",role);
@@ -1008,6 +1031,12 @@ class FoundationIntegrationTest {
    UUID adjustmentKey=UUID.randomUUID();String adjustmentId=null;
    for(int n=0;n<2;n++){String actual=json.readTree(mvc.perform(post("/api/v1/admin/usage-adjustments").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",adjustmentKey).contentType("application/json").content(json.writeValueAsString(adjustment))).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();if(adjustmentId!=null)assertEquals(adjustmentId,actual);adjustmentId=actual;}
    assertEquals(1,db.queryForObject("SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='ADJUSTMENT'",Integer.class,UUID.fromString(adjustmentId)));
+   String today=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).toString();
+   var stats=json.readTree(mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from",today).param("to",today)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   var metrics=new HashMap<String,String>();stats.get("items").forEach(x->metrics.put(x.get("metric").asText(),x.get("value").asText()));
+   assertEquals("0.000018",metrics.get("model_settled_amount"));assertEquals("18",metrics.get("model_settled_tokens"));assertEquals("-0.000010",metrics.get("model_adjustment_amount"));assertEquals("3",metrics.get("model_unresolved_runs"));
+   mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+ot).param("from",today).param("to",today)).andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+
    mvc.perform(get("/api/v1/student/usage").header("Authorization","Bearer "+st).param("q",flowRun)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].amount").value("0.000015")).andExpect(jsonPath("$.items[0].adjustmentAmount").value("-0.000010")).andExpect(jsonPath("$.items[0].netAmount").value("0.000005"));
 
    assertEquals(0,new java.math.BigDecimal("0.000015").compareTo(db.queryForObject("SELECT actual_amount FROM quota_hold WHERE run_id=?",java.math.BigDecimal.class,UUID.fromString(flowRun))));

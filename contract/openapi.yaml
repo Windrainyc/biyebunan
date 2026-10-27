@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.16
+  version: 1.0.17
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -12802,12 +12802,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Statistics'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -12836,6 +12830,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 同快照日统计，no-store。中介只返回订单/收款/项目/交付指标；学生仅本人；管理员范围内聚合。指标定义见统计指标字典。
   /api/v1/admin/notifications:
     get:
       operationId: get_admin_notifications
@@ -12972,12 +12967,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Statistics'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -13006,6 +12995,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 同快照日统计，no-store。中介只返回订单/收款/项目/交付指标；学生仅本人；管理员范围内聚合。指标定义见统计指标字典。
   /api/v1/partner/notifications:
     get:
       operationId: get_partner_notifications
@@ -13142,12 +13132,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Statistics'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -13176,6 +13160,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 同快照日统计，no-store。中介只返回订单/收款/项目/交付指标；学生仅本人；管理员范围内聚合。指标定义见统计指标字典。
   /api/v1/student/notifications:
     get:
       operationId: get_student_notifications
@@ -16576,7 +16561,19 @@ components:
             type: object
             additionalProperties: false
             properties:
-              metric: *id011
+              metric:
+                type: string
+                enum:
+                - orders_created
+                - orders_face_amount
+                - receipts_confirmed_amount
+                - projects_created
+                - delivery_publications
+                - model_settled_amount
+                - model_adjustment_amount
+                - model_settled_tokens
+                - model_unresolved_runs
+                - active_students
               value:
                 type: string
                 description: ''
@@ -16593,6 +16590,7 @@ components:
       - generatedAt
       - lagSeconds
       - items
+      description: 北京时间自然日from/to包含，最大366天；仅返回有数据日。同一主库快照直接聚合，lagSeconds=0表示未使用异步投影。归属按查询时当前订单归属；未知用量单独计数，不并入零成本。
     Notification:
       type: object
       additionalProperties: false

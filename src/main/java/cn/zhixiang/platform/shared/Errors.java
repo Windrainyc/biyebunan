@@ -26,7 +26,7 @@ public class Errors {
  * @param e 参数解析或校验错误
  * @return 400，不返回请求内可能含有的密码 */
     @ExceptionHandler({MethodArgumentNotValidException.class,HttpMessageNotReadableException.class,
-            MethodArgumentTypeMismatchException.class,MissingRequestHeaderException.class})
+            MethodArgumentTypeMismatchException.class,MissingRequestHeaderException.class,org.springframework.web.bind.MissingServletRequestParameterException.class})
     public ResponseEntity<ProblemDetail> validation(Exception e) { return response(400,"VALIDATION_ERROR","请求字段、请求头或字段格式不符合约定"); }
     /** 返回唯一性或引用冲突，不泄露表名。
  * @param e 数据库约束错误
