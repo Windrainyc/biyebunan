@@ -47,13 +47,15 @@ server:
     include-stacktrace: never
 management:
   tracing:
+    export:
+      otlp:
+        enabled: ${ZX_OTLP_ENABLED:false}
     sampling:
       probability: ${ZX_TRACE_SAMPLE_RATE:0.1}
   opentelemetry:
     tracing:
       export:
         otlp:
-          enabled: ${ZX_OTLP_ENABLED:false}
           endpoint: ${ZX_OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}
   otlp:
     metrics:
