@@ -1,0 +1,11 @@
+{
+  "source": "local app schema",
+  "isolatedRestore": true,
+  "tablesChecked": 86,
+  "rowCountsMatch": true,
+  "constraintsValidated": true,
+  "dumpBytes": 298830,
+  "elapsedSeconds": 7.34,
+  "productionRpoRtoVerified": false,
+  "objectStorageBackupVerified": false
+}

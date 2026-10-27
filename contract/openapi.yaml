@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.23
+  version: 1.0.24
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -14733,6 +14733,204 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AccountInvitationRequest'
+  /api/v1/admin/runs/{id}/adjudications:
+    post:
+      operationId: post_admin_runs_id_adjudications
+      summary: 提交人工用量证据待复核
+      tags:
+      - admin
+      x-permission: billing:adjudicate
+      x-data-scope: ALL，仅管理员
+      responses:
+        '201':
+          description: 真实单据结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adjudication'
+        '400':
+          description: 请求或筛选错误
+        '401':
+          description: 会话无效
+        '403':
+          description: 无权限或禁止自审
+        '404':
+          description: 资源不存在
+        '409':
+          description: 无需核对、原证据已到达、单据已结束或待审重复
+        '412':
+          description: CAS版本冲突
+        '422':
+          description: 用量或审核值不合法
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjudicationCreate'
+  /api/v1/admin/adjudications/{id}:
+    get:
+      operationId: get_admin_adjudications_id
+      summary: 查询人工裁决及争议标记
+      tags:
+      - admin
+      x-permission: billing:adjudicate
+      x-data-scope: ALL，仅管理员
+      responses:
+        '200':
+          description: 真实单据结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adjudication'
+        '400':
+          description: 请求或筛选错误
+        '401':
+          description: 会话无效
+        '403':
+          description: 无权限或禁止自审
+        '404':
+          description: 资源不存在
+        '409':
+          description: 无需核对、原证据已到达、单据已结束或待审重复
+        '412':
+          description: CAS版本冲突
+        '422':
+          description: 用量或审核值不合法
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /api/v1/admin/adjudications/{id}/decision:
+    post:
+      operationId: post_admin_adjudications_id_decision
+      summary: 第二位管理员批准或拒绝
+      tags:
+      - admin
+      x-permission: billing:adjudicate
+      x-data-scope: ALL，仅管理员
+      responses:
+        '200':
+          description: 真实单据结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adjudication'
+        '400':
+          description: 请求或筛选错误
+        '401':
+          description: 会话无效
+        '403':
+          description: 无权限或禁止自审
+        '404':
+          description: 资源不存在
+        '409':
+          description: 无需核对、原证据已到达、单据已结束或待审重复
+        '412':
+          description: CAS版本冲突
+        '422':
+          description: 用量或审核值不合法
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^"[1-9][0-9]*"$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjudicationDecision'
+  /api/v1/admin/adjudications:
+    get:
+      operationId: get_admin_adjudications
+      summary: 分页查询人工裁决
+      tags:
+      - admin
+      x-permission: billing:adjudicate
+      x-data-scope: ALL，仅管理员
+      responses:
+        '200':
+          description: 真实单据结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjudicationPage'
+        '400':
+          description: 请求或筛选错误
+        '401':
+          description: 会话无效
+        '403':
+          description: 无权限或禁止自审
+        '404':
+          description: 资源不存在
+        '409':
+          description: 无需核对、原证据已到达、单据已结束或待审重复
+        '412':
+          description: CAS版本冲突
+        '422':
+          description: 用量或审核值不合法
+      parameters:
+      - name: runId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
 components:
   securitySchemes:
     bearerAuth:
@@ -16093,6 +16291,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        evidenceSource:
+          type: string
+          enum: [ORIGINAL_CALL, MANUAL_ADJUDICATION, UNCONFIRMED]
         id: *id010
         runId: *id010
         inputTokens:
@@ -17969,3 +18170,181 @@ components:
           type: integer
           minimum: 1
           maximum: 72
+
+    AdjudicationCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - USAGE
+          - NO_CHARGE
+        inputTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        outputTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        cachedTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        evidenceSha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+      required:
+      - kind
+      - evidenceRef
+      - evidenceSha256
+      - reason
+      description: USAGE必须提供全部词元，cached<=input；NO_CHARGE的词元必须为空。原始凭据由两个管理员独立核验，摘要不是服务端自动认证。
+    AdjudicationDecision:
+      type: object
+      additionalProperties: false
+      properties:
+        decision:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+      required:
+      - decision
+      - reason
+    Adjudication:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - USAGE
+          - NO_CHARGE
+        inputTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        outputTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        cachedTokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          maximum: 1000000000
+        evidenceRef:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        evidenceSha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        state:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        reviewedBy:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        reviewReason:
+          type:
+          - string
+          - 'null'
+        reviewedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source:
+          type: string
+          const: MANUAL_ADJUDICATION
+        disputed:
+          type: boolean
+          description: 批准后原调用证据到达且冲突；不会自动修改账本，需复查并按实际差额调账。
+      required:
+      - kind
+      - inputTokens
+      - outputTokens
+      - cachedTokens
+      - evidenceRef
+      - evidenceSha256
+      - reason
+      - id
+      - runId
+      - version
+      - state
+      - createdBy
+      - createdAt
+      - reviewedBy
+      - reviewReason
+      - reviewedAt
+      - source
+      - disputed
+    AdjudicationPage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Adjudication'
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+      required:
+      - items
+      - page
+      - size
+      - total

@@ -57,8 +57,11 @@ public interface ExportDataMapper {
             "SELECT NULL::uuid AS"
                 + " order_id,jsonb_build_array(h.run_id,a.user_id,h.state,h.input_tokens,h.output_tokens,h.actual_amount,coalesce((SELECT"
                 + " sum(CASE WHEN b.direction='CREDIT' THEN -b.amount ELSE b.amount END) FROM"
-                + " billing_adjustment b WHERE b.run_id=h.run_id),0),h.created_at)::text AS cells"
-                + " FROM quota_hold h JOIN quota_account a ON a.id=h.account_id WHERE"
+                + " billing_adjustment b WHERE b.run_id=h.run_id),0),h.created_at,CASE WHEN"
+                + " EXISTS(SELECT 1 FROM usage_adjudication u WHERE u.run_id=h.run_id AND"
+                + " u.state='APPROVED') THEN '人工裁决' WHEN EXISTS(SELECT 1 FROM run_usage_evidence e"
+                + " WHERE e.run_id=h.run_id) THEN '原调用返回' ELSE '未确认' END)::text AS cells FROM"
+                + " quota_hold h JOIN quota_account a ON a.id=h.account_id WHERE"
                 + " h.created_at>=#{start} AND h.created_at<#{end} ORDER BY h.created_at,h.run_id"
                 + " LIMIT 10001")
     List<ExportDataDataEntity> usage(OffsetDateTime start, OffsetDateTime end);

@@ -39,7 +39,7 @@ public class CsvReport {
                 switch (kind) {
                     case "ORDERS" -> "订单ID,订单编号,标题,票面金额,状态,创建时间";
                     case "PROJECTS" -> "项目ID,订单编号,标题,阶段,交付日期,创建时间";
-                    case "USAGE" -> "运行ID,学生ID,账务状态,输入词元,输出词元,原结算金额,人工调整金额,预占创建时间";
+                    case "USAGE" -> "运行ID,学生ID,账务状态,输入词元,输出词元,原结算金额,人工调整金额,预占创建时间,用量证据来源";
                     case "AUDIT" -> "审计ID,操作者ID,动作,资源类型,资源ID,理由,创建时间";
                     default -> throw new IllegalArgumentException("未知导出类型");
                 };

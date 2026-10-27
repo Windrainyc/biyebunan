@@ -655,6 +655,64 @@ class FoundationIntegrationTest {
             assertEquals(201, ra.statusCode());
             assertEquals(201, rb.statusCode());
             assertEquals(ra.body(), rb.body());
+            var timings = new java.util.ArrayList<Long>();
+            long batchStart = System.nanoTime();
+            try (var pool = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+                var requests = new java.util.ArrayList<java.util.concurrent.Future<Long>>();
+                for (int i = 0; i < 64; i++) {
+                    var uri = i % 2 == 0 ? firstUri : secondUri;
+                    requests.add(
+                            pool.submit(
+                                    () -> {
+                                        long begin = System.nanoTime();
+                                        int code =
+                                                client.send(
+                                                                java.net.http.HttpRequest
+                                                                        .newBuilder(uri)
+                                                                        .timeout(
+                                                                                java.time.Duration
+                                                                                        .ofSeconds(
+                                                                                                10))
+                                                                        .header(
+                                                                                "Authorization",
+                                                                                "Bearer "
+                                                                                        + adminToken)
+                                                                        .GET()
+                                                                        .build(),
+                                                                java.net.http.HttpResponse
+                                                                        .BodyHandlers.discarding())
+                                                        .statusCode();
+                                        assertEquals(200, code);
+                                        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                                                System.nanoTime() - begin);
+                                    }));
+                }
+                for (var request : requests)
+                    timings.add(request.get(20, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            java.util.Collections.sort(timings);
+            var loadReport =
+                    Map.of(
+                            "requests",
+                            64,
+                            "concurrency",
+                            8,
+                            "instances",
+                            2,
+                            "errors",
+                            0,
+                            "p50Ms",
+                            timings.get(31),
+                            "p95Ms",
+                            timings.get(60),
+                            "elapsedMs",
+                            java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                                    System.nanoTime() - batchStart),
+                            "productionCapacityVerified",
+                            false);
+            java.nio.file.Files.writeString(
+                    java.nio.file.Path.of("docs/local-load-verification.json"),
+                    json.writeValueAsString(loadReport));
             db.update("UPDATE user_account SET auth_version=auth_version+1 WHERE id=?", adminId);
             for (var uri : List.of(firstUri, secondUri)) {
                 assertEquals(
@@ -6637,6 +6695,190 @@ class FoundationIntegrationTest {
                     "RECONCILING",
                     db.queryForObject(
                             "SELECT state FROM quota_hold WHERE run_id=?", String.class, lateRun));
+            // 人工声明必须独立复核，不能伪装原供应商证据。
+            UUID adjudicationRole = UUID.randomUUID(), reviewer = UUID.randomUUID();
+            String reviewerToken = UUID.randomUUID().toString();
+            seed(reviewer, "admin", reviewerToken);
+            db.update(
+                    "INSERT INTO role(id,code,name,platform,data_scope,status)"
+                            + " VALUES(?,?,?,'admin','ALL','ENABLED')",
+                    adjudicationRole,
+                    adjudicationRole.toString(),
+                    "裁决测试");
+            db.update(
+                    "INSERT INTO role_permission VALUES(?,'billing:adjudicate')", adjudicationRole);
+            db.update(
+                    "INSERT INTO user_role VALUES(?,?),(?,?)",
+                    adminId,
+                    adjudicationRole,
+                    reviewer,
+                    adjudicationRole);
+            var noChargeClaim =
+                    Map.of(
+                            "kind",
+                            "NO_CHARGE",
+                            "evidenceRef",
+                            "隔离供应商工单",
+                            "evidenceSha256",
+                            "a".repeat(64),
+                            "reason",
+                            "独立核验原始账单");
+            String pendingClaim = submitAdjudication(lateRun, noChargeClaim, adminToken);
+            assertEquals(403, reviewAdjudication(pendingClaim, "APPROVE", adminToken));
+            assertEquals(200, reviewAdjudication(pendingClaim, "REJECT", reviewerToken));
+            assertEquals(
+                    "RECONCILING",
+                    db.queryForObject(
+                            "SELECT state FROM quota_hold WHERE run_id=?", String.class, lateRun));
+            String supersededClaim = submitAdjudication(lateRun, noChargeClaim, adminToken);
+            // 新运行用于验证批准的原子结算，其他未知运行仍保留冻结。
+            runBody.put("clientMessageId", UUID.randomUUID());
+            UUID manualRun =
+                    UUID.fromString(
+                            json.readTree(
+                                            mvc.perform(
+                                                            post("/api/v1/student/runs")
+                                                                    .header(
+                                                                            "Authorization",
+                                                                            "Bearer " + st)
+                                                                    .header(
+                                                                            "Idempotency-Key",
+                                                                            UUID.randomUUID())
+                                                                    .contentType("application/json")
+                                                                    .content(
+                                                                            json.writeValueAsString(
+                                                                                    runBody)))
+                                                    .andExpect(status().isAccepted())
+                                                    .andReturn()
+                                                    .getResponse()
+                                                    .getContentAsString())
+                                    .get("id")
+                                    .asText());
+            UUID manualOwner = UUID.randomUUID();
+            var manualLease = runLeases.claim(manualOwner);
+            assertEquals(manualRun, manualLease.id());
+            assertTrue(runLeases.start(manualRun, manualOwner, manualLease.generation()));
+            mvc.perform(
+                            post("/api/v1/student/runs/" + manualRun + "/cancel")
+                                    .header("Authorization", "Bearer " + st)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content("{\"reason\":\"等待人工核对\"}"))
+                    .andExpect(status().isAccepted());
+            var usageClaim = new java.util.HashMap<String, Object>(noChargeClaim);
+            usageClaim.put("kind", "USAGE");
+            usageClaim.put("inputTokens", 12);
+            usageClaim.put("outputTokens", 6);
+            usageClaim.put("cachedTokens", 0);
+            String manualClaim = submitAdjudication(manualRun, usageClaim, adminToken);
+            try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+                var gate = new java.util.concurrent.CountDownLatch(1);
+                java.util.concurrent.Callable<Integer> review =
+                        () -> {
+                            gate.await();
+                            return reviewAdjudication(manualClaim, "APPROVE", reviewerToken);
+                        };
+                var first = pool.submit(review);
+                var second = pool.submit(review);
+                gate.countDown();
+                assertEquals(Set.of(200, 412), Set.of(first.get(), second.get()));
+            }
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM quota_ledger WHERE source_id=? AND kind='SETTLE'",
+                            Integer.class,
+                            manualRun));
+            assertEquals(
+                    0,
+                    db.queryForObject(
+                            "SELECT count(*) FROM run_usage_evidence WHERE run_id=?",
+                            Integer.class,
+                            manualRun));
+            mvc.perform(
+                            get("/api/v1/student/usage")
+                                    .header("Authorization", "Bearer " + st)
+                                    .param("q", manualRun.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].evidenceSource").value("MANUAL_ADJUDICATION"));
+            assertThrows(
+                    org.springframework.dao.DataIntegrityViolationException.class,
+                    () ->
+                            db.update(
+                                    "UPDATE usage_adjudication SET evidence_ref='changed' WHERE"
+                                            + " id=?",
+                                    UUID.fromString(manualClaim)));
+            assertFalse(
+                    completion.success(
+                            manualRun,
+                            manualOwner,
+                            manualLease.generation(),
+                            "迟到回答不恢复",
+                            new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
+                                    13, 6, 0, "late-manual-conflict")));
+            mvc.perform(
+                            get("/api/v1/admin/adjudications/" + manualClaim)
+                                    .header("Authorization", "Bearer " + reviewerToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.disputed").value(true));
+            mvc.perform(
+                            get("/api/v1/admin/adjudications")
+                                    .header("Authorization", "Bearer " + reviewerToken)
+                                    .param("runId", manualRun.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.total").value(1));
+            mvc.perform(
+                            get("/api/v1/admin/adjudications/" + manualClaim)
+                                    .header("Authorization", "Bearer " + st))
+                    .andExpect(status().isForbidden());
+            runBody.put("clientMessageId", UUID.randomUUID());
+            UUID freeManualRun =
+                    UUID.fromString(
+                            json.readTree(
+                                            mvc.perform(
+                                                            post("/api/v1/student/runs")
+                                                                    .header(
+                                                                            "Authorization",
+                                                                            "Bearer " + st)
+                                                                    .header(
+                                                                            "Idempotency-Key",
+                                                                            UUID.randomUUID())
+                                                                    .contentType("application/json")
+                                                                    .content(
+                                                                            json.writeValueAsString(
+                                                                                    runBody)))
+                                                    .andExpect(status().isAccepted())
+                                                    .andReturn()
+                                                    .getResponse()
+                                                    .getContentAsString())
+                                    .get("id")
+                                    .asText());
+            UUID freeOwner = UUID.randomUUID();
+            var freeLease = runLeases.claim(freeOwner);
+            assertEquals(freeManualRun, freeLease.id());
+            assertTrue(runLeases.start(freeManualRun, freeOwner, freeLease.generation()));
+            mvc.perform(
+                            post("/api/v1/student/runs/" + freeManualRun + "/cancel")
+                                    .header("Authorization", "Bearer " + st)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content("{\"reason\":\"待确认无费用\"}"))
+                    .andExpect(status().isAccepted());
+            String freeClaim = submitAdjudication(freeManualRun, noChargeClaim, adminToken);
+            assertEquals(200, reviewAdjudication(freeClaim, "APPROVE", reviewerToken));
+            assertEquals(
+                    "RELEASED",
+                    db.queryForObject(
+                            "SELECT state FROM quota_hold WHERE run_id=?",
+                            String.class,
+                            freeManualRun));
+            assertEquals(
+                    1,
+                    db.queryForObject(
+                            "SELECT count(*) FROM quota_ledger WHERE source_id=? AND"
+                                    + " kind='RELEASE'",
+                            Integer.class,
+                            freeManualRun));
             var lateUsage =
                     new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
                             12, 6, 0, "late-provider-001");
@@ -6675,6 +6917,8 @@ class FoundationIntegrationTest {
                                     "冲突证据",
                                     new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
                                             99, 6, 0, "late-provider-001")));
+            assertEquals(409, reviewAdjudication(supersededClaim, "APPROVE", reviewerToken));
+            assertEquals(200, reviewAdjudication(supersededClaim, "REJECT", reviewerToken));
             UUID reconcileKey = UUID.randomUUID();
             String successfulJob = null;
             for (int n = 0; n < 2; n++) {
@@ -8372,5 +8616,41 @@ class FoundationIntegrationTest {
                     admin2,
                     superRole);
         }
+    }
+
+    private String submitAdjudication(UUID run, Map<String, ?> body, String token)
+            throws Exception {
+        return json.readTree(
+                        mvc.perform(
+                                        post("/api/v1/admin/runs/" + run + "/adjudications")
+                                                .header("Authorization", "Bearer " + token)
+                                                .header("Idempotency-Key", UUID.randomUUID())
+                                                .contentType("application/json")
+                                                .content(json.writeValueAsString(body)))
+                                .andExpect(status().isCreated())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString())
+                .get("id")
+                .asText();
+    }
+
+    private int reviewAdjudication(String id, String decision, String token) throws Exception {
+        return mvc.perform(
+                        post("/api/v1/admin/adjudications/" + id + "/decision")
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                Map.of(
+                                                        "decision",
+                                                        decision,
+                                                        "reason",
+                                                        "已独立核验凭据摘要和账单"))))
+                .andReturn()
+                .getResponse()
+                .getStatus();
     }
 }

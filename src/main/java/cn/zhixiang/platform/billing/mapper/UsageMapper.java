@@ -38,7 +38,11 @@ public interface UsageMapper {
                 + " direction='DEBIT' THEN amount ELSE -amount END),0) FROM billing_adjustment b"
                 + " WHERE b.run_id=h.run_id))::text WHEN h.state='RELEASED' THEN '0' ELSE NULL END"
                 + " AS net_amount,'CNY' AS currency,h.price_id AS"
-                + " price_version_id,h.state,h.created_at"
+                + " price_version_id,h.state,h.created_at,CASE WHEN EXISTS(SELECT 1 FROM"
+                + " usage_adjudication u WHERE u.run_id=h.run_id AND u.state='APPROVED') THEN"
+                + " 'MANUAL_ADJUDICATION' WHEN EXISTS(SELECT 1 FROM run_usage_evidence e WHERE"
+                + " e.run_id=h.run_id) THEN 'ORIGINAL_CALL' ELSE 'UNCONFIRMED' END AS"
+                + " evidence_source"
                     + FILTER
                     + " ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}</script>")
     List<UsageResponse> list(@Param("q") UsageQuery q, UUID student, boolean admin);

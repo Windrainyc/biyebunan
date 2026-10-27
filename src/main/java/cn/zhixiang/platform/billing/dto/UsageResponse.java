@@ -19,6 +19,7 @@ import java.util.UUID;
  * @param currency 固定CNY
  * @param priceVersionId 不可变价格快照
  * @param state RESERVED/RECONCILING/SETTLED/RELEASED
+ * @param evidenceSource ORIGINAL_CALL/MANUAL_ADJUDICATION/UNCONFIRMED，人工裁决不是供应商实测
  * @param createdAt 预占创建时间
  */
 public record UsageResponse(
@@ -33,4 +34,5 @@ public record UsageResponse(
         String currency,
         UUID priceVersionId,
         String state,
-        OffsetDateTime createdAt) {}
+        OffsetDateTime createdAt,
+        String evidenceSource) {}
