@@ -38,6 +38,9 @@ class FoundationIntegrationTest {
  @Autowired cn.zhixiang.platform.knowledge.KnowledgeIndexer knowledgeIndexer;
  @Autowired cn.zhixiang.platform.knowledge.IndexMapper indexes;
  @Autowired cn.zhixiang.platform.operations.ActivityInbox activityInbox;
+ @Autowired cn.zhixiang.platform.exporting.ExportService exports;
+ @Autowired cn.zhixiang.platform.exporting.ExportCleanup exportCleanup;
+ @Autowired cn.zhixiang.platform.exporting.ExportMapper exportMapper;
  @Autowired cn.zhixiang.platform.billing.QuotaService quotas;
  @Autowired cn.zhixiang.platform.chat.RunJournal journal;
  @Autowired cn.zhixiang.platform.chat.RunLeaseService runLeases;
@@ -739,6 +742,50 @@ class FoundationIntegrationTest {
    mvc.perform(get("/api/v1/admin/statistics").header("Authorization","Bearer "+st).param("from","2020-02-02").param("to","2020-02-02")).andExpect(status().isForbidden());
    mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-02-02").param("to","2020-02-01")).andExpect(status().isBadRequest());
    mvc.perform(get("/api/v1/student/statistics").header("Authorization","Bearer "+st).param("from","2020-01-01").param("to","2022-01-01")).andExpect(status().isBadRequest());
+   // 报告以真实私有对象交付；下载时必须重新检查完整归属集合。
+   for(String permission:List.of("get_partner_orders","post_partner_exports","get_partner_jobs_id","post_partner_jobs_id_download"))db.update("INSERT INTO role_permission VALUES(?,?)",partnerRole,permission);
+   db.update("UPDATE software_order SET partner_id=? WHERE id=?",partner,order);
+   db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'隔离上传','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?) ON CONFLICT(id) DO NOTHING",UPLOAD_STORE,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+   String request="{\"kind\":\"ORDERS\",\"from\":\"2020-02-02\",\"to\":\"2020-02-02\"}",key=UUID.randomUUID().toString();
+   String job=json.readTree(mvc.perform(post("/api/v1/partner/exports").header("Authorization","Bearer "+pt).header("Idempotency-Key",key).contentType("application/json").content(request)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   mvc.perform(post("/api/v1/partner/exports").header("Authorization","Bearer "+pt).header("Idempotency-Key",key).contentType("application/json").content(request)).andExpect(status().isAccepted()).andExpect(jsonPath("$.id").value(job));
+   String download="/api/v1/partner/jobs/"+job+"/download";
+   mvc.perform(post(download).header("Authorization","Bearer "+pt)).andExpect(status().isUnprocessableEntity());
+   assertTrue(exports.runOne());assertFalse(exports.runOne());
+   mvc.perform(get("/api/v1/partner/jobs/"+job).header("Authorization","Bearer "+pt)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
+   var signed=json.readTree(mvc.perform(post(download).header("Authorization","Bearer "+pt)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+   var http=java.net.http.HttpClient.newHttpClient();String csv=http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(signed.get("url").asText())).GET().build(),java.net.http.HttpResponse.BodyHandlers.ofString()).body();assertTrue(csv.contains("123.456789"));assertTrue(csv.contains("统计订单"));assertFalse(csv.contains("student_phone"));
+   db.update("UPDATE software_order SET partner_id=NULL WHERE id=?",order);mvc.perform(post(download).header("Authorization","Bearer "+pt)).andExpect(status().isForbidden());
+   db.update("UPDATE software_order SET partner_id=? WHERE id=?",partner,order);db.update("DELETE FROM role_permission WHERE role_id=? AND permission_code='get_partner_orders'",partnerRole);mvc.perform(post(download).header("Authorization","Bearer "+pt)).andExpect(status().isForbidden());
+   db.update("INSERT INTO role_permission VALUES(?,'get_partner_orders')",partnerRole);
+   mvc.perform(post("/api/v1/partner/exports").header("Authorization","Bearer "+pt).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(request.replace("ORDERS","USAGE"))).andExpect(status().isForbidden());
+   db.update("UPDATE export_job SET result_expires_at=now()-interval '1 second' WHERE id=?",UUID.fromString(job));db.update("UPDATE export_attempt SET created_at=now()-interval '2 hours' WHERE job_id=?",UUID.fromString(job));
+   assertTrue(exportCleanup.runOne());assertFalse(exportCleanup.runOne());
+   mvc.perform(post(download).header("Authorization","Bearer "+pt)).andExpect(status().isUnprocessableEntity());
+   var report=db.queryForMap("SELECT object_key,object_version FROM export_job WHERE id=?",UUID.fromString(job));var target=new cn.zhixiang.platform.storage.ObjectStorage.Target("S3_COMPATIBLE",System.getenv("ZX_S3_ENDPOINT"),System.getenv("ZX_S3_REGION"),"zx-quarantine-private","local-minio");assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->storage.stat(target,(String)report.get("object_key")));
+   for(String kind:List.of("PROJECTS","USAGE","AUDIT")){
+    String adminJob=json.readTree(mvc.perform(post("/api/v1/admin/exports").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(request.replace("ORDERS",kind))).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();assertTrue(exports.runOne());
+    mvc.perform(get("/api/v1/admin/jobs/"+adminJob).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("SUCCEEDED"));
+    mvc.perform(get("/api/v1/partner/jobs/"+adminJob).header("Authorization","Bearer "+pt)).andExpect(status().isNotFound());
+    mvc.perform(post("/api/v1/admin/jobs/"+adminJob+"/download").header("Authorization","Bearer "+adminToken)).andExpect(status().isOk());
+    db.update("UPDATE export_job SET result_expires_at=now()-interval '1 second' WHERE id=?",UUID.fromString(adminJob));db.update("UPDATE export_attempt SET created_at=now()-interval '2 hours' WHERE job_id=?",UUID.fromString(adminJob));assertTrue(exportCleanup.runOne());
+   }
+   String revoked=json.readTree(mvc.perform(post("/api/v1/partner/exports").header("Authorization","Bearer "+pt).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(request)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   db.update("DELETE FROM role_permission WHERE role_id=? AND permission_code='get_partner_orders'",partnerRole);assertTrue(exports.runOne());
+   mvc.perform(get("/api/v1/partner/jobs/"+revoked).header("Authorization","Bearer "+pt)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("FAILED")).andExpect(jsonPath("$.errorCode").value("EXPORT_SCOPE_REVOKED"));
+   db.update("UPDATE export_attempt SET created_at=now()-interval '2 hours' WHERE job_id=?",UUID.fromString(revoked));assertTrue(exportCleanup.runOne());
+   db.update("INSERT INTO role_permission VALUES(?,'get_partner_orders')",partnerRole);
+   String recovered=json.readTree(mvc.perform(post("/api/v1/partner/exports").header("Authorization","Bearer "+pt).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(request)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+   db.update("UPDATE export_job SET state='RUNNING',generation=1,attempts=1,lease_until=now()-interval '1 second' WHERE id=?",UUID.fromString(recovered));
+   db.update("INSERT INTO export_attempt(job_id,generation,object_key,created_at) VALUES(?,1,?,now()-interval '2 hours')",UUID.fromString(recovered),"exports/"+recovered+"/1");
+   assertTrue(exports.runOne());assertEquals(2L,db.queryForObject("SELECT generation FROM export_job WHERE id=?",Long.class,UUID.fromString(recovered)));assertTrue(exportCleanup.runOne());
+   assertEquals(0,exportMapper.finish(UUID.fromString(recovered),1,"exports/"+recovered+"/1",null));
+   String lateKey="exports/"+recovered+"/1";storage.write(target,lateKey,"late".getBytes(java.nio.charset.StandardCharsets.UTF_8),"text/csv");db.update("UPDATE export_attempt SET cleaned_at=now()-interval '2 days' WHERE job_id=? AND generation=1",UUID.fromString(recovered));assertTrue(exportCleanup.runOne());assertThrows(cn.zhixiang.platform.shared.BusinessException.class,()->storage.stat(target,lateKey));
+
+   mvc.perform(post("/api/v1/partner/jobs/"+recovered+"/download").header("Authorization","Bearer "+pt)).andExpect(status().isOk());
+   db.update("UPDATE export_job SET result_expires_at=now()-interval '1 second' WHERE id=?",UUID.fromString(recovered));db.update("UPDATE export_attempt SET created_at=now()-interval '2 hours' WHERE job_id=?",UUID.fromString(recovered));assertTrue(exportCleanup.runOne());assertFalse(exportCleanup.runOne());
+
+
   }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id='00000000-0000-4000-8000-000000000001'",adminId);}
  }
 

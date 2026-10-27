@@ -5,6 +5,7 @@ import cn.zhixiang.platform.shared.PageQuery;
 /** 审计只读仓储；不返回detail原文，私聊元数据也需要额外授权。 */
 @Mapper
 public interface AuditMapper {
+ /** 安全元数据过滤；值全部绑定，私聊资源按额外权限过滤。 */
  String FILTER=" FROM audit_event WHERE (#{chat} OR resource_type NOT IN ('conversation','conversation_catalog','generation_run','chat_message')) AND (#{q.q}='' OR action ILIKE #{q.pattern} ESCAPE '\\' OR resource_type ILIKE #{q.pattern} ESCAPE '\\' OR resource_id::text ILIKE #{q.pattern} ESCAPE '\\')";
  /** 查询脱敏审计元数据。
   * @param q 分页与字面搜索

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.17
+  version: 1.0.18
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -13336,7 +13336,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ExportRequest'
-      description: 中介仅允许 ORDERS/PROJECTS，不允许 USAGE/AUDIT；下载时再次检查归属。
+      description: 创建持久异步CSV任务，最多10000行/20MiB，超过明确失败不截断。中介仅ORDERS/PROJECTS；还需对应业务读取权限。生成和下载重新验证当前权限。
   /api/v1/admin/jobs/{id}:
     get:
       operationId: get_admin_jobs_id
@@ -13390,18 +13390,6 @@ paths:
       x-permission: post_admin_jobs_id_download
       x-data-scope: 按操作权限；私聊另需 chat:audit
       responses:
-        '201':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DownloadGrant'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -13411,21 +13399,18 @@ paths:
         '422': *id007
         '429': *id008
         '503': *id009
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadGrant'
       parameters:
       - name: id
         in: path
         required: true
         description: ''
         schema: *id010
-      - name: Idempotency-Key
-        in: header
-        required: true
-        description: ''
-        schema:
-          type: string
-          description: ''
-          minLength: 16
-          maxLength: 128
       - name: X-Request-ID
         in: header
         required: false
@@ -13434,6 +13419,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 仅申请者可下载完成24小时内报告，签名最多60秒；下载重验业务权限、审计额外权限和完整订单归属集合，变化则403。结果并非用户上传资产，Job.resultAssetId为空。
   /api/v1/partner/exports:
     post:
       operationId: post_partner_exports
@@ -13488,7 +13474,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ExportRequest'
-      description: 中介仅允许 ORDERS/PROJECTS，不允许 USAGE/AUDIT；下载时再次检查归属。
+      description: 创建持久异步CSV任务，最多10000行/20MiB，超过明确失败不截断。中介仅ORDERS/PROJECTS；还需对应业务读取权限。生成和下载重新验证当前权限。
   /api/v1/partner/jobs/{id}:
     get:
       operationId: get_partner_jobs_id
@@ -13542,18 +13528,6 @@ paths:
       x-permission: post_partner_jobs_id_download
       x-data-scope: 当前中介名下学生订单；进度无私聊和文件地址
       responses:
-        '201':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DownloadGrant'
-          headers:
-            ETag:
-              description: 资源版本；只对可更新资源有业务意义
-              schema:
-                type: string
-                description: ''
         '400': *id001
         '401': *id002
         '403': *id003
@@ -13563,21 +13537,18 @@ paths:
         '422': *id007
         '429': *id008
         '503': *id009
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadGrant'
       parameters:
       - name: id
         in: path
         required: true
         description: ''
         schema: *id010
-      - name: Idempotency-Key
-        in: header
-        required: true
-        description: ''
-        schema:
-          type: string
-          description: ''
-          minLength: 16
-          maxLength: 128
       - name: X-Request-ID
         in: header
         required: false
@@ -13586,6 +13557,7 @@ paths:
           type: string
           description: ''
           maxLength: 128
+      description: 仅申请者可下载完成24小时内报告，签名最多60秒；下载重验业务权限、审计额外权限和完整订单归属集合，变化则403。结果并非用户上传资产，Job.resultAssetId为空。
   /api/v1/admin/jobs:
     get:
       operationId: get_admin_jobs
@@ -17017,6 +16989,7 @@ components:
       - kind
       - from
       - to
+      description: from/to为北京时间自然日包含范围，最多366天；ORDERS按订单创建，PROJECTS按项目创建，USAGE按预占创建时间且反映当前账务状态，AUDIT按事件创建。中介仅前两类。
     Health:
       type: object
       additionalProperties: false

@@ -31,6 +31,13 @@ public class S3ObjectStorage implements ObjectStorage {
   var headers=Map.of("Content-Type",mime,"Content-Length",Long.toString(size),"x-amz-checksum-sha256",Base64.getEncoder().encodeToString(HexFormat.of().parseHex(sha256)));
   try{return new Grant(client.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder().method(Http.Method.PUT).bucket(target.bucket()).object(key).expiry(300).extraHeaders(headers).build()),headers,OffsetDateTime.now(ZoneOffset.UTC).plusSeconds(300));}catch(Exception e){throw failure(e);}
  }
+ /** 写入服务端报告，限制大小并禁止覆盖已有对象。
+  * @param target 私有位置
+  * @param key 全新键
+  * @param bytes 内容
+  * @param mime 媒体类型
+  * @return 固定版本元数据 */
+ @Override public Metadata write(Target target,String key,byte[] bytes,String mime){check(target,key);if(bytes==null||bytes.length<1||bytes.length>20971520||mime==null||!mime.matches("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+"))throw new BusinessException(422,"EXPORT_SIZE_INVALID","报告内容超出限制");try{client.putObject(PutObjectArgs.builder().bucket(target.bucket()).object(key).stream(new java.io.ByteArrayInputStream(bytes),(long)bytes.length,-1L).contentType(mime).extraHeaders(Map.of("If-None-Match","*")).build());return stat(target,key);}catch(Exception e){throw failure(e);}}
  /** 读取真实元数据。
  * @param target 位置
  * @param key 对象键

@@ -71,5 +71,5 @@ public interface StorageMapper {
  /** 判断是否已有资产持久引用，调用方先锁配置。
  * @param id 配置
  * @return 是否被引用 */
- @Select("SELECT EXISTS(SELECT 1 FROM asset WHERE storage_id=#{id})") boolean referenced(UUID id);
+ @Select("SELECT EXISTS(SELECT 1 FROM asset WHERE storage_id=#{id}) OR EXISTS(SELECT 1 FROM export_job WHERE storage_id=#{id})") boolean referenced(UUID id);
 }

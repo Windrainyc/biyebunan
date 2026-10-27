@@ -33,6 +33,13 @@ public interface ObjectStorage {
  * @param sha256 小写十六进制SHA256
  * @return 五分钟内有效的授权 */
  Grant upload(Target target,String key,long size,String mime,String sha256);
+ /** 服务端生成的小型报告写入私有对象；调用方必须分配全新键。
+  * @param target 私有配置
+  * @param key 唯一服务端键
+  * @param bytes 内容，最多20MiB
+  * @param mime 媒体类型
+  * @return 已写入版本元数据 */
+ Metadata write(Target target,String key,byte[] bytes,String mime);
  /** HEAD读取对象，缺失返回404业务错误。
  * @param target 配置
  * @param key 对象键
