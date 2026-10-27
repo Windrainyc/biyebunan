@@ -19,7 +19,10 @@ for (method, path), route in implemented.items():
     if spec is None:
         failures.append(f'{method.upper()} {path}: 未定义契约')
         continue
-    if not path.startswith('/api/v1/auth/'):
+    if path in ('/api/v1/health/live', '/api/v1/health/ready'):
+        if spec.get('security') != [] or route['permission']:
+            failures.append(f'{method.upper()} {path}: 健康接口必须显式公开且不配置方法权限')
+    elif not path.startswith('/api/v1/auth/'):
         match = re.fullmatch(r"hasAuthority\('([^']+)'\)", route['permission'])
         if not match or match[1] != spec.get('x-permission'):
             failures.append(f'{method.upper()} {path}: 权限表达式与契约不一致')

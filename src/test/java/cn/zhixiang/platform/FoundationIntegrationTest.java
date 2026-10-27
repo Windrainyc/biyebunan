@@ -162,6 +162,83 @@ class FoundationIntegrationTest {
   assertEquals(1,db.queryForObject("SELECT count(*) FROM audit_event WHERE resource_id=? AND action='READ'",Integer.class,notification));
   mvc.perform(post("/api/v1/student/notifications/"+adminNotice+"/read").header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID())).andExpect(status().isNotFound());
  }
+ @Test void forumPostReviewVisibilityAndOwnerRules() throws Exception {
+  db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')",adminId);
+  try {
+  UUID author=UUID.randomUUID(),other=UUID.randomUUID(),board=UUID.randomUUID(),tag=UUID.randomUUID();String st=UUID.randomUUID().toString(),ot=UUID.randomUUID().toString();seed(author,"student",st);seed(other,"student",ot);
+  for(UUID u:List.of(author,other))db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",u);
+  db.update("INSERT INTO forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by) VALUES(?,'论坛测试',?,true,0,'ENABLED',?,?)",board,board.toString(),adminId,adminId);
+  db.update("INSERT INTO knowledge_tag(id,name,code,status,created_by,updated_by) VALUES(?,'论坛标签',?,'ENABLED',?,?)",tag,tag.toString(),adminId,adminId);
+  String path="/api/v1/student/posts",key=UUID.randomUUID().toString();
+  String body=json.writeValueAsString(Map.of("boardId",board,"title","帖子_字面%","body","隔离测试正文","tagIds",List.of(tag),"assetIds",List.of()));
+  var response=mvc.perform(post(path).header("Authorization","Bearer "+st).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.state").value("PENDING")).andReturn().getResponse();
+  String id=json.readTree(response.getContentAsString()).get("id").asString(),item=path+"/"+id;
+  mvc.perform(post(path).header("Authorization","Bearer "+st).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(content().json(response.getContentAsString()));
+  mvc.perform(get(item).header("Authorization","Bearer "+ot)).andExpect(status().isNotFound());
+  mvc.perform(get(path).header("Authorization","Bearer "+ot).param("boardId",board.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("q","_字面%").param("boardId",board.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("status","ENABLED")).andExpect(status().isBadRequest());
+  mvc.perform(get(path).header("Authorization","Bearer "+partnerToken)).andExpect(status().isForbidden());
+  mvc.perform(delete("/api/v1/admin/forum-boards/"+board).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+  mvc.perform(delete("/api/v1/admin/tags/"+tag).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isConflict());
+  UUID peer=UUID.randomUUID(),peerRole=UUID.randomUUID();String peerToken=UUID.randomUUID().toString();seed(peer,"admin",peerToken);
+  db.update("INSERT INTO role(id,code,name,platform,data_scope,status) VALUES(?,?,?,'admin','ALL','ENABLED')",peerRole,peerRole.toString(),"隔离审核员");db.update("INSERT INTO user_role VALUES(?,?)",peer,peerRole);db.update("INSERT INTO role_permission VALUES(?,'post_admin_posts_id_moderation')",peerRole);
+  var moderationPool=java.util.concurrent.Executors.newFixedThreadPool(2);
+  try{var gate=new java.util.concurrent.CountDownLatch(1);var a1=moderationPool.submit(()->{gate.await();return forumModeration(id,1,"APPROVE").andReturn().getResponse().getStatus();});var a2=moderationPool.submit(()->{gate.await();return mvc.perform(post("/api/v1/admin/posts/"+id+"/moderation").header("Authorization","Bearer "+peerToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"action\":\"APPROVE\",\"reason\":\"并发审核\"}")).andReturn().getResponse().getStatus();});gate.countDown();assertEquals(Set.of(200,412),Set.of(a1.get(),a2.get()));}finally{moderationPool.shutdownNow();}
+  mvc.perform(get(item).header("Authorization","Bearer "+ot)).andExpect(status().isOk());
+  mvc.perform(put(item).header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content(body)).andExpect(status().isNotFound());
+  String comments=item+"/comments";
+  String parent=forumComment(comments,ot,"主评论",null).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+  String parentId=json.readTree(parent).get("id").asString();
+  String reply=forumComment(comments,st,"回复",parentId).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+  String replyId=json.readTree(reply).get("id").asString();
+  forumComment(comments,st,"过深回复",replyId).andExpect(status().isUnprocessableEntity());
+  forumComment(comments,st,"无效父级",UUID.randomUUID().toString()).andExpect(status().isUnprocessableEntity());
+  mvc.perform(get(comments).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+  String moderation="/api/v1/admin/comments/"+parentId+"/moderation";
+  mvc.perform(post(moderation).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"action\":\"HIDE\",\"reason\":\"隐藏测试\"}")).andExpect(status().isOk());
+  mvc.perform(get(comments).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(get("/api/v1/admin/posts/"+id+"/comments").header("Authorization","Bearer "+adminToken)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+  mvc.perform(post(moderation).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"2\"").contentType("application/json").content("{\"action\":\"APPROVE\",\"reason\":\"恢复测试\"}")).andExpect(status().isOk());
+  mvc.perform(get(comments).header("Authorization","Bearer "+st)).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+  mvc.perform(delete("/api/v1/student/comments/"+parentId).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"")).andExpect(status().isNotFound());
+  mvc.perform(delete("/api/v1/student/comments/"+replyId).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"")).andExpect(status().isNoContent());
+  String reportBody="{\"reason\":\"隔离举报测试\"}";
+  var reportResponse=mvc.perform(post(item+"/reports").header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(reportBody)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+  String reportId=json.readTree(reportResponse).get("id").asString();
+  mvc.perform(post(item+"/reports").header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(reportBody)).andExpect(status().isCreated()).andExpect(content().json(reportResponse));
+  mvc.perform(post(item+"/reports").header("Authorization","Bearer "+ot).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content("{\"reason\":\"改变原因\"}")).andExpect(status().isConflict());
+  mvc.perform(get("/api/v1/admin/reports").header("Authorization","Bearer "+ot)).andExpect(status().isForbidden());
+  mvc.perform(get("/api/v1/admin/reports").header("Authorization","Bearer "+adminToken).param("q","隔离举报测试")).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1));
+  mvc.perform(post("/api/v1/admin/reports/"+reportId+"/decision").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"1\"").contentType("application/json").content("{\"decision\":\"DISMISSED\",\"reason\":\"测试不成立\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("DISMISSED"));
+  forumModeration(id,2,"LOCK").andExpect(status().isOk());
+  forumComment(comments,st,"锁定后评论",null).andExpect(status().isUnprocessableEntity());
+  mvc.perform(put(item).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"3\"").contentType("application/json").content(body)).andExpect(status().isUnprocessableEntity());
+  forumModeration(id,3,"UNLOCK").andExpect(status().isOk());
+  mvc.perform(put(item).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"4\"").contentType("application/json").content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.state").value("PENDING"));
+  forumModeration(id,5,"PIN").andExpect(status().isUnprocessableEntity());
+  forumModeration(id,5,"APPROVE").andExpect(status().isOk());
+  forumModeration(id,6,"PIN").andExpect(status().isOk()).andExpect(jsonPath("$.pinned").value(true));
+  forumModeration(id,7,"HIDE").andExpect(status().isOk()).andExpect(jsonPath("$.pinned").value(false));
+  mvc.perform(get(item).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+  mvc.perform(get(path).header("Authorization","Bearer "+st).param("boardId",board.toString())).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(0));
+  mvc.perform(get("/api/v1/admin/posts/"+id).header("Authorization","Bearer "+adminToken)).andExpect(status().isOk());
+  forumModeration(id,8,"APPROVE").andExpect(status().isOk());
+  db.update("UPDATE forum_board SET status='DISABLED' WHERE id=?",board);
+  mvc.perform(get(item).header("Authorization","Bearer "+st)).andExpect(status().isNotFound());
+  db.update("UPDATE forum_board SET status='ENABLED',requires_review=false WHERE id=?",board);
+  mvc.perform(delete(item).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\"9\"")).andExpect(status().isNoContent());
+  mvc.perform(get("/api/v1/admin/posts/"+id).header("Authorization","Bearer "+adminToken)).andExpect(status().isNotFound());
+  for(int n=0;n<4;n++)mvc.perform(post(path).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isCreated()).andExpect(jsonPath("$.state").value("PUBLISHED"));
+  mvc.perform(post(path).header("Authorization","Bearer "+st).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isTooManyRequests());
+  }finally{db.update("DELETE FROM user_role WHERE user_id=? AND role_id='00000000-0000-4000-8000-000000000001'",adminId);}
+ }
+ org.springframework.test.web.servlet.ResultActions forumComment(String path,String token,String body,String parent) throws Exception {var data=new HashMap<String,Object>();data.put("body",body);data.put("parentId",parent);return mvc.perform(post(path).header("Authorization","Bearer "+token).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(json.writeValueAsString(data)));}
+ org.springframework.test.web.servlet.ResultActions forumModeration(String id,long version,String action) throws Exception {return mvc.perform(post("/api/v1/admin/posts/"+id+"/moderation").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).header("If-Match","\""+version+"\"").contentType("application/json").content(json.writeValueAsString(Map.of("action",action,"reason","隔离审核测试"))));}
+ @Test void publicProbeUsesRealDependencyGroup() throws Exception {
+  mvc.perform(get("/api/v1/health/live")).andExpect(status().isOk()).andExpect(content().json("{\"status\":\"UP\"}")).andExpect(header().string("Cache-Control","no-store"));
+  mvc.perform(get("/api/v1/health/ready")).andExpect(status().isOk()).andExpect(content().json("{\"status\":\"UP\"}"));
+ }
  @Test void disabledSchoolPreventsMajorEnable() throws Exception {
   String schoolBody=json.writeValueAsString(Map.of("name","停用保护院校","code",UUID.randomUUID().toString(),"region","浙江","status","ENABLED"));
   var school=mvc.perform(post("/api/v1/admin/schools").header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(schoolBody)).andExpect(status().isCreated()).andReturn().getResponse();

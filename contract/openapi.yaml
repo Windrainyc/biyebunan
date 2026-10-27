@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.13-development
+  version: 1.0.14-development
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -11794,8 +11794,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 资源状态；未知值400
+        schema:
+          type: string
+          enum: [PENDING, PUBLISHED, HIDDEN, LOCKED]
       - name: sort
         in: query
         required: false
@@ -11922,8 +11924,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 资源状态；未知值400
+        schema:
+          type: string
+          enum: [PUBLISHED, HIDDEN]
       - name: sort
         in: query
         required: false
@@ -11996,8 +12000,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 资源状态；未知值400
+        schema:
+          type: string
+          enum: [PENDING, PUBLISHED, HIDDEN, LOCKED]
       - name: sort
         in: query
         required: false
@@ -12293,8 +12299,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 资源状态；未知值400
+        schema:
+          type: string
+          enum: [PUBLISHED, HIDDEN]
       - name: sort
         in: query
         required: false
@@ -12670,8 +12678,10 @@ paths:
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 资源状态；未知值400
+        schema:
+          type: string
+          enum: [OPEN, RESOLVED, DISMISSED]
       - name: sort
         in: query
         required: false
@@ -13803,7 +13813,12 @@ paths:
         '412': *id006
         '422': *id007
         '429': *id008
-        '503': *id009
+        '503':
+          description: 健康组未就绪或检查异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
       parameters:
       - name: X-Request-ID
         in: header
@@ -13837,7 +13852,12 @@ paths:
         '412': *id006
         '422': *id007
         '429': *id008
-        '503': *id009
+        '503':
+          description: 健康组未就绪或检查异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
       parameters:
       - name: X-Request-ID
         in: header
@@ -16150,12 +16170,20 @@ components:
           description: ''
           minLength: 1
           maxLength: 200
-        body: *id032
+        body:
+          type: string
+          minLength: 1
+          maxLength: 20000
+          description: 纯文本或Markdown，前端必须安全渲染。
         tagIds: &id043
           type: array
+          maxItems: 20
+          uniqueItems: true
           items: *id010
         assetIds: &id044
           type: array
+          maxItems: 20
+          uniqueItems: true
           items: *id010
       required:
       - boardId
@@ -16163,6 +16191,7 @@ components:
       - body
       - tagIds
       - assetIds
+      description: 正文论坛已实现；论坛附件归属链路尚未启用，assetIds非空返回503 FORUM_ASSETS_UNAVAILABLE，不忽略附件。
     Post:
       type: object
       additionalProperties: false
@@ -16216,6 +16245,7 @@ components:
       required:
       - body
       - parentId
+      description: parentId为空表示主评论；非空必须是本帖可见主评论，仅支持一层回复。
     Comment:
       type: object
       additionalProperties: false
