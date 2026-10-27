@@ -10,8 +10,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.util.UUID;
-
 /** 将可预期错误转换为 RFC ProblemDetail；内部数据库异常不直接输出。 */
 @RestControllerAdvice
 public class Errors {
@@ -76,7 +74,7 @@ public class Errors {
                         org.springframework.http.HttpStatusCode.valueOf(status), detail);
         p.setTitle(code);
         p.setProperty("code", code);
-        p.setProperty("traceId", UUID.randomUUID().toString());
+        p.setProperty("traceId", cn.zhixiang.platform.shared.observability.RequestTrace.errorId());
         p.setProperty("fieldErrors", java.util.List.of());
         var builder = ResponseEntity.status(status);
         if (status == 429) builder.header("Retry-After", "600");

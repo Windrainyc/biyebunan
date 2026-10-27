@@ -19,11 +19,41 @@ public interface WriteMapper {
      * @param target 目标
      * @param reason 业务理由，禁止传秘密
      */
+    default void auditReason(
+            UUID id, UUID actor, String action, String type, UUID target, String reason) {
+        insertAudit(
+                id,
+                actor,
+                action,
+                type,
+                target,
+                reason,
+                cn.zhixiang.platform.shared.observability.RequestTrace.current());
+    }
+
+    /**
+     * 写入同一事务的审计及请求关联标识，后台事件允许空标识。
+     *
+     * @param id 审计ID
+     * @param actor 操作者
+     * @param action 动作
+     * @param type 资源类型
+     * @param target 资源ID
+     * @param reason 安全业务理由，允许null
+     * @param traceId 服务端请求UUID，允许null
+     */
     @Insert(
-            "INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,detail)"
-                + " VALUES(#{id},#{actor},#{action},#{type},#{target},jsonb_build_object('reason',CAST(#{reason}"
-                + " AS text)))")
-    void auditReason(UUID id, UUID actor, String action, String type, UUID target, String reason);
+            "INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id,detail,trace_id)"
+                    + " VALUES(#{id},#{actor},#{action},#{type},#{target},"
+                    + " jsonb_build_object('reason',CAST(#{reason} AS text)),#{traceId})")
+    void insertAudit(
+            UUID id,
+            UUID actor,
+            String action,
+            String type,
+            UUID target,
+            String reason,
+            String traceId);
 
     /**
      * 返回新建数量，冲突为零。
@@ -88,10 +118,9 @@ public interface WriteMapper {
      * @param type 资源类型
      * @param target 对象 ID
      */
-    @Insert(
-            "INSERT INTO audit_event(id,actor_id,action,resource_type,resource_id)"
-                    + " VALUES(#{id},#{actor},#{action},#{type},#{target})")
-    void audit(UUID id, UUID actor, String action, String type, UUID target);
+    default void audit(UUID id, UUID actor, String action, String type, UUID target) {
+        auditReason(id, actor, action, type, target, null);
+    }
 
     /**
      * 在调用方业务事务内插入记录，由数据库约束保证唯一性和引用完整性。

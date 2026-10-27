@@ -26,7 +26,7 @@ public interface AuditMapper {
      */
     @Select(
             "SELECT id,actor_id,action,resource_id::text AS"
-                    + " target_id,resource_type,detail->>'reason' AS reason,NULL::text AS"
+                    + " target_id,resource_type,detail->>'reason' AS reason,"
                     + " trace_id,created_at"
                     + FILTER
                     + " ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}")

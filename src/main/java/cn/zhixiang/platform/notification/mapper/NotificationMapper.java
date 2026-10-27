@@ -175,4 +175,34 @@ public interface NotificationMapper {
             Long version,
             String renderer,
             String error);
+
+    /**
+     * 原始摘要比较在正文清理后仍有效，禁止以不同文案重用事件键。
+     *
+     * @param user 收件人
+     * @param event 事件
+     * @param title 原始标题
+     * @param body 原始正文
+     * @return 是否与原始通知相同
+     */
+    @Select(
+            "SELECT content_digest=encode(sha256(convert_to(jsonb_build_array(CAST(#{title} AS"
+                    + " text),CAST(#{body} AS text))::text,'UTF8')),'hex') FROM in_app_notification"
+                    + " WHERE recipient_id=#{user} AND event_id=#{event}")
+    boolean sameContent(UUID user, UUID event, String title, String body);
+
+    /**
+     * 任务原始摘要比较，保留期不解除业务幂等约束。
+     *
+     * @param user 收件人
+     * @param event 事件
+     * @param title 原始标题
+     * @param body 原始正文
+     * @return 是否与原始任务相同
+     */
+    @Select(
+            "SELECT content_digest=encode(sha256(convert_to(jsonb_build_array(CAST(#{title} AS"
+                + " text),CAST(#{body} AS text))::text,'UTF8')),'hex') FROM"
+                + " notification_delivery_task WHERE recipient_id=#{user} AND event_id=#{event}")
+    boolean sameTaskContent(UUID user, UUID event, String title, String body);
 }

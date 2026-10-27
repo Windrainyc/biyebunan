@@ -102,7 +102,7 @@ public class NotificationService {
             throw new BusinessException(422, "NOTIFICATION_INVALID", "通知文案不合法");
         mapper.insert(UUID.randomUUID(), recipient, event, title, body);
         var row = mapper.event(recipient, event);
-        if (!row.title().equals(title) || !row.body().equals(body))
+        if (!mapper.sameContent(recipient, event, title, body))
             throw new BusinessException(409, "NOTIFICATION_EVENT_CONFLICT", "同一通知事件的文案不可改变");
         return row.id();
     }
@@ -128,8 +128,7 @@ public class NotificationService {
                 || body.length() > 200)
             throw new BusinessException(422, "NOTIFICATION_INVALID", "通知文案不合法");
         mapper.enqueue(recipient, event, title, body);
-        var task = mapper.task(recipient, event);
-        if (!task.title().equals(title) || !task.body().equals(body))
+        if (!mapper.sameTaskContent(recipient, event, title, body))
             throw new BusinessException(409, "NOTIFICATION_EVENT_CONFLICT", "同事件通知内容不可改变");
     }
 

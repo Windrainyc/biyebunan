@@ -63,3 +63,8 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     arg-name-based-constructor-auto-mapping: true
+
+# 请求关联ID用于定位HTTP、业务错误与审计，禁止在日志中输出凭证。
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

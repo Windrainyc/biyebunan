@@ -171,6 +171,264 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.asset.service.AssetGarbageCollector assetGc;
     @Autowired cn.zhixiang.platform.asset.mapper.AssetGcMapper gcTasks;
 
+    @Autowired
+    cn.zhixiang.platform.notification.service.NotificationRetentionService notificationRetention;
+
+    @Autowired cn.zhixiang.platform.operations.service.DeadLetterRecovery deadRecovery;
+
+    @Test
+    void explicitDeadLetterRecoveryPreservesOtherMessagesAndDeduplicates() throws Exception {
+        UUID event = UUID.randomUUID(), aggregate = UUID.randomUUID();
+        String type = "test.recovery." + UUID.randomUUID();
+        db.update(
+                "INSERT INTO outbox_event(id,aggregate_id,event_type,payload)"
+                        + " VALUES(?,?,?,'{}'::jsonb)",
+                event,
+                aggregate,
+                type);
+        var props = new org.springframework.amqp.core.MessageProperties();
+        props.setMessageId(event.toString());
+        var message =
+                new org.springframework.amqp.core.Message(
+                        json.writeValueAsBytes(
+                                Map.of(
+                                        "eventId",
+                                        event,
+                                        "aggregateId",
+                                        aggregate,
+                                        "type",
+                                        type,
+                                        "data",
+                                        Map.of())),
+                        props);
+        String queue = "zx.test.recovery." + UUID.randomUUID();
+        var admin =
+                new org.springframework.amqp.rabbit.core.RabbitAdmin(rabbit.getConnectionFactory());
+        try {
+            admin.declareQueue(new org.springframework.amqp.core.Queue(queue, false));
+            rabbit.send(
+                    "",
+                    queue,
+                    new org.springframework.amqp.core.Message(
+                            "unrelated".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                            new org.springframework.amqp.core.MessageProperties()));
+            rabbit.send("", queue, message);
+            assertThrows(
+                    RuntimeException.class,
+                    () -> deadRecovery.recover(queue, event, adminToken, "恢复测试"));
+            assertEquals(
+                    0,
+                    db.queryForObject(
+                            "SELECT count(*) FROM inbox_event WHERE event_id=?",
+                            Integer.class,
+                            event));
+            db.update(
+                    "INSERT INTO role_permission(role_id,permission_code) SELECT"
+                            + " role_id,'post_admin_jobs_id_retry' FROM user_role WHERE user_id=?",
+                    adminId);
+            assertTrue(deadRecovery.recover(queue, event, adminToken, "恢复测试"));
+            rabbit.send("", queue, message);
+            assertTrue(deadRecovery.recover(queue, event, adminToken, "确认重放去重"));
+            assertEquals(
+                    1L,
+                    db.queryForObject(
+                            "SELECT event_count FROM event_activity_day WHERE event_type=?",
+                            Long.class,
+                            type));
+            assertFalse(deadRecovery.recover(queue, event, adminToken, "不存在事件"));
+            assertEquals(
+                    "unrelated",
+                    new String(
+                            rabbit.receive(queue, 1000).getBody(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+            assertEquals(
+                    2,
+                    db.queryForObject(
+                            "SELECT count(*) FROM audit_event WHERE resource_id=? AND"
+                                    + " action='DEAD_LETTER_REPLAY'",
+                            Integer.class,
+                            event));
+        } finally {
+            admin.deleteQueue(queue);
+            db.update("DELETE FROM audit_event WHERE resource_id=?", event);
+            db.update("DELETE FROM inbox_event WHERE event_id=?", event);
+            db.update("DELETE FROM event_activity_day WHERE event_type=?", type);
+            db.update("DELETE FROM outbox_event WHERE id=?", event);
+        }
+    }
+
+    @Test
+    void twoApiInstancesShareSessionIdempotencyAndRevocation() throws Exception {
+        // 第二个独立Spring容器使用相同隔离schema，不能误连正式app数据。
+        String url =
+                System.getenv("ZX_DB_URL")
+                        .replaceAll("([?&])currentSchema=[^&]+", "$1currentSchema=" + SCHEMA);
+        if (!url.contains("currentSchema="))
+            url += (url.contains("?") ? "&" : "?") + "currentSchema=" + SCHEMA;
+        var app = new org.springframework.boot.SpringApplication(PlatformApplication.class);
+        app.setRegisterShutdownHook(false);
+        var client = java.net.http.HttpClient.newHttpClient();
+        var firstUri =
+                java.net.URI.create("http://127.0.0.1:" + httpPort + "/api/v1/admin/schools");
+        String key = UUID.randomUUID().toString();
+        String body =
+                json.writeValueAsString(
+                        Map.of(
+                                "name",
+                                "双实例学院",
+                                "code",
+                                UUID.randomUUID().toString(),
+                                "region",
+                                "浙江",
+                                "status",
+                                "ENABLED"));
+        try (var second =
+                app.run(
+                        "--server.port=0",
+                        "--spring.profiles.active=api",
+                        "--spring.datasource.url=" + url,
+                        "--spring.flyway.enabled=false",
+                        "--spring.datasource.hikari.maximum-pool-size=2")) {
+            int port =
+                    ((org.springframework.boot.web.server.context.WebServerApplicationContext)
+                                    second)
+                            .getWebServer()
+                            .getPort();
+            var secondUri =
+                    java.net.URI.create("http://127.0.0.1:" + port + "/api/v1/admin/schools");
+            var requestA =
+                    java.net.http.HttpRequest.newBuilder(firstUri)
+                            .header("Authorization", "Bearer " + adminToken)
+                            .header("Idempotency-Key", key)
+                            .header("Content-Type", "application/json")
+                            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                            .build();
+            var requestB =
+                    java.net.http.HttpRequest.newBuilder(secondUri)
+                            .header("Authorization", "Bearer " + adminToken)
+                            .header("Idempotency-Key", key)
+                            .header("Content-Type", "application/json")
+                            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                            .build();
+            var a = client.sendAsync(requestA, java.net.http.HttpResponse.BodyHandlers.ofString());
+            var b = client.sendAsync(requestB, java.net.http.HttpResponse.BodyHandlers.ofString());
+            var ra = a.get(15, java.util.concurrent.TimeUnit.SECONDS);
+            var rb = b.get(15, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(201, ra.statusCode());
+            assertEquals(201, rb.statusCode());
+            assertEquals(ra.body(), rb.body());
+            db.update("UPDATE user_account SET auth_version=auth_version+1 WHERE id=?", adminId);
+            for (var uri : List.of(firstUri, secondUri)) {
+                assertEquals(
+                        401,
+                        client.send(
+                                        java.net.http.HttpRequest.newBuilder(uri)
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .GET()
+                                                .build(),
+                                        java.net.http.HttpResponse.BodyHandlers.discarding())
+                                .statusCode());
+            }
+        }
+        assertEquals(
+                200,
+                client.send(
+                                java.net.http.HttpRequest.newBuilder(
+                                                java.net.URI.create(
+                                                        "http://127.0.0.1:"
+                                                                + httpPort
+                                                                + "/actuator/health/liveness"))
+                                        .GET()
+                                        .build(),
+                                java.net.http.HttpResponse.BodyHandlers.discarding())
+                        .statusCode());
+    }
+
+    @Test
+    void notificationRetentionKeepsReplayTombstonesAndPendingContent() {
+        UUID event = UUID.randomUUID(), pending = UUID.randomUUID();
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tx.executeWithoutResult(s -> notifications.enqueue(adminId, event, "保留测试", "原始正文"));
+        for (int i = 0;
+                i < 100
+                        && db.queryForObject(
+                                        "SELECT count(*) FROM in_app_notification WHERE event_id=?",
+                                        Integer.class,
+                                        event)
+                                == 0;
+                i++) {
+            assertTrue(notifications.processOne());
+        }
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification WHERE event_id=?",
+                        Integer.class,
+                        event));
+        tx.executeWithoutResult(s -> notifications.enqueue(adminId, pending, "待处理", "必须保留"));
+        db.update(
+                "UPDATE in_app_notification SET created_at=now()-interval '40 days' WHERE"
+                        + " event_id=?",
+                event);
+        db.update(
+                "UPDATE notification_delivery_task SET created_at=now()-interval '40"
+                    + " days',finished_at=CASE WHEN state='DELIVERED' THEN now()-interval '40 days'"
+                    + " END WHERE event_id IN (?,?)",
+                event,
+                pending);
+        assertEquals(0, notificationRetention.runBatch(0));
+        assertThrows(IllegalArgumentException.class, () -> notificationRetention.runBatch(1));
+        assertEquals(2, notificationRetention.runBatch(30));
+        assertEquals(0, notificationRetention.runBatch(30));
+        assertEquals(
+                "必须保留",
+                db.queryForObject(
+                        "SELECT body FROM notification_delivery_task WHERE event_id=?",
+                        String.class,
+                        pending));
+        tx.executeWithoutResult(s -> notifications.enqueue(adminId, event, "保留测试", "原始正文"));
+        tx.executeWithoutResult(s -> notifications.deliver(adminId, event, "保留测试", "原始正文"));
+        assertEquals(
+                "历史通知正文已清理",
+                db.queryForObject(
+                        "SELECT body FROM in_app_notification WHERE event_id=?",
+                        String.class,
+                        event));
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () ->
+                        tx.executeWithoutResult(
+                                s -> notifications.deliver(adminId, event, "保留测试", "篡改正文")));
+        db.update("DELETE FROM in_app_notification WHERE event_id=?", event);
+        db.update("DELETE FROM notification_delivery_task WHERE event_id IN (?,?)", event, pending);
+    }
+
+    @Test
+    void requestTracePersistsInAuditAndMatchesUnauthorizedResponse() throws Exception {
+        UUID audit = UUID.randomUUID();
+        String trace = UUID.randomUUID().toString();
+        org.slf4j.MDC.put("requestId", trace);
+        try {
+            callbackWrites.auditReason(audit, adminId, "TRACE_TEST", "test", audit, "关联验证");
+            assertEquals(
+                    trace,
+                    db.queryForObject(
+                            "SELECT trace_id FROM audit_event WHERE id=?", String.class, audit));
+        } finally {
+            org.slf4j.MDC.remove("requestId");
+            db.update("DELETE FROM audit_event WHERE id=?", audit);
+        }
+        var response =
+                mvc.perform(get("/api/v1/admin/users").header("X-Request-ID", "forged"))
+                        .andExpect(status().isUnauthorized())
+                        .andReturn()
+                        .getResponse();
+        String header = response.getHeader("X-Request-ID");
+        assertNotNull(UUID.fromString(header));
+        assertEquals(header, json.readTree(response.getContentAsString()).get("traceId").asText());
+        assertNull(org.slf4j.MDC.get("requestId"));
+    }
+
     @Test
     void controlledNotificationTemplateSnapshotsAndSuppression() throws Exception {
         UUID template = UUID.randomUUID(),

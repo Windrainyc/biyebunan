@@ -1,0 +1,4 @@
+# 显式单事件恢复，不启动HTTP或后台任务；凭证只由受保护环境加载。
+spring:
+  main:
+    web-application-type: none

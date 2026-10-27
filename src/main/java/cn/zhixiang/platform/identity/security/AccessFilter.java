@@ -90,7 +90,7 @@ public class AccessFilter extends OncePerRequestFilter {
                                 + ",\"code\":\""
                                 + code
                                 + "\",\"detail\":\"身份或权限不满足要求\",\"traceId\":\""
-                                + java.util.UUID.randomUUID()
+                                + cn.zhixiang.platform.shared.observability.RequestTrace.errorId()
                                 + "\",\"fieldErrors\":[]}");
     }
 }
