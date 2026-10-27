@@ -38,6 +38,9 @@ public class S3ObjectStorage implements ObjectStorage {
   * @param mime 媒体类型
   * @return 固定版本元数据 */
  @Override public Metadata write(Target target,String key,byte[] bytes,String mime){check(target,key);if(bytes==null||bytes.length<1||bytes.length>20971520||mime==null||!mime.matches("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+"))throw new BusinessException(422,"EXPORT_SIZE_INVALID","报告内容超出限制");try{client.putObject(PutObjectArgs.builder().bucket(target.bucket()).object(key).stream(new java.io.ByteArrayInputStream(bytes),(long)bytes.length,-1L).contentType(mime).extraHeaders(Map.of("If-None-Match","*")).build());return stat(target,key);}catch(Exception e){throw failure(e);}}
+ /** HEAD桶存在性检查，不创建对象、不改变桶权限。
+  * @param target 私有位置 */
+ @Override public void probe(Target target){check(target,"probe");try{if(!client.bucketExists(BucketExistsArgs.builder().bucket(target.bucket()).build()))throw new BusinessException(422,"STORAGE_BUCKET_MISSING","配置桶不存在");}catch(Exception e){throw failure(e);}}
  /** 读取真实元数据。
  * @param target 位置
  * @param key 对象键

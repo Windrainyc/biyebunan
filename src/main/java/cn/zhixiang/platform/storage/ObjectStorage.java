@@ -40,6 +40,9 @@ public interface ObjectStorage {
   * @param mime 媒体类型
   * @return 已写入版本元数据 */
  Metadata write(Target target,String key,byte[] bytes,String mime);
+ /** 只读探测目标桶存在且当前凭证能访问，不代表写入权限已验证。
+  * @param target 固定部署白名单配置 */
+ void probe(Target target);
  /** HEAD读取对象，缺失返回404业务错误。
  * @param target 配置
  * @param key 对象键

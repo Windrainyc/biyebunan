@@ -24,6 +24,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class FoundationIntegrationTest {
  static final String SCHEMA="zx_test_"+UUID.randomUUID().toString().replace("-","");
  @Autowired MockMvc mvc;
+ @Autowired cn.zhixiang.platform.probing.ConfigurationProbeService probes;
+ @Autowired cn.zhixiang.platform.probing.ProbeMapper probeMapper;
  @org.springframework.beans.factory.annotation.Value("${local.server.port}") int httpPort;
  @Autowired cn.zhixiang.platform.storage.ObjectStorage storage;
  @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping handlers;
@@ -85,6 +87,23 @@ class FoundationIntegrationTest {
  void seed(UUID id,String platform,String token) {
   db.update("INSERT INTO user_account(id,platform,display_name,phone_digest,phone_masked,password_hash,status) VALUES(?,?,?,?,?,?,'ENABLED')",id,platform,"隔离测试",UUID.randomUUID().toString(),"138****0000","not-a-login-password");
   db.update("INSERT INTO auth_session(id,user_id,access_digest,refresh_digest,csrf_digest,auth_version,expires_at,refresh_expires_at,family_id) VALUES(?,?,?,?,?,1,now()+interval '15 minutes',now()+interval '7 days',?)",UUID.randomUUID(),id,digester.digest("access",token),UUID.randomUUID().toString(),UUID.randomUUID().toString(),UUID.randomUUID());
+ }
+ @Test void configurationProbeVersionLeaseAndRealStorage() throws Exception {
+  UUID role=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
+  for(String permission:List.of("post_admin_storages_id_test","post_admin_domains_id_test"))db.update("INSERT INTO role_permission VALUES(?,?)",role,permission);
+  UUID store=UPLOAD_STORE;db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'探测隔离','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?) ON CONFLICT(id) DO NOTHING",store,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  String path="/api/v1/admin/storages/"+store+"/test",body="{\"reason\":\"隔离验证\"}",key=UUID.randomUUID().toString();
+  String id=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+  mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",key).contentType("application/json").content(body)).andExpect(status().isAccepted()).andExpect(jsonPath("$.id").value(id));
+  assertTrue(probes.runOne());assertEquals("SUCCEEDED",db.queryForObject("SELECT state FROM configuration_probe_job WHERE id=?",String.class,UUID.fromString(id)),db.queryForObject("SELECT error_code FROM configuration_probe_job WHERE id=?",String.class,UUID.fromString(id)));assertFalse(probes.runOne());
+  String changed=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+  db.update("UPDATE storage_config SET version=version+1 WHERE id=?",store);assertTrue(probes.runOne());assertEquals("PROBE_CONFIG_CHANGED",db.queryForObject("SELECT error_code FROM configuration_probe_job WHERE id=?",String.class,UUID.fromString(changed)));
+  String revoked=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+  db.update("DELETE FROM role_permission WHERE role_id=? AND permission_code='post_admin_storages_id_test'",role);assertTrue(probes.runOne());assertEquals("PROBE_PERMISSION_REVOKED",db.queryForObject("SELECT error_code FROM configuration_probe_job WHERE id=?",String.class,UUID.fromString(revoked)));
+  mvc.perform(post(path).header("Authorization","Bearer "+partnerToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isForbidden());
+  db.update("INSERT INTO role_permission VALUES(?,'post_admin_storages_id_test')",role);
+  String recovered=json.readTree(mvc.perform(post(path).header("Authorization","Bearer "+adminToken).header("Idempotency-Key",UUID.randomUUID()).contentType("application/json").content(body)).andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).get("id").asText();
+  db.update("UPDATE configuration_probe_job SET state='RUNNING',generation=1,attempts=1,lease_until=now()-interval '1 second' WHERE id=?",UUID.fromString(recovered));assertTrue(probes.runOne());assertEquals(0,probeMapper.finish(UUID.fromString(recovered),1,"LATE_FAILURE"));assertEquals("SUCCEEDED",db.queryForObject("SELECT state FROM configuration_probe_job WHERE id=?",String.class,UUID.fromString(recovered)));
  }
  @Test void forumBoardCrudAndStudentVisibility() throws Exception {
   UUID role=db.queryForObject("SELECT role_id FROM user_role WHERE user_id=?",UUID.class,adminId);
@@ -930,7 +949,7 @@ class FoundationIntegrationTest {
   db.update("INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by) VALUES(?,'交付专业',?,?,'BACHELOR','ENABLED',?,?)",major,major.toString(),school,adminId,adminId);
   db.update("INSERT INTO software_order(id,order_no,title,student_id,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,status,created_by,updated_by) VALUES(?,?,'交付订单',?,?,'test-only',100,'CNY','STANDARD','MANUAL',?,?,'CONFIRMED',?,?)",order,order.toString(),student,UUID.randomUUID().toString(),school,major,adminId,adminId);
   db.update("INSERT INTO software_project(id,order_id,title,requirements,delivery_date,created_by,updated_by) VALUES(?,?,'交付项目','测试',current_date+30,?,?)",project,order,adminId,adminId);
-  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'交付测试','S3_COMPATIBLE','zx-project-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)",store,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
+  db.update("INSERT INTO storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by) VALUES(?,'交付测试','S3_COMPATIBLE','zx-project-private',?,?,'local-minio','PRIVATE','ENABLED',?,?) ON CONFLICT(id) DO NOTHING",store,System.getenv("ZX_S3_REGION"),System.getenv("ZX_S3_ENDPOINT"),adminId,adminId);
   String adminPath="/api/v1/admin/projects/"+project+"/deliveries",studentPath="/api/v1/student/projects/"+project+"/deliveries";
   UUID previous=null,previousAsset=null;
   try {
