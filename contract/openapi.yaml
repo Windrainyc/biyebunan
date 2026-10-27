@@ -17183,7 +17183,7 @@ components:
       required:
       - action
       - reason
-      description: CONFIRM为人工核实，不代表收款。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。CANCEL允许DRAFT/CONFIRMED/ACTIVE，但存在运行中答疑或未决预占时返回ORDER_CANCEL_UNSETTLED；同事务暂停未完成项目、失效挑战并记录快照，已收款保留财务核对标记，不自动退款。
+      description: CONFIRM为人工核实，不代表收款；金额必须大于0，否则返回422 ORDER_AMOUNT_INVALID并保留草稿供修改。零金额仅允许暂存草稿，当前无免费订单履约流程。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。CANCEL允许DRAFT/CONFIRMED/ACTIVE，但存在运行中答疑或未决预占时返回ORDER_CANCEL_UNSETTLED；同事务暂停未完成项目、失效挑战并记录快照，已收款保留财务核对标记，不自动退款。
     Receipt:
       description: 已确认未收款订单全额核验；流水号全局唯一，凭证须属于订单且READY，核验记录不可覆盖，不支持分期与退款。
       type: object

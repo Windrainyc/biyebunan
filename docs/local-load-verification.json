@@ -1,1 +1,1 @@
-{"requests":64,"concurrency":8,"p95Ms":21,"p50Ms":9,"instances":2,"productionCapacityVerified":false,"errors":0,"elapsedMs":88}
+{"elapsedMs":71,"errors":0,"productionCapacityVerified":false,"instances":2,"p50Ms":8,"p95Ms":14,"concurrency":8,"requests":64}

@@ -8423,6 +8423,30 @@ class FoundationIntegrationTest {
                                     .contentType("application/json")
                                     .content(json.writeValueAsString(body)))
                     .andExpect(status().isUnprocessableEntity());
+            // 仅修改本测试创建的隔离订单夹具，验证失败不会推进状态或消耗版本。
+            db.update("UPDATE software_order SET amount=0 WHERE id=?", UUID.fromString(order));
+            mvc.perform(
+                            post("/api/v1/admin/orders/" + order + "/transition")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .header("If-Match", "\"1\"")
+                                    .contentType("application/json")
+                                    .content("{\"action\":\"CONFIRM\",\"reason\":\"零金额必须保留草稿\"}"))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.code").value("ORDER_AMOUNT_INVALID"));
+            assertEquals(
+                    "DRAFT",
+                    db.queryForObject(
+                            "SELECT status FROM software_order WHERE id=?",
+                            String.class,
+                            UUID.fromString(order)));
+            assertEquals(
+                    1L,
+                    db.queryForObject(
+                            "SELECT version FROM software_order WHERE id=?",
+                            Long.class,
+                            UUID.fromString(order)));
+            db.update("UPDATE software_order SET amount=100 WHERE id=?", UUID.fromString(order));
             mvc.perform(
                             post("/api/v1/admin/orders/" + order + "/transition")
                                     .header("Authorization", "Bearer " + adminToken)

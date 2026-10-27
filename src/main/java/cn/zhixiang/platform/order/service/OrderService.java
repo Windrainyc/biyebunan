@@ -309,6 +309,10 @@ public class OrderService {
                 switch (w.action()) {
                     case "CONFIRM" -> {
                         requireState(old, "DRAFT");
+                        // 当前契约只有正金额收款流程；零值可暂存草稿，不能进入不可收款的确认态。
+                        if (new java.math.BigDecimal(old.amount()).signum() <= 0)
+                            throw new BusinessException(
+                                    422, "ORDER_AMOUNT_INVALID", "请先将草稿金额修改为正数后再确认订单");
                         yield "CONFIRMED";
                     }
                     case "ACTIVATE" -> {
