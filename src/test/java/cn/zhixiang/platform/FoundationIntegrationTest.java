@@ -174,6 +174,133 @@ class FoundationIntegrationTest {
     @Autowired
     cn.zhixiang.platform.notification.service.NotificationRetentionService notificationRetention;
 
+    @Autowired cn.zhixiang.platform.knowledge.mapper.EmbeddingMapper embeddingMapper;
+    @Autowired cn.zhixiang.platform.knowledge.mapper.SemanticSearchMapper semanticMapper;
+
+    @Test
+    void realPgvectorRetrievalRespectsPermissionGenerationAndEmbeddingProtocol() throws Exception {
+        var server =
+                com.sun.net.httpserver.HttpServer.create(
+                        new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        var invalid = new java.util.concurrent.atomic.AtomicBoolean(false);
+        server.createContext(
+                "/embeddings",
+                exchange -> {
+                    exchange.getRequestBody().readAllBytes();
+                    byte[] output =
+                            (invalid.get()
+                                            ? "{\"data\":[{\"embedding\":[1,2]}]}"
+                                            : "{\"data\":[{\"embedding\":[1,0,0]}],\"usage\":{\"prompt_tokens\":4}}")
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, output.length);
+                    exchange.getResponseBody().write(output);
+                    exchange.close();
+                });
+        server.start();
+        try {
+            var env =
+                    new org.springframework.mock.env.MockEnvironment()
+                            .withProperty("ZX_EMBEDDING_ENABLED", "true")
+                            .withProperty(
+                                    "ZX_EMBEDDING_ENDPOINT",
+                                    "http://127.0.0.1:"
+                                            + server.getAddress().getPort()
+                                            + "/embeddings")
+                            .withProperty("ZX_EMBEDDING_MODEL", "isolated-test-model")
+                            .withProperty("ZX_EMBEDDING_DIMENSIONS", "3");
+            var gateway =
+                    new cn.zhixiang.platform.knowledge.adapter.CompatibleEmbeddingGateway(
+                            env, json);
+            UUID category = UUID.randomUUID(),
+                    content = UUID.randomUUID(),
+                    snapshot = UUID.randomUUID(),
+                    chunk = UUID.randomUUID(),
+                    student = UUID.randomUUID();
+            seed(student, "student", UUID.randomUUID().toString());
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_category(id,name,code,sort_order,status,created_by,updated_by)"
+                        + " VALUES(?,'向量测试',?,0,'ENABLED',?,?)",
+                    category,
+                    category.toString(),
+                    adminId,
+                    adminId);
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_content(id,title,category_id,type,markdown,audience,state,index_state,index_generation,created_by,updated_by)"
+                        + " VALUES(?,'事务文档',?,'MARKDOWN','并发控制','PUBLIC','PUBLISHED','READY',1,?,?)",
+                    content,
+                    category,
+                    adminId,
+                    adminId);
+            db.update(
+                    "INSERT INTO"
+                        + " knowledge_version(id,content_id,version_number,title,category_id,type,markdown,audience,created_by)"
+                        + " VALUES(?,?,1,'事务文档',?,'MARKDOWN','并发控制','PUBLIC',?)",
+                    snapshot,
+                    content,
+                    category,
+                    adminId);
+            db.update(
+                    "UPDATE knowledge_content SET published_version_id=? WHERE id=?",
+                    snapshot,
+                    content);
+            db.update(
+                    "INSERT INTO knowledge_chunk(id,content_id,version_id,generation,ordinal,body)"
+                            + " VALUES(?,?,?,1,1,'并发控制')",
+                    chunk,
+                    content,
+                    snapshot);
+            db.update(
+                    "INSERT INTO knowledge_embedding_task(chunk_id,profile,created_at)"
+                            + " VALUES(?,?,now()-interval '1 day')",
+                    chunk,
+                    gateway.profile());
+            var worker =
+                    new cn.zhixiang.platform.knowledge.service.EmbeddingService(
+                            embeddingMapper,
+                            gateway,
+                            new org.springframework.transaction.support.TransactionTemplate(
+                                    txManager));
+            assertTrue(worker.runOne());
+            assertEquals(
+                    4L,
+                    db.queryForObject(
+                            "SELECT input_tokens FROM knowledge_embedding_task WHERE chunk_id=?",
+                            Long.class,
+                            chunk));
+            var service =
+                    new cn.zhixiang.platform.knowledge.service.SemanticSearchService(
+                            gateway, semanticMapper, txManager, embeddingMapper);
+            var actor =
+                    new cn.zhixiang.platform.identity.model.Actor(
+                            student, "student", 1, UUID.randomUUID());
+            var query =
+                    new cn.zhixiang.platform.knowledge.dto.ContentDtos.Query(
+                            1, 20, "不相同关键词", null, null, category, null, null);
+            var result = service.search(query, actor);
+            assertEquals(1, result.total());
+            assertEquals(chunk, result.items().getFirst().citations().getFirst().chunkId());
+            assertEquals(1.0, result.items().getFirst().score(), 0.0001);
+            db.update("UPDATE knowledge_content SET audience='MEMBER' WHERE id=?", content);
+            assertEquals(0, service.search(query, actor).total());
+            db.update(
+                    "UPDATE knowledge_content SET audience='PUBLIC',index_generation=2 WHERE id=?",
+                    content);
+            assertEquals(0, service.search(query, actor).total());
+            db.update(
+                    "UPDATE knowledge_content SET index_generation=1,state='WITHDRAWN' WHERE id=?",
+                    content);
+            assertEquals(0, service.search(query, actor).total());
+            invalid.set(true);
+            assertThrows(
+                    cn.zhixiang.platform.shared.exception.BusinessException.class,
+                    () -> gateway.embed("坏响应"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
     @Autowired cn.zhixiang.platform.operations.service.DeadLetterRecovery deadRecovery;
 
     @Test

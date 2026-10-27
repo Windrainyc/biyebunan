@@ -44,13 +44,13 @@ public final class KnowledgeQueryDtos {
             String sourceType, UUID versionId, UUID chunkId, long page, String quote) {}
 
     /**
-     * 单内容关键词命中。
+     * 单内容检索命中。
      *
      * @param contentId 内容
      * @param versionId 发布版本
      * @param title 标题
      * @param snippet 最多1000字符摘要
-     * @param score 关键词权重，不是向量相似度
+     * @param score KEYWORD为关键词权重，SEMANTIC为余弦相似度
      * @param citations 可追溯引用
      */
     public record Hit(

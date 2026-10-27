@@ -23,15 +23,21 @@ import java.util.*;
 public class KnowledgeQueryController {
     private final KnowledgeQueryService service;
     private final IdempotentWrites writes;
+    private final cn.zhixiang.platform.knowledge.service.SemanticSearchService semantic;
 
     /**
      * 初始化。
      *
      * @param service 查询用例
+     * @param semantic 显式语义检索
      * @param writes 幂等协调
      */
-    public KnowledgeQueryController(KnowledgeQueryService service, IdempotentWrites writes) {
+    public KnowledgeQueryController(
+            KnowledgeQueryService service,
+            IdempotentWrites writes,
+            cn.zhixiang.platform.knowledge.service.SemanticSearchService semantic) {
         this.service = service;
+        this.semantic = semantic;
         this.writes = writes;
     }
 
@@ -88,8 +94,9 @@ public class KnowledgeQueryController {
     }
 
     /**
-     * 关键词检索。
+     * 关键词或显式语义检索。
      *
+     * @param mode KEYWORD默认，SEMANTIC需部署嵌入服务
      * @param page 页码
      * @param size 页大小
      * @param q 必填搜索词
@@ -112,7 +119,16 @@ public class KnowledgeQueryController {
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) UUID tagId,
             @RequestParam(required = false) String contentType,
+            @RequestParam(defaultValue = "KEYWORD") String mode,
             @AuthenticationPrincipal Actor actor) {
+        if (mode.equals("SEMANTIC"))
+            return semantic.search(
+                    new ContentDtos.Query(
+                            page, size, q, status, sort, categoryId, tagId, contentType),
+                    actor);
+        if (!mode.equals("KEYWORD"))
+            throw new cn.zhixiang.platform.shared.exception.BusinessException(
+                    400, "INVALID_FILTER", "检索模式必须为KEYWORD或SEMANTIC");
         return service.search(
                 new ContentDtos.Query(page, size, q, status, sort, categoryId, tagId, contentType),
                 actor);

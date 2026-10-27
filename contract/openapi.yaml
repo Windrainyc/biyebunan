@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.20
+  version: 1.0.21
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -10705,7 +10705,7 @@ paths:
   /api/v1/student/knowledge-search:
     get:
       operationId: get_student_knowledge_search
-      summary: 带原文引用的关键词检索（向量召回待实现）
+      summary: 带原文引用的关键词或显式语义检索
       tags:
       - student
       x-permission: get_student_knowledge_search
@@ -10727,6 +10727,14 @@ paths:
         '429': *id008
         '503': *id009
       parameters:
+      - name: mode
+        in: query
+        required: false
+        description: KEYWORD默认；SEMANTIC需部署嵌入服务，否则503。相似度阈值0.2，分页遵循sort。
+        schema:
+          type: string
+          enum: [KEYWORD, SEMANTIC]
+          default: KEYWORD
       - name: page
         in: query
         required: false
