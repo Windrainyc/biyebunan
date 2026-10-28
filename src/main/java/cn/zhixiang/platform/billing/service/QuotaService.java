@@ -142,6 +142,60 @@ public class QuotaService {
     }
 
     /**
+     * 双人复核批准后追加原调用更正，原预占和结算记录不可覆盖。 调用者先锁账户、运行及裁决单；本方法再锁预占，不调用供应商。
+     *
+     * @param run 原运行，历史月份仍记原账户
+     * @param input 可信输入，null表示明确不收费
+     * @param output 可信输出，与input同空
+     * @param cached 缓存输入，与input同空
+     * @throws BusinessException 已更正、未结算、字段非法或人工退费导致净费用为负
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void correct(UUID run, Long input, Long output, Long cached) {
+        var h = locked(run);
+        if (!Set.of("SETTLED", "RELEASED").contains(h.state()))
+            throw new BusinessException(409, "CORRECTION_NOT_AVAILABLE", "仅可更正已结束账务");
+        if (mapper.corrected(run))
+            throw new BusinessException(409, "CORRECTION_ALREADY_APPLIED", "更正流水已经存在");
+        if ((input == null) != (output == null) || (input == null) != (cached == null))
+            throw new BusinessException(422, "USAGE_INVALID", "用量字段必须同时提供或同时为空");
+        var p = prices.get(h.priceId());
+        BigDecimal cost =
+                input == null
+                        ? ZERO
+                        : BillingMath.cost(
+                                input,
+                                output,
+                                cached,
+                                new BigDecimal(p.inputPerMillion()),
+                                new BigDecimal(p.outputPerMillion()),
+                                new BigDecimal(p.cachedInputPerMillion()));
+        long target;
+        try {
+            target = input == null ? 0 : Math.addExact(input, output);
+        } catch (ArithmeticException ex) {
+            throw new BusinessException(422, "USAGE_INVALID", "词元用量溢出");
+        }
+        long original =
+                "SETTLED".equals(h.state()) ? Math.addExact(h.inputTokens(), h.outputTokens()) : 0;
+        BigDecimal originalCost = "SETTLED".equals(h.state()) ? h.actualAmount() : ZERO;
+        // 已有人工优惠不能使更正后净费用为负；由独立金额调整先处理冲突，禁止静默吞掉退款。
+        if (cost.add(mapper.netAdjustments(run)).signum() < 0)
+            throw new BusinessException(
+                    409, "CORRECTION_ADJUSTMENT_CONFLICT", "现有人工退费与更正冲突，请先复核金额调整");
+        delta(
+                h.accountId(),
+                run,
+                "CORRECTION",
+                0,
+                0,
+                target - original,
+                ZERO,
+                ZERO,
+                cost.subtract(originalCost));
+    }
+
+    /**
      * 不确定是否已发生费用时保留冻结，等待核对；不自动重发供应商请求。
      *
      * @param run 运行

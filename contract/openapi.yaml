@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.29
+  version: 1.0.30
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -16416,23 +16416,24 @@ components:
           enum:
           - ORIGINAL_CALL
           - MANUAL_ADJUDICATION
+          - CORRECTED_ORIGINAL_CALL
           - UNCONFIRMED
         id: *id010
         runId: *id010
         inputTokens:
-          type:
+          type: &id042
           - integer
           - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         outputTokens:
-          type:
+          type: &id043
           - integer
           - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         cachedTokens:
-          type:
+          type: &id044
           - integer
           - 'null'
           minimum: 0
@@ -16466,6 +16467,22 @@ components:
           - RELEASED
           - RECONCILING
         createdAt: *id014
+        effectiveInputTokens:
+          type: *id042
+          minimum: 0
+          description: 更正后有效词元，未知仍null，原始值保持不变
+        effectiveOutputTokens:
+          type: *id043
+          minimum: 0
+          description: 更正后有效词元，未知仍null，原始值保持不变
+        effectiveCachedTokens:
+          type: *id044
+          minimum: 0
+          description: 更正后有效词元，未知仍null，原始值保持不变
+        correctionAmount:
+          type: string
+          description: 迟到原调用更正金额差额，六位十进制人民币；与人工调整分开
+          pattern: ^-?[0-9]{1,14}(\.[0-9]{1,6})?$
       required:
       - id
       - runId
@@ -16479,6 +16496,10 @@ components:
       - priceVersionId
       - state
       - createdAt
+      - effectiveInputTokens
+      - effectiveOutputTokens
+      - effectiveCachedTokens
+      - correctionAmount
     Quota:
       type: object
       additionalProperties: false
@@ -16504,7 +16525,7 @@ components:
       additionalProperties: false
       properties:
         boardId: *id010
-        title: &id042
+        title: &id045
           type: string
           description: ''
           minLength: 1
@@ -16514,12 +16535,12 @@ components:
           minLength: 1
           maxLength: 20000
           description: 纯文本或Markdown，前端必须安全渲染。
-        tagIds: &id043
+        tagIds: &id046
           type: array
           maxItems: 20
           uniqueItems: true
           items: *id010
-        assetIds: &id044
+        assetIds: &id047
           type: array
           maxItems: 20
           uniqueItems: true
@@ -16540,10 +16561,10 @@ components:
         createdAt: *id014
         updatedAt: *id014
         boardId: *id010
-        title: *id042
+        title: *id045
         body: *id032
-        tagIds: *id043
-        assetIds: *id044
+        tagIds: *id046
+        assetIds: *id047
         authorId: *id010
         state:
           type: string
@@ -16571,12 +16592,12 @@ components:
       type: object
       additionalProperties: false
       properties:
-        body: &id045
+        body: &id048
           type: string
           description: ''
           minLength: 1
           maxLength: 5000
-        parentId: &id046
+        parentId: &id049
           type:
           - string
           - 'null'
@@ -16593,8 +16614,8 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        body: *id045
-        parentId: *id046
+        body: *id048
+        parentId: *id049
         postId: *id010
         authorId: *id010
         state:
@@ -17005,11 +17026,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: &id047
+        phone: &id050
           type: string
           description: ''
           pattern: ^1\d{10}$
-        password: &id048
+        password: &id051
           type: string
           description: ''
           minLength: 10
@@ -17017,7 +17038,7 @@ components:
           writeOnly: true
         displayName: *id011
         challengeId: *id010
-        code: &id049
+        code: &id052
           type: string
           description: ''
           pattern: ^\d{6}$
@@ -17033,11 +17054,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: *id047
-        password: *id048
+        phone: *id050
+        password: *id051
         displayName: *id011
         challengeId: *id010
-        code: *id049
+        code: *id052
         termsVersion: *id011
         invitationToken:
           type: string
@@ -18189,7 +18210,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        durationDays: &id050
+        durationDays: &id053
           type: integer
           minimum: 1
           maximum: 36500
@@ -18209,7 +18230,7 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        durationDays: *id050
+        durationDays: *id053
         monthlyTokenQuota: *id020
         monthlyAmountLimit: *id022
         effectiveFrom: *id014
@@ -18306,6 +18327,8 @@ components:
           enum:
           - USAGE
           - NO_CHARGE
+          - CORRECTION
+          description: CORRECTION只采用已保存迟到原调用证据，申请不得填写词元；响应为证据快照
         inputTokens:
           type:
           - integer
@@ -18366,6 +18389,8 @@ components:
           enum:
           - USAGE
           - NO_CHARGE
+          - CORRECTION
+          description: CORRECTION只采用已保存迟到原调用证据，申请不得填写词元；响应为证据快照
         inputTokens:
           type:
           - integer

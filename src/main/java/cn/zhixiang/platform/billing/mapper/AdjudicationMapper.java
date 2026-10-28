@@ -11,11 +11,12 @@ import java.util.*;
 public interface AdjudicationMapper {
     /** 查询投影，标明人工来源。 */
     String SELECT =
-            "SELECT u.*, 'MANUAL_ADJUDICATION' AS source, (u.state='APPROVED' AND EXISTS(SELECT 1"
-                + " FROM run_usage_evidence e WHERE e.run_id=u.run_id AND (e.kind!=u.kind OR"
-                + " e.input_tokens IS DISTINCT FROM u.input_tokens OR e.output_tokens IS DISTINCT"
-                + " FROM u.output_tokens OR e.cached_tokens IS DISTINCT FROM u.cached_tokens))) AS"
-                + " disputed FROM usage_adjudication u";
+            "SELECT u.*, 'MANUAL_ADJUDICATION' AS source, (u.state='APPROVED' AND"
+                    + " u.kind!='CORRECTION' AND EXISTS(SELECT 1 FROM run_usage_evidence e WHERE"
+                    + " e.run_id=u.run_id AND (e.kind!=u.kind OR e.input_tokens IS DISTINCT FROM"
+                    + " u.input_tokens OR e.output_tokens IS DISTINCT FROM u.output_tokens OR"
+                    + " e.cached_tokens IS DISTINCT FROM u.cached_tokens))) AS disputed FROM"
+                    + " usage_adjudication u";
 
     /**
      * 按ID读取。
@@ -45,6 +46,18 @@ public interface AdjudicationMapper {
             "SELECT EXISTS(SELECT 1 FROM usage_adjudication WHERE run_id=#{run} AND"
                     + " state='PENDING')")
     boolean pending(UUID run);
+
+    /**
+     * 是否已有指定类型的批准记录，调用者必须持有账户锁。
+     *
+     * @param run 运行
+     * @param correction true查询更正，false查询原人工裁决
+     * @return 是否存在
+     */
+    @Select(
+            "SELECT EXISTS(SELECT 1 FROM usage_adjudication WHERE run_id=#{run} AND"
+                    + " state='APPROVED' AND (kind='CORRECTION')=#{correction})")
+    boolean approved(UUID run, boolean correction);
 
     /**
      * 新增待复核证据。

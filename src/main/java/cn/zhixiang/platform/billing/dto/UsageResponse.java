@@ -16,10 +16,15 @@ import java.util.UUID;
  * @param amount 实际金额；RELEASED为0，未知为null
  * @param adjustmentAmount 累计人工调整净额，退还为负，未调整为0
  * @param netAmount 调整后实际费用，未知为null
+ * @param correctionAmount 原调用更正金额净增量，0表示未更正或金额相同
+ * @param effectiveInputTokens 更正后输入，未更正保持原值，未知仍null
+ * @param effectiveOutputTokens 更正后输出，未更正保持原值，未知仍null
+ * @param effectiveCachedTokens 更正后缓存输入，未更正保持原值，未知仍null
  * @param currency 固定CNY
  * @param priceVersionId 不可变价格快照
  * @param state RESERVED/RECONCILING/SETTLED/RELEASED
- * @param evidenceSource ORIGINAL_CALL/MANUAL_ADJUDICATION/UNCONFIRMED，人工裁决不是供应商实测
+ * @param evidenceSource
+ *     ORIGINAL_CALL/MANUAL_ADJUDICATION/CORRECTED_ORIGINAL_CALL/UNCONFIRMED，人工裁决不是供应商实测
  * @param createdAt 预占创建时间
  */
 public record UsageResponse(
@@ -31,6 +36,10 @@ public record UsageResponse(
         String amount,
         String adjustmentAmount,
         String netAmount,
+        String correctionAmount,
+        Long effectiveInputTokens,
+        Long effectiveOutputTokens,
+        Long effectiveCachedTokens,
         String currency,
         UUID priceVersionId,
         String state,

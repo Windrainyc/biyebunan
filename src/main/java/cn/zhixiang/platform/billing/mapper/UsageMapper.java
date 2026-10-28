@@ -12,8 +12,8 @@ import java.util.*;
 public interface UsageMapper {
     /** 共用归属与筛选，计数和分页必须一致。 */
     String FILTER =
-            " FROM quota_hold h JOIN quota_account a ON a.id=h.account_id WHERE <choose><when"
-                + " test='admin'>1=1 <if test='student != null'>AND"
+            " FROM usage_billing_projection h JOIN quota_account a ON a.id=h.account_id WHERE"
+                + " <choose><when test='admin'>1=1 <if test='student != null'>AND"
                 + " a.user_id=#{student}</if></when><otherwise>a.user_id=#{student}</otherwise></choose>"
                 + " AND h.run_id::text ILIKE #{q.pattern} ESCAPE E'\\\\' <if test='q.status !="
                 + " null'>AND h.state=#{q.status}</if> <if test='q.from != null'>AND h.created_at"
@@ -31,18 +31,10 @@ public interface UsageMapper {
     @Select(
             "<script>SELECT h.run_id AS"
                 + " id,h.run_id,h.input_tokens,h.output_tokens,h.cached_tokens,CASE WHEN"
-                + " h.state='RELEASED' THEN '0' ELSE h.actual_amount::text END AS amount,(SELECT"
-                + " coalesce(sum(CASE WHEN direction='DEBIT' THEN amount ELSE -amount END),0)::text"
-                + " FROM billing_adjustment b WHERE b.run_id=h.run_id) AS adjustment_amount,CASE"
-                + " WHEN h.state='SETTLED' THEN (h.actual_amount+(SELECT coalesce(sum(CASE WHEN"
-                + " direction='DEBIT' THEN amount ELSE -amount END),0) FROM billing_adjustment b"
-                + " WHERE b.run_id=h.run_id))::text WHEN h.state='RELEASED' THEN '0' ELSE NULL END"
-                + " AS net_amount,'CNY' AS currency,h.price_id AS"
-                + " price_version_id,h.state,h.created_at,CASE WHEN EXISTS(SELECT 1 FROM"
-                + " usage_adjudication u WHERE u.run_id=h.run_id AND u.state='APPROVED') THEN"
-                + " 'MANUAL_ADJUDICATION' WHEN EXISTS(SELECT 1 FROM run_usage_evidence e WHERE"
-                + " e.run_id=h.run_id) THEN 'ORIGINAL_CALL' ELSE 'UNCONFIRMED' END AS"
-                + " evidence_source"
+                + " h.state='RELEASED' THEN '0' ELSE h.actual_amount::text END AS amount,"
+                + "h.adjustment_amount::text,h.correction_amount::text,h.net_amount::text,h.effective_input_tokens,h.effective_output_tokens,h.effective_cached_tokens,'CNY'"
+                + " AS currency,h.price_id AS"
+                + " price_version_id,h.state,h.created_at,h.evidence_source"
                     + FILTER
                     + " ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}</script>")
     List<UsageResponse> list(@Param("q") UsageQuery q, UUID student, boolean admin);

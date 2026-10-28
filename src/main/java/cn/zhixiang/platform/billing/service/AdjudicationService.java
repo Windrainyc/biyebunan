@@ -66,23 +66,39 @@ public class AdjudicationService {
     public AdjudicationDtos.View create(UUID run, AdjudicationDtos.Create w, Actor actor) {
         authorize(actor);
         lock(run);
-        requireUnresolved(run);
+        boolean correction = "CORRECTION".equals(w.kind());
+        if (correction) {
+            requireCorrection(run);
+            if (w.inputTokens() != null || w.outputTokens() != null || w.cachedTokens() != null)
+                throw new BusinessException(422, "CORRECTION_SERVER_EVIDENCE", "更正用量必须由原调用证据提供");
+            var proof = evidence.get(run);
+            w =
+                    new AdjudicationDtos.Create(
+                            "CORRECTION",
+                            proof.inputTokens(),
+                            proof.outputTokens(),
+                            proof.cachedTokens(),
+                            w.evidenceRef(),
+                            w.evidenceSha256(),
+                            w.reason());
+        } else requireUnresolved(run);
         boolean usage = "USAGE".equals(w.kind()), noCharge = "NO_CHARGE".equals(w.kind());
-        if ((!usage && !noCharge)
-                || (usage
-                        && (w.inputTokens() == null
-                                || w.outputTokens() == null
-                                || w.cachedTokens() == null
-                                || w.inputTokens() < 0
-                                || w.outputTokens() < 0
-                                || w.cachedTokens() < 0
-                                || w.cachedTokens() > w.inputTokens()
-                                || w.inputTokens() > 1000000000L
-                                || w.outputTokens() > 1000000000L))
-                || (noCharge
-                        && (w.inputTokens() != null
-                                || w.outputTokens() != null
-                                || w.cachedTokens() != null)))
+        if (!correction
+                && ((!usage && !noCharge)
+                        || (usage
+                                && (w.inputTokens() == null
+                                        || w.outputTokens() == null
+                                        || w.cachedTokens() == null
+                                        || w.inputTokens() < 0
+                                        || w.outputTokens() < 0
+                                        || w.cachedTokens() < 0
+                                        || w.cachedTokens() > w.inputTokens()
+                                        || w.inputTokens() > 1000000000L
+                                        || w.outputTokens() > 1000000000L))
+                        || (noCharge
+                                && (w.inputTokens() != null
+                                        || w.outputTokens() != null
+                                        || w.cachedTokens() != null))))
             throw new BusinessException(422, "ADJUDICATION_USAGE_INVALID", "用量字段与声明类型不一致");
         if (mapper.pending(run))
             throw new BusinessException(409, "ADJUDICATION_PENDING", "此运行已有待复核单据");
@@ -164,11 +180,26 @@ public class AdjudicationService {
             throw new BusinessException(422, "ADJUDICATION_DECISION_INVALID", "审核决定无效");
         boolean approved = "APPROVE".equals(decision.decision());
         if (approved) {
-            requireUnresolved(row.runId());
-            if ("USAGE".equals(row.kind()))
-                quotas.settle(
-                        row.runId(), row.inputTokens(), row.outputTokens(), row.cachedTokens());
-            else quotas.release(row.runId(), true);
+            if ("CORRECTION".equals(row.kind())) {
+                requireCorrection(row.runId());
+                var proof = evidence.get(row.runId());
+                if (!Objects.equals(row.inputTokens(), proof.inputTokens())
+                        || !Objects.equals(row.outputTokens(), proof.outputTokens())
+                        || !Objects.equals(row.cachedTokens(), proof.cachedTokens()))
+                    throw new BusinessException(
+                            409, "CORRECTION_EVIDENCE_CHANGED", "原调用证据与待审快照不一致");
+                quotas.correct(
+                        row.runId(),
+                        proof.inputTokens(),
+                        proof.outputTokens(),
+                        proof.cachedTokens());
+            } else {
+                requireUnresolved(row.runId());
+                if ("USAGE".equals(row.kind()))
+                    quotas.settle(
+                            row.runId(), row.inputTokens(), row.outputTokens(), row.cachedTokens());
+                else quotas.release(row.runId(), true);
+            }
         }
         String state = approved ? "APPROVED" : "REJECTED";
         if (mapper.decide(id, version, state, decision.reason(), actor.id()) != 1)
@@ -202,6 +233,23 @@ public class AdjudicationService {
         if (hold == null) throw new BusinessException(404, "RESOURCE_NOT_FOUND", "运行账务不存在");
         accounts.lock(hold.accountId());
         runs.lock(run);
+    }
+
+    private void requireCorrection(UUID run) {
+        var hold = accounts.hold(run);
+        var proof = evidence.get(run);
+        if (!Set.of("SETTLED", "RELEASED").contains(hold.state())
+                || !mapper.approved(run, false)
+                || proof == null)
+            throw new BusinessException(409, "CORRECTION_NOT_AVAILABLE", "更正需要已结束人工裁决和迟到原调用证据");
+        if (mapper.approved(run, true))
+            throw new BusinessException(409, "CORRECTION_ALREADY_APPLIED", "此原调用证据已经更正入账");
+        String priorKind = "SETTLED".equals(hold.state()) ? "USAGE" : "NO_CHARGE";
+        if (priorKind.equals(proof.kind())
+                && Objects.equals(hold.inputTokens(), proof.inputTokens())
+                && Objects.equals(hold.outputTokens(), proof.outputTokens())
+                && Objects.equals(hold.cachedTokens(), proof.cachedTokens()))
+            throw new BusinessException(409, "CORRECTION_NOT_REQUIRED", "原调用证据与已入账用量相同");
     }
 
     private void requireUnresolved(UUID run) {

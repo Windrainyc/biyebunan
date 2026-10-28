@@ -52,11 +52,15 @@ public class AdjustmentService {
         if (initial == null) throw new BusinessException(404, "RESOURCE_NOT_FOUND", "运行账务不存在");
         quotas.lock(initial.accountId());
         var h = quotas.lockHold(w.runId());
-        if (!"SETTLED".equals(h.state()))
+        if (!"SETTLED".equals(h.state()) && !quotas.corrected(w.runId()))
             throw new BusinessException(409, "RECONCILIATION_REQUIRED", "仅已结算运行可调整，未知用量须先核对");
         BigDecimal delta =
                 w.direction() == AdjustmentDtos.Direction.DEBIT ? amount : amount.negate();
-        if (h.actualAmount().add(mapper.net(w.runId())).add(delta).signum() < 0)
+        if ((h.actualAmount() == null ? BigDecimal.ZERO : h.actualAmount())
+                        .add(quotas.netAdjustments(w.runId()))
+                        .add(delta)
+                        .signum()
+                < 0)
             throw new BusinessException(422, "ADJUSTMENT_EXCEEDS_CHARGE", "累计退还不能超过该运行已扣金额");
         UUID id = UUID.randomUUID();
         mapper.insert(id, h.accountId(), w, actor.id());

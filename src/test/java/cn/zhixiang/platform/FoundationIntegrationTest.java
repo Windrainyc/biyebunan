@@ -6859,7 +6859,7 @@ class FoundationIntegrationTest {
                             manualLease.generation(),
                             "迟到回答不恢复",
                             new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
-                                    13, 6, 0, "late-manual-conflict")));
+                                    11, 6, 0, "late-manual-conflict")));
             mvc.perform(
                             get("/api/v1/admin/adjudications/" + manualClaim)
                                     .header("Authorization", "Bearer " + reviewerToken))
@@ -6875,6 +6875,119 @@ class FoundationIntegrationTest {
                             get("/api/v1/admin/adjudications/" + manualClaim)
                                     .header("Authorization", "Bearer " + st))
                     .andExpect(status().isForbidden());
+            var correctionClaim = new java.util.HashMap<String, Object>(noChargeClaim);
+            correctionClaim.put("kind", "CORRECTION");
+            var forgedCorrection = new java.util.HashMap<String, Object>(correctionClaim);
+            forgedCorrection.put("inputTokens", 1);
+            mvc.perform(
+                            post("/api/v1/admin/runs/" + manualRun + "/adjudications")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content(json.writeValueAsString(forgedCorrection)))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.code").value("CORRECTION_SERVER_EVIDENCE"));
+            String correctionId = submitAdjudication(manualRun, correctionClaim, adminToken);
+            assertEquals(403, reviewAdjudication(correctionId, "APPROVE", adminToken));
+            String originalManualAmount =
+                    db.queryForObject(
+                            "SELECT actual_amount::text FROM quota_hold WHERE run_id=?",
+                            String.class,
+                            manualRun);
+            var refund =
+                    Map.of(
+                            "runId",
+                            manualRun,
+                            "direction",
+                            "CREDIT",
+                            "amount",
+                            originalManualAmount,
+                            "reason",
+                            "隔离更正退款冲突验证",
+                            "evidenceRef",
+                            "integration-only-refund");
+            mvc.perform(
+                            post("/api/v1/admin/usage-adjustments")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content(json.writeValueAsString(refund)))
+                    .andExpect(status().isCreated());
+            assertEquals(409, reviewAdjudication(correctionId, "APPROVE", reviewerToken));
+            assertEquals(
+                    0,
+                    db.queryForObject(
+                            "SELECT count(*) FROM quota_ledger WHERE source_id=? AND"
+                                    + " kind='CORRECTION'",
+                            Integer.class,
+                            manualRun));
+            assertEquals(
+                    "PENDING",
+                    db.queryForObject(
+                            "SELECT state FROM usage_adjudication WHERE id=?",
+                            String.class,
+                            UUID.fromString(correctionId)));
+            var reverseRefund = new java.util.HashMap<String, Object>(refund);
+            reverseRefund.put("direction", "DEBIT");
+            mvc.perform(
+                            post("/api/v1/admin/usage-adjustments")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content(json.writeValueAsString(reverseRefund)))
+                    .andExpect(status().isCreated());
+
+            try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+                var gate = new java.util.concurrent.CountDownLatch(1);
+                java.util.concurrent.Callable<Integer> action =
+                        () -> {
+                            gate.await();
+                            return reviewAdjudication(correctionId, "APPROVE", reviewerToken);
+                        };
+                var a = pool.submit(action);
+                var b = pool.submit(action);
+                gate.countDown();
+                assertEquals(Set.of(200, 412), Set.of(a.get(), b.get()));
+            }
+            assertEquals(
+                    -1L,
+                    db.queryForObject(
+                            "SELECT spend_tokens FROM quota_ledger WHERE source_id=? AND"
+                                    + " kind='CORRECTION'",
+                            Long.class,
+                            manualRun));
+            assertEquals(
+                    12L,
+                    db.queryForObject(
+                            "SELECT input_tokens FROM quota_hold WHERE run_id=?",
+                            Long.class,
+                            manualRun));
+            mvc.perform(
+                            get("/api/v1/student/usage")
+                                    .header("Authorization", "Bearer " + st)
+                                    .param("q", manualRun.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].inputTokens").value(12))
+                    .andExpect(jsonPath("$.items[0].effectiveInputTokens").value(11))
+                    .andExpect(
+                            jsonPath("$.items[0].evidenceSource").value("CORRECTED_ORIGINAL_CALL"));
+            mvc.perform(
+                            post("/api/v1/admin/runs/" + manualRun + "/adjudications")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content(json.writeValueAsString(correctionClaim)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("CORRECTION_ALREADY_APPLIED"));
+            assertEquals(
+                    0,
+                    db.queryForObject(
+                            "SELECT count(*) FROM quota_account a WHERE a.spent_tokens<>(SELECT"
+                                    + " coalesce(sum(spend_tokens),0) FROM quota_ledger l WHERE"
+                                    + " l.account_id=a.id) OR a.spent_amount<>(SELECT"
+                                    + " coalesce(sum(spend_amount),0) FROM quota_ledger l WHERE"
+                                    + " l.account_id=a.id)",
+                            Integer.class));
             runBody.put("clientMessageId", UUID.randomUUID());
             UUID freeManualRun =
                     UUID.fromString(
@@ -6923,6 +7036,36 @@ class FoundationIntegrationTest {
                                     + " kind='RELEASE'",
                             Integer.class,
                             freeManualRun));
+            assertFalse(
+                    completion.success(
+                            freeManualRun,
+                            freeOwner,
+                            freeLease.generation(),
+                            "迟到原调用仅用于更正，不发布回答",
+                            new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
+                                    4, 2, 0, "late-free-correction")));
+            String freeCorrection = submitAdjudication(freeManualRun, correctionClaim, adminToken);
+            assertEquals(200, reviewAdjudication(freeCorrection, "APPROVE", reviewerToken));
+            assertEquals(
+                    "RELEASED",
+                    db.queryForObject(
+                            "SELECT state FROM quota_hold WHERE run_id=?",
+                            String.class,
+                            freeManualRun));
+            assertEquals(
+                    6L,
+                    db.queryForObject(
+                            "SELECT spend_tokens FROM quota_ledger WHERE source_id=? AND"
+                                    + " kind='CORRECTION'",
+                            Long.class,
+                            freeManualRun));
+            mvc.perform(
+                            get("/api/v1/student/usage")
+                                    .header("Authorization", "Bearer " + st)
+                                    .param("q", freeManualRun.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].amount").value("0"))
+                    .andExpect(jsonPath("$.items[0].effectiveInputTokens").value(4));
             var lateUsage =
                     new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
                             12, 6, 0, "late-provider-001");

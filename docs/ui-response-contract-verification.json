@@ -70,8 +70,8 @@
       "code": "INVALID_FILTER"
     }
   ],
-  "checkedAt": "2026-10-28T00:40:01.998418+00:00",
-  "contractVersion": "1.0.28",
+  "checkedAt": "2026-10-28T10:32:32.173481+00:00",
+  "contractVersion": "1.0.30",
   "isolatedDatabase": true,
   "checks": [
     {

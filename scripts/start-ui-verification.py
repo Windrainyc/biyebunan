@@ -54,7 +54,8 @@ runtime_jar=directory/('api-runtime-'+uuid.uuid4().hex+'.jar')
 shutil.copyfile(root/'target/platform-0.1.0-SNAPSHOT.jar',runtime_jar)
 command=['java',*java_options,'-jar',str(runtime_jar)]
 log=open(directory/'runtime.log','w');os.chmod(directory/'runtime.log',0o600)
-for profile in ([] if resume else ['migrate','bootstrap']):
+# 恢复已有环境也必须先迁移；只跳过一次性管理员初始化。迁移失败禁止启动新版本。
+for profile in (['migrate'] if resume else ['migrate','bootstrap']):
  subprocess.run(command+['--spring.profiles.active='+profile],cwd=root,env=env,stdout=log,stderr=log,check=True)
 process=subprocess.Popen(command+['--spring.profiles.active=api'],cwd=root,env=env,stdout=log,stderr=log)
 def post(path,body):

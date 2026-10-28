@@ -190,4 +190,26 @@ public interface QuotaMapper {
                 + " state=#{state},input_tokens=#{input},output_tokens=#{output},cached_tokens=#{cached},actual_amount=#{amount},updated_at=now()"
                 + " WHERE run_id=#{run}")
     void state(UUID run, String state, Long input, Long output, Long cached, BigDecimal amount);
+
+    /**
+     * 当前净调整，包括已批准更正，调用者先取得账户锁。
+     *
+     * @param run 运行
+     * @return 金额净增量
+     */
+    @Select(
+            "SELECT adjustment_amount+correction_amount FROM usage_billing_projection WHERE"
+                    + " run_id=#{run}")
+    BigDecimal netAdjustments(UUID run);
+
+    /**
+     * 检查更正账本唯一流水。
+     *
+     * @param run 运行
+     * @return 是否已更正
+     */
+    @Select(
+            "SELECT EXISTS(SELECT 1 FROM quota_ledger WHERE source_id=#{run} AND"
+                    + " kind='CORRECTION')")
+    boolean corrected(UUID run);
 }

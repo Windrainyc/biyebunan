@@ -12,16 +12,16 @@ public final class AdjudicationDtos {
     /**
      * 待第二人复核的声明，不能直接触发结算。
      *
-     * @param kind USAGE或NO_CHARGE
-     * @param inputTokens 输入词元；NO_CHARGE必须null
-     * @param outputTokens 输出词元；NO_CHARGE必须null
-     * @param cachedTokens 缓存输入词元；NO_CHARGE必须null
+     * @param kind USAGE、NO_CHARGE或CORRECTION（仅采用已存原调用证据）
+     * @param inputTokens 输入词元；NO_CHARGE和CORRECTION请求必须null；更正响应为服务端快照
+     * @param outputTokens 输出词元；NO_CHARGE和CORRECTION请求必须null；更正响应为服务端快照
+     * @param cachedTokens 缓存输入词元；NO_CHARGE和CORRECTION请求必须null；更正响应为服务端快照
      * @param evidenceRef 供应商账单/工单引用，禁止放密钥
      * @param evidenceSha256 原始凭据文件SHA-256，复核者应独立验证
      * @param reason 提交原因
      */
     public record Create(
-            @NotNull @Pattern(regexp = "USAGE|NO_CHARGE") String kind,
+            @NotNull @Pattern(regexp = "USAGE|NO_CHARGE|CORRECTION") String kind,
             @Min(0) @Max(1000000000) Long inputTokens,
             @Min(0) @Max(1000000000) Long outputTokens,
             @Min(0) @Max(1000000000) Long cachedTokens,
@@ -46,7 +46,7 @@ public final class AdjudicationDtos {
      * @param runId 对应运行
      * @param version CAS版本
      * @param state PENDING/APPROVED/REJECTED
-     * @param kind USAGE/NO_CHARGE
+     * @param kind USAGE/NO_CHARGE/CORRECTION
      * @param inputTokens 输入词元，可空
      * @param outputTokens 输出词元，可空
      * @param cachedTokens 缓存词元，可空
