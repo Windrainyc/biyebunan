@@ -1,0 +1,584 @@
+{
+  "database": "zx_ui_854985f04581",
+  "prefix": "WRITE_E2632669F2B8",
+  "checks": 72,
+  "passed": 72,
+  "results": [
+    {
+      "case": "schools create",
+      "method": "POST",
+      "path": "/api/v1/admin/schools",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "schools replay",
+      "method": "POST",
+      "path": "/api/v1/admin/schools",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "schools key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/schools",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "schools unique",
+      "method": "POST",
+      "path": "/api/v1/admin/schools",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "schools detail",
+      "method": "GET",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "schools update",
+      "method": "PUT",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "schools stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "schools enable",
+      "method": "POST",
+      "path": "/api/v1/admin/schools/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "schools disable",
+      "method": "POST",
+      "path": "/api/v1/admin/schools/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "schools stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "schools delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "schools absent",
+      "method": "GET",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "tags create",
+      "method": "POST",
+      "path": "/api/v1/admin/tags",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "tags replay",
+      "method": "POST",
+      "path": "/api/v1/admin/tags",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "tags key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/tags",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "tags unique",
+      "method": "POST",
+      "path": "/api/v1/admin/tags",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "tags detail",
+      "method": "GET",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "tags update",
+      "method": "PUT",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "tags stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "tags enable",
+      "method": "POST",
+      "path": "/api/v1/admin/tags/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "tags disable",
+      "method": "POST",
+      "path": "/api/v1/admin/tags/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "tags stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "tags delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "tags absent",
+      "method": "GET",
+      "path": "/api/v1/admin/tags/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "categories create",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "categories replay",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "categories key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "categories unique",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "categories detail",
+      "method": "GET",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "categories update",
+      "method": "PUT",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "categories stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "categories enable",
+      "method": "POST",
+      "path": "/api/v1/admin/categories/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "categories disable",
+      "method": "POST",
+      "path": "/api/v1/admin/categories/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "categories stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "categories delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "categories absent",
+      "method": "GET",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "forum-boards create",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "forum-boards replay",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "forum-boards key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "forum-boards unique",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "forum-boards detail",
+      "method": "GET",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "forum-boards update",
+      "method": "PUT",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "forum-boards stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "forum-boards enable",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "forum-boards disable",
+      "method": "POST",
+      "path": "/api/v1/admin/forum-boards/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "forum-boards stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "forum-boards delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "forum-boards absent",
+      "method": "GET",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "notification-templates create",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "notification-templates replay",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "notification-templates key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "notification-templates unique",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "notification-templates detail",
+      "method": "GET",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "notification-templates update",
+      "method": "PUT",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "notification-templates stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "notification-templates enable",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "notification-templates disable",
+      "method": "POST",
+      "path": "/api/v1/admin/notification-templates/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "notification-templates stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "notification-templates delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "notification-templates absent",
+      "method": "GET",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "roles create",
+      "method": "POST",
+      "path": "/api/v1/admin/roles",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "roles replay",
+      "method": "POST",
+      "path": "/api/v1/admin/roles",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "roles key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/roles",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "roles unique",
+      "method": "POST",
+      "path": "/api/v1/admin/roles",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "roles detail",
+      "method": "GET",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "roles update",
+      "method": "PUT",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "roles stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "roles enable",
+      "method": "POST",
+      "path": "/api/v1/admin/roles/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "roles disable",
+      "method": "POST",
+      "path": "/api/v1/admin/roles/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "roles stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "roles delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "roles absent",
+      "method": "GET",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    }
+  ]
+}

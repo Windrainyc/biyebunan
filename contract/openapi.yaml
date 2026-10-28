@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.28
+  version: 1.0.29
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -4732,7 +4732,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4779,7 +4780,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4869,7 +4871,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4916,7 +4919,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5006,7 +5010,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5053,7 +5058,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5143,7 +5149,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5189,7 +5196,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -10773,7 +10781,7 @@ paths:
         schema:
           type: string
           minLength: 1
-          pattern: '\S'
+          pattern: \S
           maxLength: 100
       - name: status
         in: query
@@ -10781,7 +10789,8 @@ paths:
         description: 仅允许PUBLISHED；省略时仍仅检索已发布内容。
         schema:
           type: string
-          enum: [PUBLISHED]
+          enum:
+          - PUBLISHED
       - name: sort
         in: query
         required: false
@@ -14299,7 +14308,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -15146,7 +15156,12 @@ components:
       additionalProperties: false
       properties:
         name: *id011
-        code: *id011
+        code:
+          type: string
+          description: 大写字母开头，仅含大写字母、数字、下划线
+          maxLength: 64
+          minLength: 2
+          pattern: ^[A-Z][A-Z0-9_]{1,63}$
         platform: *id012
         dataScope: &id018
           type: string
