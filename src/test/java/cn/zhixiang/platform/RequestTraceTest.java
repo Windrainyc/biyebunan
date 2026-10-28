@@ -16,6 +16,48 @@ import java.util.UUID;
 /** 验证请求标识不信任客户端、错误一致性及线程上下文清理。 */
 class RequestTraceTest {
     @Test
+    void databaseFailureIsServerErrorWithoutSecretsAndConflictsStay409() throws Exception {
+        var mvc =
+                org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(
+                                new FailingController())
+                        .setControllerAdvice(new Errors())
+                        .build();
+        var result =
+                mvc.perform(
+                                org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                        .get("/failure"))
+                        .andExpect(
+                                org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                                        .status()
+                                        .isInternalServerError())
+                        .andReturn();
+        String body = result.getResponse().getContentAsString();
+        assertTrue(body.contains("INTERNAL_ERROR"));
+        assertFalse(body.contains("sensitive_sql_value"));
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                "/conflict"))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isConflict());
+    }
+
+    @org.springframework.web.bind.annotation.RestController
+    static class FailingController {
+        @org.springframework.web.bind.annotation.GetMapping("/failure")
+        String failure() {
+            throw new org.springframework.jdbc.BadSqlGrammarException(
+                    "test", "sensitive_sql_value", new java.sql.SQLException("secret"));
+        }
+
+        @org.springframework.web.bind.annotation.GetMapping("/conflict")
+        String conflict() {
+            throw new org.springframework.dao.DataIntegrityViolationException(
+                    "sensitive_sql_value");
+        }
+    }
+
+    @Test
     void controlledIdentityAndFailureCleanup() throws Exception {
         var filter = new RequestTraceFilter();
         var request = new MockHttpServletRequest();

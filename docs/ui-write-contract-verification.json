@@ -1,8 +1,8 @@
 {
   "database": "zx_ui_854985f04581",
-  "prefix": "WRITE_E2632669F2B8",
-  "checks": 72,
-  "passed": 72,
+  "prefix": "WRITE_A5E4B2FC2F9F",
+  "checks": 96,
+  "passed": 96,
   "results": [
     {
       "case": "schools create",
@@ -576,6 +576,198 @@
       "case": "roles absent",
       "method": "GET",
       "path": "/api/v1/admin/roles/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "models create",
+      "method": "POST",
+      "path": "/api/v1/admin/models",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "models replay",
+      "method": "POST",
+      "path": "/api/v1/admin/models",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "models key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/models",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "models unique",
+      "method": "POST",
+      "path": "/api/v1/admin/models",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "models detail",
+      "method": "GET",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "models update",
+      "method": "PUT",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "models stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "models enable",
+      "method": "POST",
+      "path": "/api/v1/admin/models/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "models disable",
+      "method": "POST",
+      "path": "/api/v1/admin/models/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "models stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "models delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "models absent",
+      "method": "GET",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "menus create",
+      "method": "POST",
+      "path": "/api/v1/admin/menus",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "menus replay",
+      "method": "POST",
+      "path": "/api/v1/admin/menus",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "menus key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/menus",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "menus unique",
+      "method": "POST",
+      "path": "/api/v1/admin/menus",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "menus detail",
+      "method": "GET",
+      "path": "/api/v1/admin/menus/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "menus update",
+      "method": "PUT",
+      "path": "/api/v1/admin/menus/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "menus stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/menus/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "menus enable",
+      "method": "POST",
+      "path": "/api/v1/admin/menus/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "menus disable",
+      "method": "POST",
+      "path": "/api/v1/admin/menus/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "menus stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/menus/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "menus delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/menus/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "menus absent",
+      "method": "GET",
+      "path": "/api/v1/admin/menus/{id}",
       "status": 404,
       "expected": 404,
       "failures": []

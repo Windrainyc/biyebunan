@@ -61,6 +61,22 @@ public class Errors {
     }
 
     /**
+     * 将数据库基础设施故障保留为服务端500，避免错误转发被认证链改写为401。 只记录异常类型和关联号，SQL及绑定参数可能含秘密，不记录异常消息或堆栈。
+     *
+     * @param e 数据访问故障；唯一性和引用冲突由更具体的处理器处理
+     * @return 不包含SQL、表名或请求值的标准500响应
+     */
+    @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+    public ResponseEntity<ProblemDetail> database(org.springframework.dao.DataAccessException e) {
+        org.slf4j.LoggerFactory.getLogger(Errors.class)
+                .error(
+                        "数据库访问失败 type={} requestId={}",
+                        e.getClass().getSimpleName(),
+                        cn.zhixiang.platform.shared.observability.RequestTrace.errorId());
+        return response(500, "INTERNAL_ERROR", "服务暂时无法处理请求，请稍后重试或提供关联号联系管理员");
+    }
+
+    /**
      * 返回标准错误响应。
      *
      * @param status HTTP 状态

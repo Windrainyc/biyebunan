@@ -78,6 +78,8 @@ fixtures = {
     'forum-boards': {'requiresReview':True,'sortOrder':1},
     'notification-templates': {'channel':'IN_APP','providerTemplateId':'isolated-unused-template'},
     'roles': {'platform':'student','dataScope':'SELF','permissionCodes':[]},
+    'models': {'provider':'OPENAI_COMPATIBLE','endpoint':'https://example.invalid/v1','contextLimit':4096,'maxOutputTokens':512},
+    'menus': {'platform':'student','parentId':None,'path':'/student/knowledge','permissionCode':'get_student_knowledge','sortOrder':999},
 }
 try:
     for resource, extra in fixtures.items():
@@ -118,4 +120,4 @@ finally:
             results.append({'case':'cleanup','path':path+'/{id}','failures':['cleanupFailed']})
     report={'database':state['database'],'prefix':prefix,'checks':len(results),'passed':sum(not r['failures'] for r in results),'results':results}
     (ROOT/'docs/ui-write-contract-verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
-print(f'写入契约回归通过：{len(results)}项，六类隔离资源已清理。')
+print(f'写入契约回归通过：{len(results)}项，{len(fixtures)}类隔离资源已清理。')
