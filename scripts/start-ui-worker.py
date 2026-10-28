@@ -53,6 +53,14 @@ env.update(ZX_OTLP_ENABLED="false", ZX_RABBIT_VHOST=vhost,
 directory = Path(state['credentialFile']).parent
 os.umask(0o077)
 env.update(ZX_MODEL_CALLS_ENABLED='false', ZX_MODEL_ALLOWED_HOSTS='')
+if '--video' in sys.argv:
+    ffmpeg = shutil.which('ffmpeg')
+    ffprobe = shutil.which('ffprobe')
+    if not ffmpeg or not ffprobe:
+        raise SystemExit('显式视频模式要求已安装FFmpeg和ffprobe')
+    env.update(ZX_VIDEO_ENABLED='true', ZX_FFMPEG_PATH=ffmpeg, ZX_FFPROBE_PATH=ffprobe)
+else:
+    env['ZX_VIDEO_ENABLED'] = 'false'
 java_options = []
 if '--test-model' in sys.argv:
     truststore = directory / 'sms-fixture/truststore.p12'
