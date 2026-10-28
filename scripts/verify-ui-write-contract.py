@@ -88,6 +88,8 @@ try:
         path = '/api/v1/admin/'+resource
         body = {'name':'隔离写回归-'+resource,'code':prefix+'_'+resource.replace('-', '_').upper(),'status':'DISABLED',**extra}
         if resource in ('storages','domains'): body.pop('code')
+        if resource == 'menus':
+            check('menu integer overflow rejected','POST',path,path,400,{**body,'sortOrder':2147483648})
         key = str(uuid.uuid4())
         row, etag = check(resource+' create','POST',path,path,201,body,key=key)
         owned.append((path,row['id']))

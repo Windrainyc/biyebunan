@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.31
-  description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
+  version: 1.0.32
+  description: '工程实现契约。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
-    开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
+    路由映射与字段校验不代表全部业务验收或生产部署；实际验证及外部配置边界见docs/开发进度.md。'
 servers:
 - url: https://api.example.com
   description: 占位地址；实际由三个站点同源反向代理
@@ -15271,7 +15271,10 @@ components:
           pattern: ^/(?!/)[A-Za-z0-9/_-]*$
           maxLength: 500
         permissionCode: *id011
-        sortOrder: *id020
+        sortOrder:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
         status: *id015
       required:
       - name

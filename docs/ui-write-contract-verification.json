@@ -1,8 +1,8 @@
 {
   "database": "zx_ui_854985f04581",
-  "prefix": "WRITE_12B2318D6944",
-  "checks": 135,
-  "passed": 135,
+  "prefix": "WRITE_81E6A569140B",
+  "checks": 136,
+  "passed": 136,
   "results": [
     {
       "case": "schools create",
@@ -866,6 +866,14 @@
       "path": "/api/v1/admin/domains/{id}",
       "status": 404,
       "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "menu integer overflow rejected",
+      "method": "POST",
+      "path": "/api/v1/admin/menus",
+      "status": 400,
+      "expected": 400,
       "failures": []
     },
     {

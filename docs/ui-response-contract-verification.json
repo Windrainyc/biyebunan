@@ -70,8 +70,8 @@
       "code": "INVALID_FILTER"
     }
   ],
-  "checkedAt": "2026-10-28T10:32:32.173481+00:00",
-  "contractVersion": "1.0.30",
+  "checkedAt": "2026-10-28T10:46:02.170889+00:00",
+  "contractVersion": "1.0.31",
   "isolatedDatabase": true,
   "checks": [
     {
@@ -466,6 +466,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/admin/notification-templates/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/admin/users/{id}",
       "status": 200,
       "failures": []
@@ -633,7 +639,7 @@
       "failures": []
     }
   ],
-  "passed": 93,
-  "total": 93,
+  "passed": 94,
+  "total": 94,
   "scope": "三端无路径参数及可从真实列表取得ID的详情/子列表JSON响应；不代表所有写操作或浏览器验收"
 }
