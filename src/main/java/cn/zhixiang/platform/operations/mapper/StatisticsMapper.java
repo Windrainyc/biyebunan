@@ -42,7 +42,7 @@ SELECT 'delivery_publications' AS metric,(count(*))::text AS value,'count' AS un
     List<StatisticsItem> business(OffsetDateTime start, OffsetDateTime end, Actor actor);
 
     /**
-     * 从追加账本聚合已结算成本与人工调整，未知冻结单独计数。
+     * 从追加账本按入账日期分别聚合原结算、迟到用量更正和金额调整，未知冻结单独计数。
      *
      * @param start 起点
      * @param end 排他终点
@@ -51,11 +51,11 @@ SELECT 'delivery_publications' AS metric,(count(*))::text AS value,'count' AS un
      */
     @Select(
             """
-SELECT CASE l.kind WHEN 'SETTLE' THEN 'model_settled_amount' ELSE 'model_adjustment_amount' END AS metric,sum(l.spend_amount)::text AS value,'CNY' AS unit,(l.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS bucket
-FROM quota_ledger l JOIN quota_account a ON a.id=l.account_id WHERE l.kind IN ('SETTLE','ADJUSTMENT') AND (#{actor.platform}='admin' OR a.user_id=#{actor.id}) AND l.created_at>=#{start} AND l.created_at<#{end} GROUP BY l.kind,bucket
+SELECT CASE l.kind WHEN 'SETTLE' THEN 'model_settled_amount' WHEN 'CORRECTION' THEN 'model_correction_amount' ELSE 'model_adjustment_amount' END AS metric,sum(l.spend_amount)::text AS value,'CNY' AS unit,(l.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS bucket
+FROM quota_ledger l JOIN quota_account a ON a.id=l.account_id WHERE l.kind IN ('SETTLE','ADJUSTMENT','CORRECTION') AND (#{actor.platform}='admin' OR a.user_id=#{actor.id}) AND l.created_at>=#{start} AND l.created_at<#{end} GROUP BY l.kind,bucket
 UNION ALL
-SELECT 'model_settled_tokens',sum(l.spend_tokens)::text,'token',(l.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS bucket
-FROM quota_ledger l JOIN quota_account a ON a.id=l.account_id WHERE l.kind='SETTLE' AND (#{actor.platform}='admin' OR a.user_id=#{actor.id}) AND l.created_at>=#{start} AND l.created_at<#{end} GROUP BY bucket
+SELECT CASE l.kind WHEN 'SETTLE' THEN 'model_settled_tokens' ELSE 'model_correction_tokens' END,sum(l.spend_tokens)::text,'token',(l.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS bucket
+FROM quota_ledger l JOIN quota_account a ON a.id=l.account_id WHERE l.kind IN ('SETTLE','CORRECTION') AND (#{actor.platform}='admin' OR a.user_id=#{actor.id}) AND l.created_at>=#{start} AND l.created_at<#{end} GROUP BY l.kind,bucket
 UNION ALL
 SELECT 'model_unresolved_runs',count(*)::text,'count',(h.created_at AT TIME ZONE 'Asia/Shanghai')::date::text AS bucket
 FROM quota_hold h JOIN quota_account a ON a.id=h.account_id WHERE h.state='RECONCILING' AND (#{actor.platform}='admin' OR a.user_id=#{actor.id}) AND h.created_at>=#{start} AND h.created_at<#{end} GROUP BY bucket

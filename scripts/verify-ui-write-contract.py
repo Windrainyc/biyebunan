@@ -79,12 +79,15 @@ fixtures = {
     'notification-templates': {'channel':'IN_APP','providerTemplateId':'isolated-unused-template'},
     'roles': {'platform':'student','dataScope':'SELF','permissionCodes':[]},
     'models': {'provider':'OPENAI_COMPATIBLE','endpoint':'https://example.invalid/v1','contextLimit':4096,'maxOutputTokens':512},
+    'storages': {'provider':'S3_COMPATIBLE','bucket':prefix.lower().replace('_','-'),'region':'us-east-1','endpoint':'https://example.invalid','credentialRef':'isolated-unused-alias','access':'PRIVATE'},
+    'domains': {'hostname':prefix.lower().replace('_','-')+'.example.invalid','platform':'assets','certificateRef':'isolated-unused-cert'},
     'menus': {'platform':'student','parentId':None,'path':'/student/knowledge','permissionCode':'get_student_knowledge','sortOrder':999},
 }
 try:
     for resource, extra in fixtures.items():
         path = '/api/v1/admin/'+resource
         body = {'name':'隔离写回归-'+resource,'code':prefix+'_'+resource.replace('-', '_').upper(),'status':'DISABLED',**extra}
+        if resource in ('storages','domains'): body.pop('code')
         key = str(uuid.uuid4())
         row, etag = check(resource+' create','POST',path,path,201,body,key=key)
         owned.append((path,row['id']))
@@ -108,12 +111,38 @@ try:
         check(resource+' delete','DELETE',target,pattern,204,version=row['version'])
         owned.remove((path,row['id']))
         check(resource+' absent','GET',target,pattern,404)
+    # 关联实体不能只验证单表CRUD：父级状态、外键删除保护和树环必须通过真实HTTP。
+    school_path='/api/v1/admin/schools'
+    school_body={'name':'隔离关联院校','code':prefix+'_PARENT','region':'隔离','status':'DISABLED'}
+    school,_=check('reference school create','POST',school_path,school_path,201,school_body)
+    owned.append((school_path,school['id']))
+    major_path='/api/v1/admin/majors'
+    major_body={'name':'隔离关联专业','code':prefix+'_MAJOR','schoolId':school['id'],'level':'BACHELOR','status':'DISABLED'}
+    check('disabled school rejects major','POST',major_path,major_path,422,major_body)
+    school,_=check('reference school enable','POST',school_path+'/'+school['id']+'/status',school_path+'/{id}/status',200,{'status':'ENABLED'},school['version'])
+    major,_=check('reference major create','POST',major_path,major_path,201,major_body)
+    owned.append((major_path,major['id']))
+    check('referenced school delete denied','DELETE',school_path+'/'+school['id'],school_path+'/{id}',409,version=school['version'])
+    major,_=check('major invalid school rejected','PUT',major_path+'/'+major['id'],major_path+'/{id}',422,{**major_body,'schoolId':str(uuid.uuid4())},major['version'])
+    # 失败请求的错误体不是资源；重新读取以确认版本与归属未改变。
+    major,_=check('major preserved after rejection','GET',major_path+'/'+owned[-1][1],major_path+'/{id}',200)
+    assert major['schoolId']==school['id'] and major['version']==1
+    check('major delete','DELETE',major_path+'/'+major['id'],major_path+'/{id}',204,version=major['version']);owned.remove((major_path,major['id']))
+    check('unreferenced school delete','DELETE',school_path+'/'+school['id'],school_path+'/{id}',204,version=school['version']);owned.remove((school_path,school['id']))
+    category_path='/api/v1/admin/categories'
+    parent_body={'name':'隔离父分类','code':prefix+'_TREE','parentId':None,'sortOrder':0,'status':'DISABLED'}
+    parent,_=check('tree parent create','POST',category_path,category_path,201,parent_body);owned.append((category_path,parent['id']))
+    child,_=check('tree child create','POST',category_path,category_path,201,{**parent_body,'code':prefix+'_CHILD','parentId':parent['id']});owned.append((category_path,child['id']))
+    check('tree cycle rejected','PUT',category_path+'/'+parent['id'],category_path+'/{id}',422,{**parent_body,'parentId':child['id']},parent['version'])
+    check('tree parent delete protected','DELETE',category_path+'/'+parent['id'],category_path+'/{id}',409,version=parent['version'])
+    check('tree child delete','DELETE',category_path+'/'+child['id'],category_path+'/{id}',204,version=child['version']);owned.remove((category_path,child['id']))
+    check('tree parent delete','DELETE',category_path+'/'+parent['id'],category_path+'/{id}',204,version=parent['version']);owned.remove((category_path,parent['id']))
 finally:
     # 失败时仅清理本次API返回的资源；失败清理单独记录，不掩盖原错误。
-    for path, identifier in owned:
+    for path, identifier in reversed(owned):
         try:
             status, row, _ = call('GET',path+'/'+identifier)
-            if status==200 and row.get('code','').startswith(prefix):
+            if status==200 and (row.get('code','').startswith(prefix) or row.get('bucket','').startswith(prefix.lower().replace('_','-')) or row.get('hostname','').startswith(prefix.lower().replace('_','-'))):
                 code, _, _ = call('DELETE',path+'/'+identifier,version=row['version'])
                 results.append({'case':'cleanup','path':path+'/{id}','status':code,'failures':[] if code==204 else ['cleanupFailed']})
         except Exception:

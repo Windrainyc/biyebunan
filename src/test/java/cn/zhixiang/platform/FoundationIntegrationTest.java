@@ -7066,6 +7066,25 @@ class FoundationIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.items[0].amount").value("0"))
                     .andExpect(jsonPath("$.items[0].effectiveInputTokens").value(4));
+            String metricDay =
+                    java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).toString();
+            var correctedMetrics =
+                    json.readTree(
+                            mvc.perform(
+                                            get("/api/v1/student/statistics")
+                                                    .header("Authorization", "Bearer " + st)
+                                                    .param("from", metricDay)
+                                                    .param("to", metricDay))
+                                    .andExpect(status().isOk())
+                                    .andReturn()
+                                    .getResponse()
+                                    .getContentAsString());
+            long correctionTokens = 0;
+            for (var metric : correctedMetrics.get("items")) {
+                if (metric.get("metric").asText().equals("model_correction_tokens"))
+                    correctionTokens += Long.parseLong(metric.get("value").asText());
+            }
+            assertEquals(5L, correctionTokens, "更正统计必须包含负一词元和释放后补记六词元");
             var lateUsage =
                     new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
                             12, 6, 0, "late-provider-001");

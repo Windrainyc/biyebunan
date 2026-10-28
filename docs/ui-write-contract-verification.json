@@ -1,8 +1,8 @@
 {
   "database": "zx_ui_854985f04581",
-  "prefix": "WRITE_A5E4B2FC2F9F",
-  "checks": 96,
-  "passed": 96,
+  "prefix": "WRITE_12B2318D6944",
+  "checks": 135,
+  "passed": 135,
   "results": [
     {
       "case": "schools create",
@@ -677,6 +677,198 @@
       "failures": []
     },
     {
+      "case": "storages create",
+      "method": "POST",
+      "path": "/api/v1/admin/storages",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "storages replay",
+      "method": "POST",
+      "path": "/api/v1/admin/storages",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "storages key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/storages",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "storages unique",
+      "method": "POST",
+      "path": "/api/v1/admin/storages",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "storages detail",
+      "method": "GET",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "storages update",
+      "method": "PUT",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "storages stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "storages enable",
+      "method": "POST",
+      "path": "/api/v1/admin/storages/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "storages disable",
+      "method": "POST",
+      "path": "/api/v1/admin/storages/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "storages stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "storages delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "storages absent",
+      "method": "GET",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "domains create",
+      "method": "POST",
+      "path": "/api/v1/admin/domains",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "domains replay",
+      "method": "POST",
+      "path": "/api/v1/admin/domains",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "domains key conflict",
+      "method": "POST",
+      "path": "/api/v1/admin/domains",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "domains unique",
+      "method": "POST",
+      "path": "/api/v1/admin/domains",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "domains detail",
+      "method": "GET",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "domains update",
+      "method": "PUT",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "domains stale update",
+      "method": "PUT",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "domains enable",
+      "method": "POST",
+      "path": "/api/v1/admin/domains/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "domains disable",
+      "method": "POST",
+      "path": "/api/v1/admin/domains/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "domains stale delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 412,
+      "expected": 412,
+      "failures": []
+    },
+    {
+      "case": "domains delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "domains absent",
+      "method": "GET",
+      "path": "/api/v1/admin/domains/{id}",
+      "status": 404,
+      "expected": 404,
+      "failures": []
+    },
+    {
       "case": "menus create",
       "method": "POST",
       "path": "/api/v1/admin/menus",
@@ -770,6 +962,126 @@
       "path": "/api/v1/admin/menus/{id}",
       "status": 404,
       "expected": 404,
+      "failures": []
+    },
+    {
+      "case": "reference school create",
+      "method": "POST",
+      "path": "/api/v1/admin/schools",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "disabled school rejects major",
+      "method": "POST",
+      "path": "/api/v1/admin/majors",
+      "status": 422,
+      "expected": 422,
+      "failures": []
+    },
+    {
+      "case": "reference school enable",
+      "method": "POST",
+      "path": "/api/v1/admin/schools/{id}/status",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "reference major create",
+      "method": "POST",
+      "path": "/api/v1/admin/majors",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "referenced school delete denied",
+      "method": "DELETE",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "major invalid school rejected",
+      "method": "PUT",
+      "path": "/api/v1/admin/majors/{id}",
+      "status": 422,
+      "expected": 422,
+      "failures": []
+    },
+    {
+      "case": "major preserved after rejection",
+      "method": "GET",
+      "path": "/api/v1/admin/majors/{id}",
+      "status": 200,
+      "expected": 200,
+      "failures": []
+    },
+    {
+      "case": "major delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/majors/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "unreferenced school delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "tree parent create",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "tree child create",
+      "method": "POST",
+      "path": "/api/v1/admin/categories",
+      "status": 201,
+      "expected": 201,
+      "failures": []
+    },
+    {
+      "case": "tree cycle rejected",
+      "method": "PUT",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 422,
+      "expected": 422,
+      "failures": []
+    },
+    {
+      "case": "tree parent delete protected",
+      "method": "DELETE",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 409,
+      "expected": 409,
+      "failures": []
+    },
+    {
+      "case": "tree child delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 204,
+      "expected": 204,
+      "failures": []
+    },
+    {
+      "case": "tree parent delete",
+      "method": "DELETE",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 204,
+      "expected": 204,
       "failures": []
     }
   ]
