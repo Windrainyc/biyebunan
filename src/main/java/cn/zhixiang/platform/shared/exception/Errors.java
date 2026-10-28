@@ -72,6 +72,8 @@ public class Errors {
         ProblemDetail p =
                 ProblemDetail.forStatusAndDetail(
                         org.springframework.http.HttpStatusCode.valueOf(status), detail);
+        // Spring默认about:blank可能被序列化器省略；显式URN保证错误契约的type始终存在。
+        p.setType(java.net.URI.create("urn:zhixiang:problem:" + code));
         p.setTitle(code);
         p.setProperty("code", code);
         p.setProperty("traceId", cn.zhixiang.platform.shared.observability.RequestTrace.errorId());

@@ -1,9 +1,77 @@
 {
-  "negativeChecks": {
-    "missingSearchQuery": 400
-  },
-  "checkedAt": "2026-10-28T00:33:31.420795+00:00",
-  "contractVersion": "1.0.27",
+  "negativeChecks": [
+    {
+      "path": "/api/v1/student/knowledge-search",
+      "query": {},
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/admin/schools",
+      "query": {
+        "page": 0
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/admin/schools",
+      "query": {
+        "size": 101
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/admin/schools",
+      "query": {
+        "sort": "name;DROP TABLE school"
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/partner/orders",
+      "query": {
+        "status": "UNKNOWN_STATE"
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/student/orders",
+      "query": {
+        "sort": "amount:unknown"
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    },
+    {
+      "path": "/api/v1/student/knowledge-search",
+      "query": {
+        "q": "项目",
+        "status": "DRAFT"
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "failures": [],
+      "code": "INVALID_FILTER"
+    }
+  ],
+  "checkedAt": "2026-10-28T00:40:01.998418+00:00",
+  "contractVersion": "1.0.28",
   "isolatedDatabase": true,
   "checks": [
     {
@@ -341,9 +409,231 @@
       "path": "/api/v1/admin/adjudications",
       "status": 200,
       "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/schools/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/majors/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/roles/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/membership-plans/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/models/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/model-prices/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/storages/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/categories/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/forum-boards/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users/{id}/memberships",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/model-keys/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/orders/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/orders/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/orders/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/students/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/projects/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/projects/{id}/deliveries",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/projects/{id}/milestones",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/projects/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/projects/{id}/deliveries",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/projects/{id}/milestones",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/projects/{id}/progress",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/knowledge/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/knowledge/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/conversations/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/conversations/{id}/messages",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/conversations/{id}/messages",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/posts/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/posts/{id}/comments",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/posts/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/posts/{id}/comments",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/jobs/{id}",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/membership-plans/{id}/versions",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/knowledge/{id}/versions",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/knowledge/{id}/versions",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/adjudications/{id}",
+      "status": 200,
+      "failures": []
     }
   ],
-  "passed": 56,
-  "total": 56,
-  "scope": "无路径参数的三端只读JSON响应；不代表所有写操作或浏览器验收"
+  "passed": 93,
+  "total": 93,
+  "scope": "三端无路径参数及可从真实列表取得ID的详情/子列表JSON响应；不代表所有写操作或浏览器验收"
 }

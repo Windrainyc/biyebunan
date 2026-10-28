@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.27
+  version: 1.0.28
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -17344,6 +17344,10 @@ components:
           type: string
           description: ''
           format: uri
+        instance:
+          type: string
+          format: uri-reference
+          description: 可选请求路径，不包含查询参数；安全过滤器拒绝可省略。
         title: *id011
         status:
           type: integer

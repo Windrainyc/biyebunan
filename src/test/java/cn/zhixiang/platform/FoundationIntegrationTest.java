@@ -181,6 +181,40 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.asset.service.AssetService assetAccess;
 
     @Test
+    void actualHttpProblemResponseMatchesDeclaredFields() throws Exception {
+        var request =
+                java.net.http.HttpRequest.newBuilder(
+                                java.net.URI.create(
+                                        "http://127.0.0.1:"
+                                                + httpPort
+                                                + "/api/v1/admin/schools?page=0"))
+                        .header("Authorization", "Bearer " + adminToken)
+                        .GET()
+                        .build();
+        var response =
+                java.net.http.HttpClient.newHttpClient()
+                        .send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, response.statusCode());
+        var body = json.readValue(response.body(), java.util.Map.class);
+        assertEquals(
+                Set.of(
+                        "type",
+                        "title",
+                        "status",
+                        "detail",
+                        "instance",
+                        "code",
+                        "traceId",
+                        "fieldErrors"),
+                body.keySet());
+        assertTrue(body.get("type").toString().startsWith("urn:zhixiang:problem:"));
+        assertEquals("/api/v1/admin/schools", body.get("instance"));
+        assertFalse(body.get("traceId").toString().isBlank());
+        assertEquals(List.of(), body.get("fieldErrors"));
+        assertFalse(response.body().contains(adminToken));
+    }
+
+    @Test
     void realVideoLifecycleKeepsOriginalAndAuthorizesPlayback() throws Exception {
         String ffmpeg = "/opt/homebrew/bin/ffmpeg", ffprobe = "/opt/homebrew/bin/ffprobe";
         org.junit.jupiter.api.Assumptions.assumeTrue(
