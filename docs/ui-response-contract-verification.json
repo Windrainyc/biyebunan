@@ -1,0 +1,349 @@
+{
+  "negativeChecks": {
+    "missingSearchQuery": 400
+  },
+  "checkedAt": "2026-10-28T00:33:31.420795+00:00",
+  "contractVersion": "1.0.27",
+  "isolatedDatabase": true,
+  "checks": [
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/schools",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/majors",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/roles",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/membership-plans",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/menus",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/models",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/model-prices",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/storages",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/domains",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/categories",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/tags",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/forum-boards",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/notification-templates",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/me",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/me",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/membership",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/quota",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/model-keys",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/schools",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/majors",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/menus",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/dictionaries/schools",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/dictionaries/majors",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/dictionaries/menus",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/orders",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/orders",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/orders",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/students",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/projects",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/projects",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/projects",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/knowledge",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/knowledge",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/knowledge-search",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/conversations",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/usage",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/conversations",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/usage",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/posts",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/posts",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/reports",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/statistics",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/notifications",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/statistics",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/partner/notifications",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/statistics",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/notifications",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/jobs",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/audits",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/models",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/categories",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/tags",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/student/dictionaries/forum-boards",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/permissions",
+      "status": 200,
+      "failures": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/adjudications",
+      "status": 200,
+      "failures": []
+    }
+  ],
+  "passed": 56,
+  "total": 56,
+  "scope": "无路径参数的三端只读JSON响应；不代表所有写操作或浏览器验收"
+}

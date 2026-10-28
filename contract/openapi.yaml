@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.26
+  version: 1.0.27
   description: '评审契约，尚未实现。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     开发契约；含尚未实现接口，不代表已交付。实际状态见docs/开发进度.md。'
@@ -10768,17 +10768,20 @@ paths:
           default: 20
       - name: q
         in: query
-        required: false
-        description: ''
+        required: true
+        description: 检索词必须包含非空白字符；缺失或空白返回400 INVALID_FILTER。
         schema:
           type: string
-          description: ''
+          minLength: 1
+          pattern: '\S'
           maxLength: 100
       - name: status
         in: query
         required: false
-        description: 状态取值遵循返回资源定义；未知状态 400
-        schema: *id011
+        description: 仅允许PUBLISHED；省略时仍仅检索已发布内容。
+        schema:
+          type: string
+          enum: [PUBLISHED]
       - name: sort
         in: query
         required: false
