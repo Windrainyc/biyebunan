@@ -1,0 +1,20 @@
+{
+  "createdCount": 7,
+  "createdResources": [
+    "schools",
+    "majors",
+    "schools",
+    "majors",
+    "schools",
+    "majors",
+    "forum-boards"
+  ],
+  "adminLogin": "PASS",
+  "studentLogin": "PASS",
+  "orders": 3,
+  "projects": 2,
+  "knowledge": 2,
+  "forum-boards": 2,
+  "schools": 27,
+  "majors": 4
+}
