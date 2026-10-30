@@ -15114,7 +15114,10 @@ components:
       properties:
         name: *id011
         code: *id011
-        schoolId: *id010
+        schoolId:
+          type: [string, 'null']
+          format: uuid
+          description: 历史院校关联；全国独立专业为空
         level: &id017
           type: string
           enum:
@@ -15125,7 +15128,6 @@ components:
       required:
       - name
       - code
-      - schoolId
       - level
       - status
     Major:
@@ -15138,7 +15140,10 @@ components:
         updatedAt: *id014
         name: *id011
         code: *id011
-        schoolId: *id010
+        schoolId:
+          type: [string, 'null']
+          format: uuid
+          description: 历史院校关联；全国独立专业为空
         level: *id017
         status: *id015
       required:

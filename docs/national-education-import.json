@@ -1,0 +1,18 @@
+{
+  "database": "zx_ui_854985f04581",
+  "sources": "data/education/README.md",
+  "resources": {
+    "schools": {
+      "created": 0,
+      "existing": 3196,
+      "conflicts": [],
+      "totalAfter": 3223
+    },
+    "majors": {
+      "created": 0,
+      "existing": 57,
+      "conflicts": [],
+      "totalAfter": 61
+    }
+  }
+}

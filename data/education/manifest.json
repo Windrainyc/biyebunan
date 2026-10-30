@@ -1,0 +1,10 @@
+{
+  "schools-2026.json": {
+    "sha256": "95c47939fade2a5f6210fa5c497b97269a4d86ee1d33fb4671ab47a739740d84",
+    "count": 3196
+  },
+  "computer-majors-2026.json": {
+    "sha256": "362f64b8383a344c6126f6a1198f772d44b2977979e5b8c7436ec57c848b49c0",
+    "count": 57
+  }
+}

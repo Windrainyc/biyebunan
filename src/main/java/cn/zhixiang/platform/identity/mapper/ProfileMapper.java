@@ -26,8 +26,8 @@ public interface ProfileMapper {
      * @return ID或null
      */
     @Select(
-            "SELECT id FROM major WHERE id=#{id} AND school_id=#{school} AND status='ENABLED' FOR"
-                    + " SHARE")
+            "SELECT id FROM major WHERE id=#{id} AND (school_id=#{school} OR school_id IS NULL) AND"
+                    + " status='ENABLED' FOR SHARE")
     UUID major(UUID id, UUID school);
 
     /**

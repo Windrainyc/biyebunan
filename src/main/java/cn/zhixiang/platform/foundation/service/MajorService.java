@@ -150,6 +150,7 @@ public class MajorService {
     }
 
     private void checkSchool(UUID id) {
+        if (id == null) return; // 全国目录不隶属院校；兼容历史院校专业。
         var s = schools.lock(id);
         if (s == null || s.status() != SchoolDtos.Status.ENABLED)
             throw new BusinessException(422, "INVALID_TRANSITION", "所属院校必须存在且启用");

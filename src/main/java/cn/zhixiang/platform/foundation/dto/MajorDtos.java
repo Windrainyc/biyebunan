@@ -32,14 +32,14 @@ public final class MajorDtos {
      *
      * @param name 展示名称
      * @param code 稳定代码
-     * @param schoolId 所属院校
+     * @param schoolId 历史所属院校；全国目录为空
      * @param level 学历
      * @param status 启停状态
      */
     public record Write(
             @NotBlank @Size(max = 200) String name,
             @NotBlank @Size(max = 200) String code,
-            @NotNull UUID schoolId,
+            UUID schoolId,
             @NotNull Level level,
             @NotNull Status status) {}
 
@@ -59,7 +59,7 @@ public final class MajorDtos {
      * @param updatedAt UTC 更新时间
      * @param name 名称
      * @param code 代码
-     * @param schoolId 院校标识
+     * @param schoolId 历史院校标识；全国目录为空
      * @param level 学历
      * @param status 启停状态
      */

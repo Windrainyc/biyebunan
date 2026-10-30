@@ -1,0 +1,401 @@
+[
+  {
+    "name": "人工智能",
+    "code": "080717T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "计算机科学与技术",
+    "code": "080901",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "软件工程",
+    "code": "080902",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "网络工程",
+    "code": "080903",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "信息安全",
+    "code": "080904K",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "物联网工程",
+    "code": "080905",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数字媒体技术",
+    "code": "080906",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "智能科学与技术",
+    "code": "080907T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "空间信息与数字技术",
+    "code": "080908T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "电子与计算机工程",
+    "code": "080909T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数据科学与大数据技术",
+    "code": "080910T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "网络空间安全",
+    "code": "080911TK",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "新媒体技术",
+    "code": "080912T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "电影制作",
+    "code": "080913T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "保密技术",
+    "code": "080914TK",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "服务科学与工程",
+    "code": "080915T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "虚拟现实技术",
+    "code": "080916T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "区块链工程",
+    "code": "080917T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "密码科学与技术",
+    "code": "080918TK",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "工业软件",
+    "code": "080919T",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "计算机应用技术",
+    "code": "510201",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "计算机网络技术",
+    "code": "510202",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "软件技术",
+    "code": "510203",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数字媒体技术",
+    "code": "510204",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "大数据技术",
+    "code": "510205",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "云计算技术应用",
+    "code": "510206",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "信息安全技术应用",
+    "code": "510207",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "虚拟现实技术应用",
+    "code": "510208",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "人工智能技术应用",
+    "code": "510209",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "嵌入式技术应用",
+    "code": "510210",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "工业互联网技术",
+    "code": "510211",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "区块链技术应用",
+    "code": "510212",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "移动应用开发",
+    "code": "510213",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "工业软件开发技术",
+    "code": "510214",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "动漫制作技术",
+    "code": "510215",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "密码技术应用",
+    "code": "510216",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "计算机应用工程",
+    "code": "310201",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "网络工程技术",
+    "code": "310202",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "软件工程技术",
+    "code": "310203",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数字媒体技术",
+    "code": "310204",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "大数据工程技术",
+    "code": "310205",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "云计算技术",
+    "code": "310206",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "信息安全与管理",
+    "code": "310207",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "虚拟现实技术",
+    "code": "310208",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "人工智能工程技术",
+    "code": "310209",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "嵌入式技术",
+    "code": "310210",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "工业互联网技术",
+    "code": "310211",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "区块链技术",
+    "code": "310212",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数据安全技术与管理",
+    "code": "310213",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "密码工程技术",
+    "code": "310214",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "人工智能数据工程技术",
+    "code": "510217",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "数字孪生应用技术",
+    "code": "510218",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "智能体技术应用",
+    "code": "510219",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "开源技术应用",
+    "code": "510220",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "信创系统技术应用",
+    "code": "510221",
+    "schoolId": null,
+    "level": "COLLEGE",
+    "status": "ENABLED"
+  },
+  {
+    "name": "工业智能工程技术",
+    "code": "310215",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  },
+  {
+    "name": "开源技术开发与应用",
+    "code": "310216",
+    "schoolId": null,
+    "level": "BACHELOR",
+    "status": "ENABLED"
+  }
+]

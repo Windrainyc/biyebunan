@@ -146,8 +146,8 @@ public interface UserMapper {
      * @return 启用且匹配的关联数量
      */
     @Select(
-            "SELECT count(*) FROM school s LEFT JOIN major m ON m.school_id=s.id AND m.id=#{major}"
-                + " WHERE s.id=#{school} AND s.status='ENABLED' AND (CAST(#{major} AS uuid) IS NULL"
-                + " OR (m.id IS NOT NULL AND m.status='ENABLED'))")
+            "SELECT count(*) FROM school s LEFT JOIN major m ON (m.school_id=s.id OR m.school_id IS"
+                + " NULL) AND m.id=#{major} WHERE s.id=#{school} AND s.status='ENABLED' AND"
+                + " (CAST(#{major} AS uuid) IS NULL OR (m.id IS NOT NULL AND m.status='ENABLED'))")
     int validEducation(UUID school, UUID major);
 }

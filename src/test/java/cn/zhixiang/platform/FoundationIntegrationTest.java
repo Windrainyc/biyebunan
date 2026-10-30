@@ -2116,6 +2116,49 @@ class FoundationIntegrationTest {
     }
 
     @Test
+    void nationalMajorDoesNotRequireSchoolAndCodeIsUnique() throws Exception {
+        String code = "NATIONAL-" + UUID.randomUUID();
+        String body =
+                json.writeValueAsString(
+                        Map.of(
+                                "name",
+                                "全国计算机专业",
+                                "code",
+                                code,
+                                "level",
+                                "BACHELOR",
+                                "status",
+                                "ENABLED"));
+        var response =
+                mvc.perform(
+                                post("/api/v1/admin/majors")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse();
+        String id = json.readTree(response.getContentAsString()).get("id").asText();
+        assertNull(
+                db.queryForObject("SELECT school_id FROM major WHERE id=?::uuid", UUID.class, id));
+        mvc.perform(
+                        get("/api/v1/admin/majors")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .param("schoolId", UUID.randomUUID().toString())
+                                .param("q", code))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(
+                        post("/api/v1/admin/majors")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void disabledSchoolPreventsMajorEnable() throws Exception {
         String schoolBody =
                 json.writeValueAsString(

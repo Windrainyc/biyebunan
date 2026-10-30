@@ -227,10 +227,10 @@ public class OrderService {
         var m = majors.lock(major);
         if (s == null
                 || m == null
-                || !m.schoolId().equals(school)
+                || (m.schoolId() != null && !m.schoolId().equals(school))
                 || s.status() != SchoolDtos.Status.ENABLED
                 || m.status() != MajorDtos.Status.ENABLED)
-            throw new BusinessException(422, "ORDER_EDUCATION_INVALID", "请选择同一院校下启用的专业");
+            throw new BusinessException(422, "ORDER_EDUCATION_INVALID", "请选择启用的院校及全国专业（或该校历史专业）");
     }
 
     private void partner(UUID id) {

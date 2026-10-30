@@ -21,8 +21,8 @@ public interface MajorMapper {
             "<script>SELECT id,version,created_at,updated_at,name,code,school_id,level,status FROM"
                 + " major WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\' OR code ILIKE #{q.pattern}"
                 + " ESCAPE E'\\\\') <if test='q.status != null'>AND status=#{q.status}</if> <if"
-                + " test='schoolId != null'>AND school_id=#{schoolId}</if> ORDER BY ${q.orderBy}"
-                + " LIMIT #{q.size} OFFSET #{q.offset}</script>")
+                + " test='schoolId != null'>AND (school_id=#{schoolId} OR school_id IS NULL)</if>"
+                + " ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}</script>")
     List<MajorDtos.View> list(@Param("q") PageQuery q, UUID schoolId);
 
     /**
@@ -36,7 +36,7 @@ public interface MajorMapper {
             "<script>SELECT count(*) FROM major WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\' OR"
                     + " code ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='q.status != null'>AND"
                     + " status=#{q.status}</if><if test='schoolId != null'>AND"
-                    + " school_id=#{schoolId}</if></script>")
+                    + " (school_id=#{schoolId} OR school_id IS NULL)</if></script>")
     long count(@Param("q") PageQuery q, UUID schoolId);
 
     /**

@@ -12,10 +12,10 @@ import java.util.*;
 public interface EducationDictionaryMapper {
     /** 共用筛选，学生和中介都只读取启用字典。 */
     String FILTER =
-            " FROM major m WHERE m.status='ENABLED' AND EXISTS(SELECT 1 FROM school s WHERE"
-                + " s.id=m.school_id AND s.status='ENABLED') AND (m.name ILIKE #{q.pattern} ESCAPE"
-                + " E'\\\\' OR m.code ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='school !="
-                + " null'>AND m.school_id=#{school}</if> ";
+            " FROM major m WHERE m.status='ENABLED' AND (m.school_id IS NULL OR EXISTS(SELECT 1"
+                + " FROM school s WHERE s.id=m.school_id AND s.status='ENABLED')) AND (m.name ILIKE"
+                + " #{q.pattern} ESCAPE E'\\\\' OR m.code ILIKE #{q.pattern} ESCAPE E'\\\\') <if"
+                + " test='school != null'>AND (m.school_id=#{school} OR m.school_id IS NULL)</if> ";
 
     /**
      * 查询专业页。
