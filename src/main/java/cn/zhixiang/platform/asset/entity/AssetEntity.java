@@ -13,6 +13,7 @@ import java.util.UUID;
  * @param receiptOrderId 凭证订单
  * @param contentId 知识内容
  * @param forumPostId 论坛帖子
+ * @param materialCategoryId 素材分类，仅MATERIAL归属使用
  * @param storageId 存储配置
  * @param filename 文件名
  * @param size 字节数
@@ -37,6 +38,7 @@ public record AssetEntity(
         UUID receiptOrderId,
         UUID contentId,
         UUID forumPostId,
+        UUID materialCategoryId,
         UUID storageId,
         String filename,
         long size,

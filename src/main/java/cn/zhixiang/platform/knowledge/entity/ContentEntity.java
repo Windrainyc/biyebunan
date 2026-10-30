@@ -20,6 +20,7 @@ import java.util.*;
  * @param state 状态
  * @param publishedVersionId 快照
  * @param indexState 索引状态
+ * @param coverAssetId 扫描通过的图片封面，可空
  * @param indexGeneration 期望索引代次
  */
 public record ContentEntity(
@@ -37,4 +38,5 @@ public record ContentEntity(
         String state,
         UUID publishedVersionId,
         String indexState,
-        long indexGeneration) {}
+        long indexGeneration,
+        UUID coverAssetId) {}

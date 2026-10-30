@@ -40,6 +40,32 @@ public class AdminAssetController {
     }
 
     /**
+     * 素材库分页；共享素材仍保持私有存储。
+     *
+     * @param page 页码
+     * @param size 页大小
+     * @param q 文件名
+     * @param categoryId 素材分类
+     * @param kind 文件种类
+     * @param state 校验状态
+     * @param sort 白名单排序
+     * @return 素材分页
+     */
+    @GetMapping("/materials")
+    @PreAuthorize("hasAuthority('materials:read')")
+    public cn.zhixiang.platform.shared.dto.PageResult<AssetDtos.View> materials(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String kind,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String sort) {
+        return service.materials(
+                new AssetDtos.MaterialQuery(page, size, q, categoryId, kind, state, sort));
+    }
+
+    /**
      * 创建签名上传。
      *
      * @param w 材料

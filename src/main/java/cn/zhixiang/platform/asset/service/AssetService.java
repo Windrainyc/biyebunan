@@ -26,6 +26,7 @@ public class AssetService {
     private final cn.zhixiang.platform.forum.service.ForumFileAccess forum;
     private final cn.zhixiang.platform.knowledge.mapper.ContentMapper contents;
     private final AssetMapper mapper;
+    private final cn.zhixiang.platform.asset.mapper.MaterialCategoryMapper materialCategories;
     private final StorageMapper stores;
     private final OrderMapper orders;
     private final ProjectMapper projects;
@@ -38,6 +39,7 @@ public class AssetService {
      *
      * @param forum 论坛文件归属
      * @param contents 知识授权
+     * @param materialCategories 素材分类端口
      * @param mapper 资产端口
      * @param stores 配置端口
      * @param orders 订单授权
@@ -50,6 +52,7 @@ public class AssetService {
             cn.zhixiang.platform.forum.service.ForumFileAccess forum,
             cn.zhixiang.platform.knowledge.mapper.ContentMapper contents,
             AssetMapper mapper,
+            cn.zhixiang.platform.asset.mapper.MaterialCategoryMapper materialCategories,
             StorageMapper stores,
             OrderMapper orders,
             ProjectMapper projects,
@@ -59,12 +62,31 @@ public class AssetService {
         this.forum = forum;
         this.contents = contents;
         this.mapper = mapper;
+        this.materialCategories = materialCategories;
         this.stores = stores;
         this.orders = orders;
         this.projects = projects;
         this.storage = storage;
         this.writes = writes;
         this.configured = configured;
+    }
+
+    /**
+     * 素材库分页，不暴露签名地址及存储对象键。
+     *
+     * @param q 查询条件
+     * @return 授权范围内的素材
+     */
+    @Transactional(
+            readOnly = true,
+            isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public cn.zhixiang.platform.shared.dto.PageResult<AssetDtos.View> materials(
+            AssetDtos.MaterialQuery q) {
+        return new cn.zhixiang.platform.shared.dto.PageResult<>(
+                mapper.materials(q).stream().map(this::view).toList(),
+                q.page(),
+                q.size(),
+                mapper.materialCount(q));
     }
 
     /**
@@ -77,6 +99,10 @@ public class AssetService {
     @Transactional(rollbackFor = Exception.class)
     public AssetDtos.Grant create(AssetDtos.Upload w, Actor actor) {
         authorize(w.ownerType(), w.ownerId(), actor, true);
+        if (w.ownerType().equals("MATERIAL")
+                && materialCategories.get(w.ownerId()).status()
+                        != cn.zhixiang.platform.asset.dto.MaterialCategoryDtos.Status.ENABLED)
+            throw new BusinessException(422, "CATEGORY_DISABLED", "素材分类已停用，不能新增上传");
         UUID storeId;
         try {
             storeId = UUID.fromString(configured);
@@ -186,6 +212,7 @@ public class AssetService {
     }
 
     private UUID owner(AssetEntity r) {
+        if (r.materialCategoryId() != null) return r.materialCategoryId();
         return r.forumPostId() != null
                 ? r.forumPostId()
                 : r.projectId() != null
@@ -201,7 +228,11 @@ public class AssetService {
         }
         if (!"admin".equals(actor.platform())) missing();
         String permission;
-        if (type.equals("PROJECT")) {
+        if (type.equals("MATERIAL")) {
+            permission = write ? "materials:write" : "materials:read";
+            var category = write ? materialCategories.lock(id) : materialCategories.get(id);
+            if (category == null) missing();
+        } else if (type.equals("PROJECT")) {
             permission =
                     write
                             ? "post_admin_projects_id_deliveries"
@@ -245,7 +276,8 @@ public class AssetService {
                 r.sha256(),
                 r.mimeType(),
                 r.state(),
-                r.storageId());
+                r.storageId(),
+                r.materialCategoryId());
     }
 
     private ObjectStorage.Target target(StorageEntity s) {

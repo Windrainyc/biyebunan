@@ -184,6 +184,7 @@ public class OssCallbackService {
                 a.sha256(),
                 a.mimeType(),
                 a.state(),
-                a.storageId());
+                a.storageId(),
+                a.materialCategoryId());
     }
 }

@@ -1,0 +1,11 @@
+{
+  "database": "zx_ui_854985f04581",
+  "assetId": "8d3b146b-0ec6-4c53-861b-34113d53a9c8",
+  "state": "READY",
+  "checks": [
+    "真实MP4签名上传",
+    "worker扫描READY",
+    "原件私有下载摘要一致",
+    "视频类型筛选可见"
+  ]
+}

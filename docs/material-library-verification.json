@@ -1,0 +1,25 @@
+{
+  "database": "zx_ui_854985f04581",
+  "categoryId": "cc4bbdeb-bb96-42fc-979e-eb81d40d7c1b",
+  "assets": [
+    {
+      "id": "89a6e962-defc-46ec-b31c-f8ee8a438516",
+      "filename": "素材封面验收.png",
+      "state": "READY"
+    },
+    {
+      "id": "70d04448-65d7-4fb0-aad6-1ed0c65e2ec5",
+      "filename": "素材文档验收.txt",
+      "state": "READY"
+    }
+  ],
+  "contentId": "ef73d72e-7977-469e-9d85-4657a9ff6bb8",
+  "checks": [
+    "真实签名PUT上传图片和文档",
+    "worker扫描READY",
+    "私有下载摘要一致",
+    "新增知识关联共享正文和封面",
+    "两个引用资产删除409",
+    "审核发布成功"
+  ]
+}

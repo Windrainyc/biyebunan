@@ -181,6 +181,177 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.asset.service.AssetService assetAccess;
 
     @Test
+    void sharedMaterialsRequireScanAndProtectKnowledgeCoverReferences() throws Exception {
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"
+                        + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
+                adminId);
+        UUID category = UUID.randomUUID(),
+                contentCategory = UUID.randomUUID(),
+                asset = UUID.randomUUID();
+        db.update(
+                "INSERT INTO material_category(id,name,code,status,created_by,updated_by)"
+                        + " VALUES(?,'测试素材',?,'ENABLED',?,?)",
+                category,
+                category.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " knowledge_category(id,name,code,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'测试知识',?,0,'ENABLED',?,?)",
+                contentCategory,
+                contentCategory.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'素材隔离','S3_COMPATIBLE','zx-quarantine-private',?,?,'local-minio','PRIVATE','ENABLED',?,?)"
+                    + " ON CONFLICT(id) DO NOTHING",
+                UPLOAD_STORE,
+                System.getenv("ZX_S3_REGION"),
+                System.getenv("ZX_S3_ENDPOINT"),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,material_category_id,storage_id,filename,size,sha256,mime_type,upload_key,state,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'MATERIAL',?,?,'封面.png',10,?,'image/png',?,'QUARANTINED',now(),?,?)",
+                asset,
+                UUID.randomUUID(),
+                category,
+                UPLOAD_STORE,
+                "0".repeat(64),
+                "zx-test/" + asset,
+                adminId,
+                adminId);
+        var body =
+                new HashMap<String, Object>(
+                        Map.of(
+                                "title",
+                                "素材复用测试",
+                                "categoryId",
+                                contentCategory,
+                                "tagIds",
+                                List.of(),
+                                "type",
+                                "MARKDOWN",
+                                "markdown",
+                                "正文",
+                                "audience",
+                                "PUBLIC",
+                                "coverAssetId",
+                                asset));
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isUnprocessableEntity());
+        db.update(
+                "UPDATE asset SET state='READY',private_key=? WHERE id=?",
+                "zx-test/private/" + asset,
+                asset);
+        var created =
+                json.readTree(
+                        mvc.perform(
+                                        post("/api/v1/admin/knowledge")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("Idempotency-Key", UUID.randomUUID())
+                                                .contentType("application/json")
+                                                .content(json.writeValueAsString(body)))
+                                .andExpect(status().isCreated())
+                                .andExpect(jsonPath("$.coverAssetId").value(asset.toString()))
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        String id = created.get("id").asText();
+        String studentToken = UUID.randomUUID().toString();
+        UUID materialStudent = UUID.randomUUID();
+        seed(materialStudent, "student", studentToken);
+        db.update(
+                "INSERT INTO user_role(user_id,role_id) SELECT ?,id FROM role WHERE code='STUDENT'"
+                        + " AND built_in=true",
+                materialStudent);
+        mvc.perform(
+                        get("/api/v1/student/assets/" + asset)
+                                .header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isNotFound());
+        for (int step = 0; step < 2; step++)
+            mvc.perform(
+                            post("/api/v1/admin/knowledge/"
+                                            + id
+                                            + (step == 0 ? "/submit-review" : "/publish"))
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .header("If-Match", "\"" + (step + 1) + "\"")
+                                    .contentType("application/json")
+                                    .content("{\"reason\":\"素材验收\"}"))
+                    .andExpect(status().isOk());
+        assertEquals(
+                asset,
+                db.queryForObject(
+                        "SELECT cover_asset_id FROM knowledge_version WHERE content_id=?",
+                        UUID.class,
+                        UUID.fromString(id)));
+        mvc.perform(
+                        get("/api/v1/student/assets/" + asset)
+                                .header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isOk());
+        mvc.perform(
+                        get("/api/v1/admin/materials")
+                                .header("Authorization", "Bearer " + studentToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(
+                        get("/api/v1/admin/materials")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .param("categoryId", category.toString())
+                                .param("kind", "IMAGE")
+                                .param("state", "READY"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(
+                        delete("/api/v1/admin/assets/" + asset)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isConflict());
+        mvc.perform(
+                        delete("/api/v1/admin/material-categories/" + category)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isConflict());
+        db.update("UPDATE asset SET mime_type='application/pdf' WHERE id=?", asset);
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isUnprocessableEntity());
+        // 共享复用必须显式标记MATERIAL；既有知识专属资产仍不得跨内容借用。
+        db.update(
+                "UPDATE asset SET"
+                    + " owner_type='KNOWLEDGE',material_category_id=NULL,content_id=?,mime_type='image/png'"
+                    + " WHERE id=?",
+                UUID.fromString(id),
+                asset);
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isUnprocessableEntity());
+        // 本用例不运行索引器，定点清理自己的排队任务，避免影响后续领取测试。
+        db.update("DELETE FROM knowledge_index_task WHERE content_id=?", UUID.fromString(id));
+        db.update("UPDATE knowledge_content SET state='WITHDRAWN' WHERE id=?", UUID.fromString(id));
+    }
+
+    @Test
     void actualHttpProblemResponseMatchesDeclaredFields() throws Exception {
         var request =
                 java.net.http.HttpRequest.newBuilder(

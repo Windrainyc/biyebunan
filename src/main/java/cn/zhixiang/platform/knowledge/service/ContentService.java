@@ -219,13 +219,36 @@ public class ContentService {
             if (complete && w.assetId() == null)
                 throw new BusinessException(422, "ASSET_REQUIRED", "发布须上传附件");
         }
-        if (w.assetId() != null) {
-            var a = assets.lock(w.assetId());
+        // 固定UUID顺序锁定正文及封面，避免多素材交叉引用发生死锁。
+        var selected = new TreeSet<UUID>();
+        if (w.assetId() != null) selected.add(w.assetId());
+        if (w.coverAssetId() != null) selected.add(w.coverAssetId());
+        for (UUID assetId : selected) {
+            var a = assets.lock(assetId);
             if (a == null
                     || a.deletedAt() != null
-                    || !id.equals(a.contentId())
+                    || !(id.equals(a.contentId()) || a.ownerType().equals("MATERIAL"))
                     || !a.state().equals("READY"))
-                throw new BusinessException(422, "CONTENT_ASSET_INVALID", "文件须属于当前知识内容且扫描通过");
+                throw new BusinessException(422, "CONTENT_ASSET_INVALID", "文件须为扫描通过的素材或本内容附件");
+            if (a.ownerType().equals("MATERIAL")) {
+                var authentication =
+                        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                                .getAuthentication();
+                if (authentication == null
+                        || authentication.getAuthorities().stream()
+                                .noneMatch(
+                                        authority ->
+                                                authority.getAuthority().equals("materials:read")))
+                    throw new BusinessException(403, "FORBIDDEN", "缺少素材库读取权限");
+            }
+            if (assetId.equals(w.coverAssetId())
+                    && !a.mimeType().matches("image/(png|jpeg|gif|webp|avif)"))
+                throw new BusinessException(
+                        422, "COVER_FORMAT_INVALID", "封面请选择PNG、JPEG、GIF、WebP或AVIF图片");
+            if (assetId.equals(w.assetId())
+                    && w.type().equals("VIDEO")
+                    && !a.mimeType().startsWith("video/"))
+                throw new BusinessException(422, "VIDEO_FORMAT_INVALID", "视频内容请选择视频文件");
         }
     }
 
@@ -245,7 +268,8 @@ public class ContentService {
                 r.assetId(),
                 r.markdown(),
                 r.audience(),
-                r.projectId());
+                r.projectId(),
+                r.coverAssetId());
     }
 
     private void replaceTags(UUID id, List<UUID> ids) {
@@ -275,7 +299,8 @@ public class ContentService {
                 r.projectId(),
                 r.state(),
                 r.publishedVersionId(),
-                r.indexState());
+                r.indexState(),
+                r.coverAssetId());
     }
 
     private void admin(Actor a) {

@@ -13,7 +13,40 @@ import java.util.UUID;
 public interface AssetMapper {
     /** 内部完整投影字段，不直接返回HTTP。 */
     String COLS =
-            "id,upload_id,owner_type,project_id,receipt_order_id,content_id,forum_post_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,object_version,state,upload_expires_at,deleted_at,version,created_by,created_at,updated_at";
+            "id,upload_id,owner_type,project_id,receipt_order_id,content_id,forum_post_id,material_category_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,object_version,state,upload_expires_at,deleted_at,version,created_by,created_at,updated_at";
+
+    /** 素材库过滤；只有显式归属素材库的资产才可被管理端复用。 */
+    String MATERIAL_FILTER =
+            " FROM asset WHERE owner_type='MATERIAL' AND deleted_at IS NULL AND filename ILIKE"
+                + " #{q.pattern} <if test='q.categoryId != null'>AND"
+                + " material_category_id=#{q.categoryId}</if> <if test='q.state != null'>AND"
+                + " state=#{q.state}</if> <if test='q.kind != null'>AND (CASE WHEN mime_type LIKE"
+                + " 'image/%' THEN 'IMAGE' WHEN mime_type LIKE 'video/%' THEN 'VIDEO' WHEN"
+                + " mime_type LIKE 'text/%' OR mime_type IN"
+                + " ('application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-powerpoint','application/vnd.openxmlformats-officedocument.presentationml.presentation')"
+                + " THEN 'DOCUMENT' ELSE 'OTHER' END)=#{q.kind}</if>";
+
+    /**
+     * 查询共享素材，禁止混入项目凭证或论坛文件。
+     *
+     * @param q 过滤条件
+     * @return 当前页资产
+     */
+    @Select(
+            "<script>SELECT "
+                    + COLS
+                    + MATERIAL_FILTER
+                    + " ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}</script>")
+    java.util.List<AssetEntity> materials(@Param("q") AssetDtos.MaterialQuery q);
+
+    /**
+     * 相同权限范围的素材数量。
+     *
+     * @param q 条件
+     * @return 数量
+     */
+    @Select("<script>SELECT count(*)" + MATERIAL_FILTER + "</script>")
+    long materialCount(@Param("q") AssetDtos.MaterialQuery q);
 
     /**
      * 查询资产。
@@ -55,11 +88,12 @@ public interface AssetMapper {
      */
     @Insert(
             "INSERT INTO"
-                + " asset(id,upload_id,owner_type,project_id,receipt_order_id,content_id,forum_post_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by)"
+                + " asset(id,upload_id,owner_type,project_id,receipt_order_id,content_id,forum_post_id,material_category_id,storage_id,filename,size,sha256,mime_type,upload_key,upload_expires_at,created_by,updated_by)"
                 + " VALUES(#{id},#{uploadId},#{w.ownerType},CASE WHEN #{w.ownerType}='PROJECT' THEN"
                 + " #{w.ownerId} ELSE NULL END,CASE WHEN #{w.ownerType}='RECEIPT' THEN #{w.ownerId}"
                 + " ELSE NULL END,CASE WHEN #{w.ownerType}='KNOWLEDGE' THEN #{w.ownerId} ELSE NULL"
-                + " END,CASE WHEN #{w.ownerType}='FORUM' THEN #{w.ownerId} ELSE NULL"
+                + " END,CASE WHEN #{w.ownerType}='FORUM' THEN #{w.ownerId} ELSE NULL END,CASE WHEN"
+                + " #{w.ownerType}='MATERIAL' THEN #{w.ownerId} ELSE NULL"
                 + " END,#{storageId},#{w.filename},#{w.size},#{w.sha256},#{w.mimeType},#{key},#{expiry},#{actor},#{actor})")
     void insert(
             UUID id,
@@ -121,8 +155,9 @@ public interface AssetMapper {
             "SELECT EXISTS(SELECT 1 FROM forum_post_asset WHERE asset_id=#{id}) OR EXISTS(SELECT 1"
                     + " FROM order_receipt WHERE proof_asset_id=#{id}) OR EXISTS(SELECT 1 FROM"
                     + " project_delivery WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM"
-                    + " knowledge_content WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM"
-                    + " knowledge_version WHERE asset_id=#{id})")
+                    + " knowledge_content WHERE asset_id=#{id} OR cover_asset_id=#{id}) OR"
+                    + " EXISTS(SELECT 1 FROM knowledge_version WHERE asset_id=#{id} OR"
+                    + " cover_asset_id=#{id})")
     boolean referenced(UUID id);
 
     /**
@@ -137,8 +172,8 @@ public interface AssetMapper {
                 + " p.id=d.project_id JOIN software_order o ON o.id=p.order_id WHERE"
                 + " d.asset_id=#{id} AND d.state='PUBLISHED' AND o.student_id=#{student} AND"
                 + " o.status IN ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1"
-                + " FROM knowledge_content c WHERE c.asset_id=#{id} AND c.state='PUBLISHED' AND"
-                + " c.deleted_at IS NULL AND "
+                + " FROM knowledge_content c WHERE (c.asset_id=#{id} OR c.cover_asset_id=#{id}) AND"
+                + " c.state='PUBLISHED' AND c.deleted_at IS NULL AND "
                     + cn.zhixiang.platform.knowledge.mapper.ContentMapper.ACCESS
                     + ")")
     boolean studentVisible(UUID id, UUID student);

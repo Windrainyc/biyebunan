@@ -22,6 +22,7 @@ public final class ContentDtos {
      * @param assetId 本内容扫描通过的附件，可空
      * @param markdown Markdown正文，最多20万字符，可空
      * @param audience PUBLIC为已登录学生，MEMBER为有效会员，PROJECT为项目归属
+     * @param coverAssetId 扫描通过的图片封面，可空
      * @param projectId 项目范围时必填
      */
     public record Write(
@@ -32,7 +33,8 @@ public final class ContentDtos {
             UUID assetId,
             @Size(max = 200000) String markdown,
             @NotNull @Pattern(regexp = "PUBLIC|MEMBER|PROJECT") String audience,
-            UUID projectId) {}
+            UUID projectId,
+            UUID coverAssetId) {}
 
     /**
      * 内容响应。
@@ -51,6 +53,7 @@ public final class ContentDtos {
      * @param projectId 项目
      * @param state 状态
      * @param publishedVersionId 当前发布快照
+     * @param coverAssetId 图片封面，可空
      * @param indexState 索引状态
      */
     public record View(
@@ -68,7 +71,8 @@ public final class ContentDtos {
             UUID projectId,
             String state,
             UUID publishedVersionId,
-            String indexState) {}
+            String indexState,
+            UUID coverAssetId) {}
 
     /**
      * 操作依据。

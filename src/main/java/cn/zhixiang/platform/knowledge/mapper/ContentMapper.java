@@ -22,7 +22,7 @@ public interface ContentMapper {
 
     /** 内部投影列。 */
     String C =
-            "c.id,c.version,c.created_at,c.updated_at,c.title,c.category_id,c.type,c.asset_id,c.markdown,c.audience,c.project_id,c.state,c.published_version_id,c.index_state,c.index_generation";
+            "c.id,c.version,c.created_at,c.updated_at,c.title,c.category_id,c.type,c.asset_id,c.markdown,c.audience,c.project_id,c.state,c.published_version_id,c.index_state,c.index_generation,c.cover_asset_id";
 
     /** 共用分页条件。 */
     String F =
@@ -110,8 +110,8 @@ public interface ContentMapper {
      */
     @Insert(
             "INSERT INTO"
-                + " knowledge_content(id,title,category_id,type,asset_id,markdown,audience,project_id,created_by,updated_by)"
-                + " VALUES(#{id},#{w.title},#{w.categoryId},#{w.type},#{w.assetId},#{w.markdown},#{w.audience},#{w.projectId},#{actor},#{actor})")
+                + " knowledge_content(id,title,category_id,type,asset_id,cover_asset_id,markdown,audience,project_id,created_by,updated_by)"
+                + " VALUES(#{id},#{w.title},#{w.categoryId},#{w.type},#{w.assetId},#{w.coverAssetId},#{w.markdown},#{w.audience},#{w.projectId},#{actor},#{actor})")
     void insert(UUID id, @Param("w") ContentDtos.Write w, UUID actor);
 
     /**
@@ -123,7 +123,7 @@ public interface ContentMapper {
      */
     @Update(
             "UPDATE knowledge_content SET"
-                + " title=#{w.title},category_id=#{w.categoryId},type=#{w.type},asset_id=#{w.assetId},markdown=#{w.markdown},audience=#{w.audience},project_id=#{w.projectId},state='DRAFT',index_state='PENDING',index_generation=index_generation+1,version=version+1,updated_at=now(),updated_by=#{actor}"
+                + " title=#{w.title},category_id=#{w.categoryId},type=#{w.type},asset_id=#{w.assetId},cover_asset_id=#{w.coverAssetId},markdown=#{w.markdown},audience=#{w.audience},project_id=#{w.projectId},state='DRAFT',index_state='PENDING',index_generation=index_generation+1,version=version+1,updated_at=now(),updated_by=#{actor}"
                 + " WHERE id=#{id}")
     void update(UUID id, @Param("w") ContentDtos.Write w, UUID actor);
 
@@ -178,10 +178,10 @@ public interface ContentMapper {
      */
     @Insert(
             "INSERT INTO"
-                + " knowledge_version(id,content_id,version_number,title,category_id,type,asset_id,markdown,audience,project_id,created_by)"
+                + " knowledge_version(id,content_id,version_number,title,category_id,type,asset_id,cover_asset_id,markdown,audience,project_id,created_by)"
                 + " SELECT #{versionId},c.id,(SELECT coalesce(max(version_number),0)+1 FROM"
                 + " knowledge_version WHERE"
-                + " content_id=c.id),c.title,c.category_id,c.type,c.asset_id,c.markdown,c.audience,c.project_id,#{actor}"
+                + " content_id=c.id),c.title,c.category_id,c.type,c.asset_id,c.cover_asset_id,c.markdown,c.audience,c.project_id,#{actor}"
                 + " FROM knowledge_content c WHERE c.id=#{id}")
     void snapshot(UUID versionId, UUID id, UUID actor);
 
