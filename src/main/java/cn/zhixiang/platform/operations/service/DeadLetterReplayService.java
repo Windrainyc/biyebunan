@@ -18,6 +18,7 @@ public class DeadLetterReplayService {
     private final TokenDigester digester;
     private final ActivityInbox inbox;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.notification.service.NotificationInbox notifications;
 
     /**
      * 创建恢复用例。
@@ -25,17 +26,20 @@ public class DeadLetterReplayService {
      * @param identities 真实会话与权限
      * @param digester 令牌摘要
      * @param inbox 原统计消费用例
+     * @param notifications 通知原消费用例
      * @param writes 事务审计
      */
     public DeadLetterReplayService(
             IdentityMapper identities,
             TokenDigester digester,
             ActivityInbox inbox,
-            WriteMapper writes) {
+            WriteMapper writes,
+            cn.zhixiang.platform.notification.service.NotificationInbox notifications) {
         this.identities = identities;
         this.digester = digester;
         this.inbox = inbox;
         this.writes = writes;
+        this.notifications = notifications;
     }
 
     /**
@@ -49,6 +53,23 @@ public class DeadLetterReplayService {
      */
     @Transactional(rollbackFor = Exception.class)
     public boolean replay(Message message, String token, String reason) {
+        return execute(message, token, reason, false);
+    }
+
+    /**
+     * 恢复指定通知死信，沿用会话权限和事务审计。
+     *
+     * @param message 原始消息字节
+     * @param token 管理员会话
+     * @param reason 恢复原因
+     * @return 是否首次消费
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean replayNotification(Message message, String token, String reason) {
+        return execute(message, token, reason, true);
+    }
+
+    private boolean execute(Message message, String token, String reason, boolean notification) {
         if (token == null || token.isBlank() || token.length() > 1024)
             throw new BusinessException(401, "UNAUTHENTICATED", "需要有效管理员会话");
         var actor = identities.authenticate(digester.digest("access", token));
@@ -58,12 +79,12 @@ public class DeadLetterReplayService {
             throw new BusinessException(403, "FORBIDDEN", "缺少任务恢复权限");
         if (reason == null || reason.isBlank() || reason.length() > 200)
             throw new BusinessException(400, "VALIDATION_ERROR", "需要1至200字恢复原因");
-        boolean first = inbox.consume(message);
+        boolean first = notification ? notifications.consume(message) : inbox.consume(message);
         writes.auditReason(
                 UUID.randomUUID(),
                 actor.id(),
                 "DEAD_LETTER_REPLAY",
-                "activity_event",
+                notification ? "notification_event" : "activity_event",
                 UUID.fromString(message.getMessageProperties().getMessageId()),
                 reason);
         return first;

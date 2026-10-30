@@ -1,0 +1,12 @@
+{
+  "database": "zx_ui_854985f04581",
+  "assetId": "ca7afb5d-bb97-4622-b3b6-152fb9624b7d",
+  "sourceState": "READY",
+  "pdfBytes": 16148,
+  "checks": [
+    "真实DOCX签名上传和扫描",
+    "Office转换为PDF",
+    "跨端管理员令牌访问学生预览403"
+  ],
+  "verifiedAt": "2026-10-30 12:36:27"
+}

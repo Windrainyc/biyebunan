@@ -54,6 +54,7 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.knowledge.service.KnowledgeIndexer knowledgeIndexer;
     @Autowired cn.zhixiang.platform.knowledge.mapper.IndexMapper indexes;
     @Autowired cn.zhixiang.platform.operations.service.ActivityInbox activityInbox;
+    @Autowired cn.zhixiang.platform.notification.service.NotificationInbox notificationInbox;
     @Autowired cn.zhixiang.platform.exporting.service.ExportService exports;
     @Autowired cn.zhixiang.platform.exporting.service.ExportCleanup exportCleanup;
     @Autowired cn.zhixiang.platform.exporting.mapper.ExportMapper exportMapper;
@@ -1056,7 +1057,7 @@ class FoundationIntegrationTest {
                         + " provider_template_id='delivery-published-v1',version=2 WHERE id=?",
                 template);
         tx.executeWithoutResult(s -> notifications.enqueueDelivery(adminId, event));
-        assertTrue(notifications.processOne());
+        tx.executeWithoutResult(s -> notifications.processEvent(event));
         assertEquals(
                 "新资料已发布，请查看项目。",
                 db.queryForObject(
@@ -2713,6 +2714,132 @@ class FoundationIntegrationTest {
                         "SELECT count(*) FROM audit_event WHERE actor_id=?",
                         Integer.class,
                         adminId));
+    }
+
+    @Test
+    void notificationInboxAuthenticatesAndDeduplicatesDelivery() throws Exception {
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        UUID event = UUID.randomUUID(), aggregate = UUID.randomUUID();
+        db.update(
+                "INSERT INTO outbox_event(id,aggregate_id,event_type,payload) VALUES(?,?,?,'{}')",
+                event,
+                aggregate,
+                "delivery.PUBLISHED");
+        tx.executeWithoutResult(s -> notifications.enqueue(adminId, event, "资料更新", "新的交付版本已发布"));
+        byte[] body =
+                json.writeValueAsBytes(
+                        Map.of(
+                                "eventId",
+                                event,
+                                "aggregateId",
+                                aggregate,
+                                "type",
+                                "delivery.PUBLISHED",
+                                "data",
+                                Map.of()));
+        var properties = new org.springframework.amqp.core.MessageProperties();
+        properties.setMessageId(event.toString());
+        var message = new org.springframework.amqp.core.Message(body, properties);
+        String queueName = "zx.test.notification." + UUID.randomUUID();
+        var brokerAdmin =
+                new org.springframework.amqp.rabbit.core.RabbitAdmin(rabbit.getConnectionFactory());
+        var listener =
+                new org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer(
+                        rabbit.getConnectionFactory());
+        var completed = new java.util.concurrent.CountDownLatch(2);
+        var outcomes = new java.util.concurrent.CopyOnWriteArrayList<Boolean>();
+        try {
+            brokerAdmin.declareQueue(new org.springframework.amqp.core.Queue(queueName, false));
+            listener.setQueueNames(queueName);
+            listener.setMessageListener(
+                    (org.springframework.amqp.core.MessageListener)
+                            delivered -> {
+                                outcomes.add(notificationInbox.consume(delivered));
+                                completed.countDown();
+                            });
+            listener.setDefaultRequeueRejected(false);
+            listener.start();
+            rabbit.send("", queueName, message);
+            rabbit.send("", queueName, message);
+            assertTrue(completed.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(java.util.List.of(true, false), outcomes);
+        } finally {
+            listener.stop();
+            brokerAdmin.deleteQueue(queueName);
+        }
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification WHERE event_id=?",
+                        Integer.class,
+                        event));
+        assertEquals(
+                "DELIVERED",
+                db.queryForObject(
+                        "SELECT state FROM notification_delivery_task WHERE event_id=?",
+                        String.class,
+                        event));
+        byte[] forged =
+                json.writeValueAsBytes(
+                        Map.of(
+                                "eventId",
+                                event,
+                                "aggregateId",
+                                aggregate,
+                                "type",
+                                "delivery.PUBLISHED",
+                                "data",
+                                Map.of("forged", true)));
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () ->
+                        notificationInbox.consume(
+                                new org.springframework.amqp.core.Message(forged, properties)));
+    }
+
+    @Autowired cn.zhixiang.platform.operations.service.DeadLetterReplayService replayService;
+
+    @Test
+    void notificationDeadLetterReplayRequiresSessionAndDoesNotDuplicate() throws Exception {
+        UUID event = UUID.randomUUID(), aggregate = UUID.randomUUID();
+        db.update(
+                "INSERT INTO outbox_event(id,aggregate_id,event_type,payload) VALUES(?,?,?,'{}')",
+                event,
+                aggregate,
+                "delivery.PUBLISHED");
+        new org.springframework.transaction.support.TransactionTemplate(txManager)
+                .executeWithoutResult(s -> notifications.enqueue(adminId, event, "恢复通知", "受控恢复验收"));
+        var props = new org.springframework.amqp.core.MessageProperties();
+        props.setMessageId(event.toString());
+        var message =
+                new org.springframework.amqp.core.Message(
+                        json.writeValueAsBytes(
+                                Map.of(
+                                        "eventId",
+                                        event,
+                                        "aggregateId",
+                                        aggregate,
+                                        "type",
+                                        "delivery.PUBLISHED",
+                                        "data",
+                                        Map.of())),
+                        props);
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () -> replayService.replayNotification(message, "invalid-session", "恢复验收"));
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT"
+                        + " role_id,'post_admin_jobs_id_retry' FROM user_role WHERE user_id=? ON"
+                        + " CONFLICT DO NOTHING",
+                adminId);
+        assertTrue(replayService.replayNotification(message, adminToken, "首次恢复验收"));
+        assertFalse(replayService.replayNotification(message, adminToken, "重复恢复验收"));
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification WHERE event_id=?",
+                        Integer.class,
+                        event));
     }
 
     @Test

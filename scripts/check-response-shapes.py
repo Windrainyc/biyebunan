@@ -10,6 +10,7 @@ import yaml
 root = Path(__file__).resolve().parents[1]
 schemas = yaml.safe_load((root / 'contract/openapi.yaml').read_text())['components']['schemas']
 bindings = {
+    'preview/dto/DocumentPreview.java': 'DocumentPreview',
     'billing/dto/AdjudicationDtos.java': 'Adjudication',
     'operations/dto/StatisticsResponse.java': 'Statistics',
     'operations/dto/AuditResponse.java': 'Audit',
@@ -44,7 +45,7 @@ bindings = {
 errors = []
 for file, schema in bindings.items():
     source = (root / 'src/main/java/cn/zhixiang/platform' / file).read_text()
-    record_name = Path(file).stem if Path(file).stem.endswith('Response') else 'View'
+    record_name = Path(file).stem if (Path(file).stem.endswith('Response') or Path(file).stem == 'DocumentPreview') else 'View'
     match = re.search(r'public record ' + record_name + r'\(([^()]*)\)', source, re.S)
     if match is None or '@' in match[1]:
         errors.append(f'{file}: 不支持的记录形式，需人工核对并扩展检查器')

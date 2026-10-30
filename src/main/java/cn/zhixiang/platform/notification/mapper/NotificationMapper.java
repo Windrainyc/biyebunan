@@ -205,4 +205,38 @@ public interface NotificationMapper {
                 + " text),CAST(#{body} AS text))::text,'UTF8')),'hex') FROM"
                 + " notification_delivery_task WHERE recipient_id=#{user} AND event_id=#{event}")
     boolean sameTaskContent(UUID user, UUID event, String title, String body);
+
+    /**
+     * 锁定指定可信事件尚未投递的任务；与补偿轮询竞争时等待其短事务结果。
+     *
+     * @param event 本库outbox事件
+     * @return 待处理收件人任务
+     */
+    @Select(
+            "SELECT event_id,recipient_id,title,body FROM notification_delivery_task WHERE"
+                    + " event_id=#{event} AND state='QUEUED' ORDER BY recipient_id FOR UPDATE")
+    List<NotificationTaskEntity> pendingEvent(UUID event);
+
+    /**
+     * 独立通知消费者去重，与站内信写入同事务。
+     *
+     * @param event 可信事件
+     * @param digest 原始消息摘要
+     * @return 首次写入为1，重复为0
+     */
+    @Insert(
+            "INSERT INTO inbox_event(event_id,consumer,body_sha256)"
+                    + " VALUES(#{event},'notification-v1',#{digest}) ON CONFLICT DO NOTHING")
+    int receiveEvent(UUID event, String digest);
+
+    /**
+     * 已接收的消息摘要，拒绝同事件不同正文。
+     *
+     * @param event 事件标识
+     * @return 摘要或空
+     */
+    @Select(
+            "SELECT body_sha256 FROM inbox_event WHERE event_id=#{event} AND"
+                    + " consumer='notification-v1'")
+    String eventDigest(UUID event);
 }

@@ -7,8 +7,13 @@ import os,shlex,subprocess,json,uuid,time,urllib.request,urllib.parse,base64,hma
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 os.umask(0o077)
-if set(sys.argv[1:]) - {'--test-sms','--resume','--test-model','--container-frontends'}:raise SystemExit('仅支持--test-sms、--test-model、--container-frontends和--resume')
+if set(sys.argv[1:]) - {'--test-sms','--resume','--test-model','--container-frontends','--office'}:raise SystemExit('仅支持--test-sms、--test-model、--container-frontends、--office和--resume')
 env=os.environ.copy()
+if '--office' in sys.argv:
+ token_path=Path(__file__).resolve().parents[1]/'secrets/office-preview-token'
+ if not token_path.is_file(): raise SystemExit('请先启动独立Office转换服务')
+ env.update(ZX_DOCUMENT_PREVIEW_ENDPOINT='http://127.0.0.1:18790',ZX_DOCUMENT_PREVIEW_TOKEN_FILE=str(token_path))
+
 # 已有API占用端口时拒绝初始化，避免把请求送到其他运行环境。
 with socket.socket() as probe:
  if probe.connect_ex(('127.0.0.1',18080)) == 0:

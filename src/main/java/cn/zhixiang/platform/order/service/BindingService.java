@@ -31,6 +31,7 @@ public class BindingService implements OrderChallengePort {
     private final SmsGateway sms;
     private final TransactionTemplate tx;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.notification.service.NotificationService notifications;
     private final OrderService orders;
     private final SecureRandom random = new SecureRandom();
 
@@ -43,6 +44,7 @@ public class BindingService implements OrderChallengePort {
      * @param digester HMAC摘要
      * @param sms 短信端口
      * @param tx 短事务
+     * @param notifications 事务内通知快照
      * @param writes 审计事件
      * @param orders 订单读取
      */
@@ -53,6 +55,7 @@ public class BindingService implements OrderChallengePort {
             TokenDigester digester,
             SmsGateway sms,
             TransactionTemplate tx,
+            cn.zhixiang.platform.notification.service.NotificationService notifications,
             WriteMapper writes,
             OrderService orders) {
         this.mapper = mapper;
@@ -62,6 +65,7 @@ public class BindingService implements OrderChallengePort {
         this.sms = sms;
         this.tx = tx;
         this.writes = writes;
+        this.notifications = notifications;
         this.orders = orders;
     }
 
@@ -152,8 +156,9 @@ public class BindingService implements OrderChallengePort {
         mapper.consume(input.challengeId());
         if (mapper.bind(order, actor.id()) == 1) {
             writes.audit(UUID.randomUUID(), actor.id(), "BOUND", "software_order", order);
-            writes.event(
-                    UUID.randomUUID(), order, "software_order.BOUND", "{\"id\":\"" + order + "\"}");
+            UUID event = UUID.randomUUID();
+            writes.event(event, order, "software_order.BOUND", "{\"id\":\"" + order + "\"}");
+            notifications.enqueue(actor.id(), event, "订单绑定成功", "订单已关联到你的账户，可在我的项目中查看后续进展。");
         }
         return orders.get(order, actor);
     }

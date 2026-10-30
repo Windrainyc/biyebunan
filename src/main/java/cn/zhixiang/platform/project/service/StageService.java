@@ -31,6 +31,7 @@ public class StageService {
     private final OrderMapper orders;
     private final ProjectService service;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.notification.service.NotificationService notifications;
 
     /**
      * 创建状态机。
@@ -39,6 +40,7 @@ public class StageService {
      * @param projects 项目端口
      * @param orders 订单端口
      * @param service 项目响应
+     * @param notifications 事务内通知快照
      * @param writes 审计事件
      */
     public StageService(
@@ -46,12 +48,14 @@ public class StageService {
             ProjectMapper projects,
             OrderMapper orders,
             ProjectService service,
+            cn.zhixiang.platform.notification.service.NotificationService notifications,
             WriteMapper writes) {
         this.mapper = mapper;
         this.projects = projects;
         this.orders = orders;
         this.service = service;
         this.writes = writes;
+        this.notifications = notifications;
     }
 
     /**
@@ -127,8 +131,11 @@ public class StageService {
             throw new BusinessException(412, "VERSION_CONFLICT", "项目已更新");
         mapper.event(UUID.randomUUID(), p.id(), p.stage(), target, reason, actor.id(), decision);
         writes.audit(UUID.randomUUID(), actor.id(), "STAGE_CHANGED", "project", p.id());
-        writes.event(
-                UUID.randomUUID(), p.id(), "project.STAGE_CHANGED", "{\"id\":\"" + p.id() + "\"}");
+        UUID event = UUID.randomUUID();
+        writes.event(event, p.id(), "project.STAGE_CHANGED", "{\"id\":\"" + p.id() + "\"}");
+        var order = orders.get(p.orderId(), actor);
+        if (order.studentId() != null)
+            notifications.enqueue(order.studentId(), event, "项目进度已更新", "你的项目阶段已更新，请进入项目空间查看最新进展。");
         return service.get(p.id(), actor);
     }
 

@@ -1,0 +1,10 @@
+{
+  "database": "zx_ui_854985f04581",
+  "eventId": "4874a1f7-87e7-4880-a9d9-1f319c1bcccb",
+  "publisherConfirmed": true,
+  "notificationInboxCount": 1,
+  "notificationCount": 1,
+  "liveConsumers": 1,
+  "fixtureKind": "独立数据库探针，业务阶段与绑定另由集成测试覆盖",
+  "verifiedAt": "2026-10-30 12:38:42"
+}

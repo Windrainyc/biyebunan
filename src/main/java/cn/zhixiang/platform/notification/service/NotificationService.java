@@ -182,6 +182,20 @@ public class NotificationService {
                 error);
     }
 
+    /**
+     * 按可信消息事件投递所有待处理接收者，调用者负责核对outbox并持有事务。
+     *
+     * @param event 已验证的领域事件
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void processEvent(UUID event) {
+        for (var task : mapper.pendingEvent(event)) {
+            boolean missing = !mapper.recipientExists(task.recipientId());
+            if (!missing) deliver(task.recipientId(), task.eventId(), task.title(), task.body());
+            mapper.delivered(task.recipientId(), task.eventId(), missing);
+        }
+    }
+
     private NotificationResponse view(NotificationEntity r) {
         return new NotificationResponse(
                 r.id(), r.title(), r.body(), r.readAt() != null, r.createdAt());

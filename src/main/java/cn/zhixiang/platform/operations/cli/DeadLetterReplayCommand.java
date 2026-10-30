@@ -43,9 +43,12 @@ public class DeadLetterReplayCommand implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         UUID event = UUID.fromString(environment.getRequiredProperty("ZX_REPLAY_EVENT_ID"));
+        String queue = environment.getProperty("ZX_REPLAY_QUEUE", "zx.activity.dead");
+        if (!java.util.Set.of("zx.activity.dead", "zx.notifications.dead").contains(queue))
+            throw new IllegalArgumentException("不支持的死信队列");
         boolean found =
                 recovery.recover(
-                        "zx.activity.dead",
+                        queue,
                         event,
                         environment.getRequiredProperty("ZX_REPLAY_ACCESS_TOKEN"),
                         environment.getRequiredProperty("ZX_REPLAY_REASON"));

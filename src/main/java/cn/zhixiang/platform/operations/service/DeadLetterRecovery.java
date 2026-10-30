@@ -27,7 +27,7 @@ public class DeadLetterRecovery {
     /**
      * 最多读取100条定位指定事件；未找到不丢弃其他消息。ACK失败可能再次恢复，由inbox去重。
      *
-     * @param queue 受控zx命名队列，CLI固定zx.activity.dead，测试使用隔离队列
+     * @param queue 受控zx命名队列，CLI仅允许统计或通知死信队列，测试使用隔离队列
      * @param event 显式指定事件，不批量盲目重放
      * @param token 有效管理员访问令牌
      * @param reason 操作原因
@@ -52,8 +52,10 @@ public class DeadLetterRecovery {
                                     var props =
                                             new org.springframework.amqp.core.MessageProperties();
                                     props.setMessageId(delivery.getProps().getMessageId());
-                                    replay.replay(
-                                            new Message(delivery.getBody(), props), token, reason);
+                                    var message = new Message(delivery.getBody(), props);
+                                    if (queue.equals("zx.notifications.dead"))
+                                        replay.replayNotification(message, token, reason);
+                                    else replay.replay(message, token, reason);
                                     channel.basicAck(tag, false);
                                     pending.remove(Long.valueOf(tag));
                                     return true;

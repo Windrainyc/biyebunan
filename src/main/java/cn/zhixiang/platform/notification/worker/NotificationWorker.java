@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/** 独立worker投递站内信；最多每批50项，失败不打印通知正文。 */
+/** 站内信低频补偿；Rabbit消息为主，补偿处理历史积压或拓扑部署前的事件。 */
 @Component
 @Profile("worker")
 public class NotificationWorker {
@@ -24,7 +24,7 @@ public class NotificationWorker {
     }
 
     /** 多节点依靠SKIP LOCKED和收件箱唯一约束协调；失败回滚后下一轮接续。 */
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelayString = "${ZX_NOTIFICATION_REPAIR_MS:60000}")
     public void poll() {
         try {
             for (int i = 0; i < 50 && service.processOne(); i++) {}
