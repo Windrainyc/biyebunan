@@ -20,11 +20,13 @@ public interface NotificationMapper {
      * @return 当前页
      */
     @Select(
-            "<script>SELECT id,title,body,read_at,created_at FROM in_app_notification WHERE"
-                + " recipient_id=#{user} AND (title ILIKE #{q.pattern} ESCAPE E'\\\\' OR body ILIKE"
-                + " #{q.pattern} ESCAPE E'\\\\') <if test='unread != null'>AND (read_at IS"
-                + " NULL)=#{unread}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
-                + " #{q.offset}</script>")
+            "<script>SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
+                + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
+                + " in_app_notification WHERE recipient_id=#{user} AND (title ILIKE #{q.pattern}"
+                + " ESCAPE E'\\\\' OR body ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='unread !="
+                + " null'>AND (read_at IS NULL)=#{unread}</if> ORDER BY ${q.orderBy} LIMIT"
+                + " #{q.size} OFFSET #{q.offset}</script>")
     List<NotificationEntity> list(UUID user, @Param("q") PageQuery q, Boolean unread);
 
     /**
@@ -49,8 +51,10 @@ public interface NotificationMapper {
      * @return 通知或空
      */
     @Select(
-            "SELECT id,title,body,read_at,created_at FROM in_app_notification WHERE id=#{id} AND"
-                    + " recipient_id=#{user} FOR UPDATE")
+            "SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
+                + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
+                + " in_app_notification WHERE id=#{id} AND recipient_id=#{user} FOR UPDATE")
     NotificationEntity lock(UUID id, UUID user);
 
     /**
@@ -86,8 +90,10 @@ public interface NotificationMapper {
      * @return 已写入通知
      */
     @Select(
-            "SELECT id,title,body,read_at,created_at FROM in_app_notification WHERE"
-                    + " recipient_id=#{user} AND event_id=#{event}")
+            "SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
+                + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
+                + " in_app_notification WHERE recipient_id=#{user} AND event_id=#{event}")
     NotificationEntity event(UUID user, UUID event);
 
     /**

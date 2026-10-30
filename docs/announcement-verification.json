@@ -1,0 +1,14 @@
+{
+  "announcementId": "ed3af19f-a5a0-4dfe-b7b2-31258ea13393",
+  "recipients": 2,
+  "confirmed": 2,
+  "inbox": 2,
+  "delivered": 2,
+  "read": 2,
+  "browserChecks": [
+    "管理员指定学生和管理员发布",
+    "发送记录两人送达",
+    "管理员正文和已读",
+    "学生正文和已读"
+  ]
+}

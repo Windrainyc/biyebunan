@@ -198,6 +198,6 @@ public class NotificationService {
 
     private NotificationResponse view(NotificationEntity r) {
         return new NotificationResponse(
-                r.id(), r.title(), r.body(), r.readAt() != null, r.createdAt());
+                r.id(), r.title(), r.body(), r.readAt() != null, r.createdAt(), r.announcementId());
     }
 }

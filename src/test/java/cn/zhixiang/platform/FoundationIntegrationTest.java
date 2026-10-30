@@ -1753,6 +1753,164 @@ class FoundationIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Autowired cn.zhixiang.platform.notification.service.AnnouncementService announcements;
+
+    @Test
+    void announcementPublicationSnapshotsRecipientsAndProtectsBody() throws Exception {
+        UUID role =
+                db.queryForObject(
+                        "SELECT role_id FROM user_role WHERE user_id=?", UUID.class, adminId);
+        for (String permission :
+                List.of("announcements:read", "announcements:write", "get_admin_notifications"))
+            db.update("INSERT INTO role_permission VALUES(?,?)", role, permission);
+        UUID student = UUID.randomUUID(), other = UUID.randomUUID();
+        String token = UUID.randomUUID().toString(), otherToken = UUID.randomUUID().toString();
+        seed(student, "student", token);
+        seed(other, "student", otherToken);
+        for (UUID id : List.of(student, other))
+            db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')", id);
+        String path = "/api/v1/admin/announcements", key = UUID.randomUUID().toString();
+        String body =
+                json.writeValueAsString(
+                        Map.of(
+                                "title",
+                                "指定公告",
+                                "body",
+                                "完整正文".repeat(100),
+                                "kind",
+                                "ANNOUNCEMENT",
+                                "audience",
+                                "SELECTED",
+                                "recipientIds",
+                                List.of(student)));
+        var result =
+                mvc.perform(
+                                post(path)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", key)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        UUID id =
+                UUID.fromString(
+                        json.readTree(result.getResponse().getContentAsString())
+                                .get("id")
+                                .asText());
+        mvc.perform(
+                        post(path)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", key)
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(content().json(result.getResponse().getContentAsString()));
+        mvc.perform(
+                        get("/api/v1/student/announcements/" + id)
+                                .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        get("/api/v1/student/announcements/" + id)
+                                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.body").value("完整正文".repeat(100)))
+                .andExpect(jsonPath("$.recipientCount").doesNotExist());
+        UUID event =
+                db.queryForObject(
+                        "SELECT event_id FROM announcement_recipient WHERE announcement_id=?",
+                        UUID.class,
+                        id);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tx.executeWithoutResult(x -> notifications.processEvent(event));
+        tx.executeWithoutResult(x -> notifications.processEvent(event));
+        mvc.perform(get("/api/v1/student/notifications").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].announcementId").value(id.toString()));
+        UUID notification =
+                db.queryForObject(
+                        "SELECT id FROM in_app_notification WHERE event_id=?", UUID.class, event);
+        mvc.perform(
+                        post("/api/v1/student/notifications/" + notification + "/read")
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID().toString()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get(path + "/" + id).header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recipientCount").value(1))
+                .andExpect(jsonPath("$.deliveredCount").value(1))
+                .andExpect(jsonPath("$.readCount").value(1));
+        mvc.perform(
+                        get(path + "/recipients")
+                                .param("platform", "student")
+                                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        long before = db.queryForObject("SELECT count(*) FROM announcement", Long.class);
+        String invalid =
+                json.writeValueAsString(
+                        Map.of(
+                                "title",
+                                "无效",
+                                "body",
+                                "不应部分投递",
+                                "kind",
+                                "REMINDER",
+                                "audience",
+                                "SELECTED",
+                                "recipientIds",
+                                List.of(student, UUID.randomUUID())));
+        mvc.perform(
+                        post(path)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .contentType("application/json")
+                                .content(invalid))
+                .andExpect(status().isUnprocessableEntity());
+        assertEquals(before, db.queryForObject("SELECT count(*) FROM announcement", Long.class));
+        String all =
+                json.writeValueAsString(
+                        Map.of(
+                                "title",
+                                "全部公告",
+                                "body",
+                                "全部当前启用用户",
+                                "kind",
+                                "ANNOUNCEMENT",
+                                "audience",
+                                "ALL",
+                                "recipientIds",
+                                List.of()));
+        var allResponse =
+                mvc.perform(
+                                post(path)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .contentType("application/json")
+                                        .content(all))
+                        .andExpect(status().isCreated())
+                        .andReturn();
+        UUID allId =
+                UUID.fromString(
+                        json.readTree(allResponse.getResponse().getContentAsString())
+                                .get("id")
+                                .asText());
+        long snapshot =
+                db.queryForObject(
+                        "SELECT count(*) FROM announcement_recipient WHERE announcement_id=?",
+                        Long.class,
+                        allId);
+        assertEquals(
+                db.queryForObject(
+                        "SELECT count(*) FROM user_account WHERE status='ENABLED'", Long.class),
+                snapshot);
+        seed(UUID.randomUUID(), "student", UUID.randomUUID().toString());
+        assertEquals(
+                snapshot,
+                db.queryForObject(
+                        "SELECT count(*) FROM announcement_recipient WHERE announcement_id=?",
+                        Long.class,
+                        allId));
+    }
+
     @Test
     void notificationsArePrivateDeduplicatedAndMonotonic() throws Exception {
         var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);

@@ -36,7 +36,7 @@ env.update(ZX_DB_URL=f"jdbc:postgresql://postgres:5432/{ui['database']}?currentS
            ZX_MODEL_CALLS_ENABLED='false', ZX_OTLP_ENABLED='false')
 name = 'zx-api-verify-' + uuid.uuid4().hex[:12]
 worker_mode = '--worker' in __import__('sys').argv
-image = 'zhixiang/worker:0.37.0-dev' if worker_mode else 'zhixiang/platform:0.37.0-dev'
+image = 'zhixiang/worker:0.38.0-dev' if worker_mode else 'zhixiang/platform:0.38.0-dev'
 command = ['docker', '--context', 'colima-zhixiang']
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]

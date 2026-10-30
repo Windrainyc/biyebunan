@@ -12,7 +12,13 @@ import java.util.*;
  * @param title 安全短标题
  * @param body 安全短正文
  * @param read 已读标志
+ * @param announcementId 关联公告，可空表示业务提醒
  * @param createdAt 创建时间
  */
 public record NotificationResponse(
-        UUID id, String title, String body, boolean read, OffsetDateTime createdAt) {}
+        UUID id,
+        String title,
+        String body,
+        boolean read,
+        OffsetDateTime createdAt,
+        UUID announcementId) {}

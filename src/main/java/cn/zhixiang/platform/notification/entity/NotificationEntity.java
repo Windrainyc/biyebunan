@@ -10,7 +10,13 @@ import java.util.*;
  * @param title 标题
  * @param body 正文
  * @param readAt 已读时间，未读为空
+ * @param announcementId 关联公告，可空表示业务提醒
  * @param createdAt 创建时间
  */
 public record NotificationEntity(
-        UUID id, String title, String body, OffsetDateTime readAt, OffsetDateTime createdAt) {}
+        UUID id,
+        String title,
+        String body,
+        OffsetDateTime readAt,
+        OffsetDateTime createdAt,
+        UUID announcementId) {}
