@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.33
+  version: 1.0.34
   description: '工程实现契约。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     路由映射与字段校验不代表全部业务验收或生产部署；实际验证及外部配置边界见docs/开发进度.md。'
@@ -18166,14 +18166,13 @@ components:
       required:
       - reason
     StateChange:
+      description: 记录行直接启用或停用，仅提交目标状态；沿用幂等键、If-Match与服务端审计。
       type: object
       additionalProperties: false
       properties:
         status: *id015
-        reason: *id011
       required:
       - status
-      - reason
     StageChange:
       description: 订单须ACTIVE。阶段顺序推进，可暂停并恢复原阶段；DONE仅由学生验收产生。进入ACCEPTANCE须进度100并发布源码与论文模板。
       type: object
