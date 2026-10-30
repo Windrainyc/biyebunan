@@ -1,0 +1,16 @@
+{
+  "verifiedAt": "2026-10-30 15:49:10",
+  "scope": "独立转换器真实ODF文件转PDF，不替代浏览器或全部Office格式验收",
+  "results": [
+    {
+      "format": "odt",
+      "pdfBytes": 18799,
+      "converted": true
+    },
+    {
+      "format": "ods",
+      "pdfBytes": 14846,
+      "converted": true
+    }
+  ]
+}
