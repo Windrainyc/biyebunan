@@ -34,6 +34,8 @@ public final class AuthDtos {
      * @param status 启停
      * @param schoolId 院校
      * @param majorId 专业
+     * @param avatarIndex 默认头像序号
+     * @param avatarAssetId 本人头像
      * @param roleIds 角色标识
      */
     public record User(
@@ -47,7 +49,9 @@ public final class AuthDtos {
             String status,
             UUID schoolId,
             UUID majorId,
-            List<UUID> roleIds) {}
+            List<UUID> roleIds,
+            int avatarIndex,
+            UUID avatarAssetId) {}
 
     /**
      * 模块数据记录，字段含义和取值约束见参数说明。

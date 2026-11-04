@@ -68,6 +68,8 @@ public class ProfileService {
             throw new BusinessException(404, "RESOURCE_NOT_FOUND", "账户不存在");
         if (account.version() != version)
             throw new BusinessException(412, "VERSION_CONFLICT", "资料已经更新");
+        if (w.avatarAssetId() != null && mapper.avatar(w.avatarAssetId(), actor.id()) == null)
+            throw new BusinessException(422, "INVALID_AVATAR", "头像须为本人上传且扫描通过的图片");
         // 按院校→专业锁定，阻止检验成功后并发停用或删除；不存在则拒绝。
         if (mapper.school(w.schoolId()) == null || mapper.major(w.majorId(), w.schoolId()) == null)
             throw new BusinessException(422, "INVALID_REFERENCE", "院校专业须启用且相互匹配");

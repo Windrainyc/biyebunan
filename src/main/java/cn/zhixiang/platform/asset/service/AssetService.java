@@ -99,6 +99,11 @@ public class AssetService {
     @Transactional(rollbackFor = Exception.class)
     public AssetDtos.Grant create(AssetDtos.Upload w, Actor actor) {
         authorize(w.ownerType(), w.ownerId(), actor, true);
+        if (w.ownerType().equals("PROFILE")
+                && (w.size() > 5 * 1024 * 1024
+                        || !java.util.Set.of("image/png", "image/jpeg", "image/webp")
+                                .contains(w.mimeType())))
+            throw new BusinessException(422, "INVALID_AVATAR", "头像须为不超过5MB的PNG、JPEG或WebP图片");
         if (w.ownerType().equals("MATERIAL")
                 && materialCategories.get(w.ownerId()).status()
                         != cn.zhixiang.platform.asset.dto.MaterialCategoryDtos.Status.ENABLED)
@@ -201,6 +206,10 @@ public class AssetService {
     private AssetEntity visible(UUID id, Actor actor) {
         var r = mapper.get(id);
         live(r);
+        if (r.ownerType().equals("PROFILE")) {
+            authorize("PROFILE", r.profileUserId(), actor, false);
+            return r;
+        }
         if (r.ownerType().equals("FORUM")) {
             forum.read(r.forumPostId(), id, actor);
             return r;
@@ -212,6 +221,7 @@ public class AssetService {
     }
 
     private UUID owner(AssetEntity r) {
+        if (r.profileUserId() != null) return r.profileUserId();
         if (r.materialCategoryId() != null) return r.materialCategoryId();
         return r.forumPostId() != null
                 ? r.forumPostId()
@@ -221,6 +231,10 @@ public class AssetService {
     }
 
     private void authorize(String type, UUID id, Actor actor, boolean write) {
+        if (type.equals("PROFILE")) {
+            if (!actor.platform().equals("student") || !actor.id().equals(id)) missing();
+            return;
+        }
         if (type.equals("FORUM")) {
             if (!write) throw new IllegalStateException("论坛读取必须使用资产标识验权");
             forum.write(id, actor);

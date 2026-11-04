@@ -32,11 +32,13 @@ public final class DeliveryDtos {
      * 一次发布多类交付文件，各类最多一个文件，不覆盖历史版本。
      *
      * @param files 本次更新的资料，未提交的类别保留当前发布版
+     * @param label 展示版本号，可空自动递增
      * @param note 本次版本说明
      */
     public record Batch(
             @NotEmpty @Size(max = 6) List<@jakarta.validation.Valid Write> files,
-            @NotBlank @Size(max = 1000) String note) {}
+            @NotBlank @Size(max = 1000) String note,
+            @Pattern(regexp = "v[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}") String label) {}
 
     /**
      * 发布或撤回依据。

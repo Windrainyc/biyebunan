@@ -224,7 +224,9 @@ public class AuthService {
                 a.status(),
                 a.schoolId(),
                 a.majorId(),
-                mapper.roles(a.id()));
+                mapper.roles(a.id()),
+                a.avatarIndex(),
+                a.avatarAssetId());
     }
 
     private String token() {

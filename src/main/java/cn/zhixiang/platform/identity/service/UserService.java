@@ -226,7 +226,9 @@ public class UserService {
                 a.status(),
                 a.schoolId(),
                 a.majorId(),
-                accounts.roles(a.id()));
+                accounts.roles(a.id()),
+                a.avatarIndex(),
+                a.avatarAssetId());
     }
 
     private void audit(UUID id, UUID actor, String action) {

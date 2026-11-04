@@ -349,11 +349,9 @@ public class OrderService {
                     }
                     case "ACTIVATE" -> {
                         requireState(old, "CONFIRMED");
-                        if (old.studentId() == null
-                                || !old.receiptStatus().equals("CONFIRMED")
-                                || mapper.projectStage(id) == null)
+                        if (mapper.projectStage(id) == null)
                             throw new BusinessException(
-                                    422, "ORDER_ACTIVATION_BLOCKED", "需完成学生绑定、收款确认并建立项目后才能启动");
+                                    422, "ORDER_ACTIVATION_BLOCKED", "需建立项目后才能启动");
                         yield "ACTIVE";
                     }
                     case "COMPLETE" -> {

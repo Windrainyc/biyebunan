@@ -70,6 +70,7 @@ public class ServicePackageService {
     @Transactional(rollbackFor = Exception.class)
     public ServicePackageDtos.View create(ServicePackageDtos.Write w, UUID actor) {
         UUID id = UUID.randomUUID();
+        validateCover(w);
         mapper.insert(id, w, actor);
         audit(id, actor, "CREATED");
         return get(id);
@@ -88,6 +89,7 @@ public class ServicePackageService {
     public ServicePackageDtos.View update(
             UUID id, long version, ServicePackageDtos.Write w, UUID actor) {
         checked(id, version);
+        validateCover(w);
         if (mapper.update(id, version, w, actor) != 1) conflict();
         audit(id, actor, "UPDATED");
         return get(id);
@@ -133,6 +135,11 @@ public class ServicePackageService {
         return old;
     }
 
+    private void validateCover(ServicePackageDtos.Write w) {
+        if (w.coverAssetId() != null && mapper.cover(w.coverAssetId()) == null)
+            throw new BusinessException(422, "INVALID_COVER", "封面须选择已通过扫描的图片素材");
+    }
+
     private void conflict() {
         throw new BusinessException(412, "VERSION_CONFLICT", "数据已被修改，请刷新后重试");
     }
@@ -144,6 +151,14 @@ public class ServicePackageService {
 
     private ServicePackageDtos.View view(ServicePackageEntity r) {
         return new ServicePackageDtos.View(
-                r.id(), r.version(), r.createdAt(), r.updatedAt(), r.name(), r.code(), r.status());
+                r.id(),
+                r.version(),
+                r.createdAt(),
+                r.updatedAt(),
+                r.name(),
+                r.code(),
+                r.status(),
+                r.details(),
+                r.coverAssetId());
     }
 }

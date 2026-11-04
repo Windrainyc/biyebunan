@@ -14,6 +14,7 @@ import java.util.UUID;
  * @param contentId 知识内容
  * @param forumPostId 论坛帖子
  * @param materialCategoryId 素材分类，仅MATERIAL归属使用
+ * @param profileUserId 头像所属账户
  * @param storageId 存储配置
  * @param filename 文件名
  * @param size 字节数
@@ -39,6 +40,7 @@ public record AssetEntity(
         UUID contentId,
         UUID forumPostId,
         UUID materialCategoryId,
+        UUID profileUserId,
         UUID storageId,
         String filename,
         long size,

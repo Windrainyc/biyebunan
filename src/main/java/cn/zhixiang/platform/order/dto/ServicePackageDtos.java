@@ -22,12 +22,16 @@ public final class ServicePackageDtos {
      *
      * @param name 展示名称
      * @param code 稳定代码
+     * @param details 套餐详情，可空
+     * @param coverAssetId 已扫描的素材封面，可空
      * @param status 启停状态
      */
     public record Write(
             @NotBlank @Size(max = 100) String name,
             @NotBlank @Size(max = 200) String code,
-            @NotNull Status status) {}
+            @NotNull Status status,
+            @Size(max = 20000) String details,
+            UUID coverAssetId) {}
 
     /**
      * 资源启停请求。
@@ -46,6 +50,8 @@ public final class ServicePackageDtos {
      * @param name 名称
      * @param code 代码
      * @param status 启停状态
+     * @param details 套餐详情
+     * @param coverAssetId 封面资产
      */
     public record View(
             UUID id,
@@ -54,5 +60,7 @@ public final class ServicePackageDtos {
             OffsetDateTime updatedAt,
             String name,
             String code,
-            Status status) {}
+            Status status,
+            String details,
+            UUID coverAssetId) {}
 }

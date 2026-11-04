@@ -19,7 +19,7 @@ public interface AuthMapper {
      */
     @Select(
             "SELECT"
-                + " id,version,platform,display_name,phone_masked,password_hash,status,auth_version,school_id,major_id,mfa_secret_ref,created_at,updated_at"
+                + " id,version,platform,display_name,phone_masked,password_hash,status,auth_version,school_id,major_id,mfa_secret_ref,created_at,updated_at,avatar_index,avatar_asset_id"
                 + " FROM user_account WHERE platform=#{platform} AND phone_digest=#{phone}")
     AuthAccountEntity find(String platform, String phone);
 
@@ -31,7 +31,7 @@ public interface AuthMapper {
      */
     @Select(
             "SELECT"
-                + " id,version,platform,display_name,phone_masked,password_hash,status,auth_version,school_id,major_id,mfa_secret_ref,created_at,updated_at"
+                + " id,version,platform,display_name,phone_masked,password_hash,status,auth_version,school_id,major_id,mfa_secret_ref,created_at,updated_at,avatar_index,avatar_asset_id"
                 + " FROM user_account WHERE id=#{id} FOR UPDATE")
     AuthAccountEntity lockAccount(UUID id);
 

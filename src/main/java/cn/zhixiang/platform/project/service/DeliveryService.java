@@ -152,6 +152,21 @@ public class DeliveryService {
                 .forEach(id -> validAsset(id, project));
         UUID batch = UUID.randomUUID();
         int number = mapper.nextRelease(project);
+        String label = w.label();
+        if (label == null) {
+            String previous = mapper.latestLabel(project);
+            if (previous == null) label = "v1.0.0";
+            else {
+                int dot = previous.lastIndexOf('.');
+                int patch = Integer.parseInt(previous.substring(dot + 1));
+                if (patch >= 999999)
+                    throw new BusinessException(422, "VERSION_LABEL_EXHAUSTED", "请手动指定新的主版本或次版本");
+                label = previous.substring(0, dot + 1) + (patch + 1);
+            }
+        }
+        if (mapper.labelExists(project, label))
+            throw new BusinessException(409, "VERSION_LABEL_EXISTS", "版本号已存在，请修改后重试");
+        mapper.insertRelease(batch, project, number, label, w.note());
         List<DeliveryDtos.View> result = new ArrayList<>();
         for (var file : w.files()) {
             UUID id = UUID.randomUUID();
@@ -166,6 +181,7 @@ public class DeliveryService {
             audit(id, actor.id(), "PUBLISHED", w.note());
             result.add(view(mapper.get(id)));
         }
+        mapper.snapshotRelease(batch, project);
         var p = projects.get(project, actor);
         var order = orders.get(p.orderId(), actor);
         if (order.studentId() != null) {
@@ -178,6 +194,48 @@ public class DeliveryService {
             notifications.enqueueDelivery(order.studentId(), event);
         }
         return result;
+    }
+
+    /**
+     * 管理员版本列表。
+     *
+     * @param project 项目
+     * @param q 分页
+     * @param actor 身份
+     * @return 版本列表
+     */
+    @Transactional(
+            readOnly = true,
+            isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResult<cn.zhixiang.platform.project.dto.ReleaseView> releases(
+            UUID project, cn.zhixiang.platform.shared.dto.PageQuery q, Actor actor) {
+        if (!actor.platform().equals("admin") || projects.get(project, actor) == null) missing();
+        var rows =
+                mapper.releases(project, q).stream()
+                        .map(
+                                x ->
+                                        new cn.zhixiang.platform.project.dto.ReleaseView(
+                                                x.id(),
+                                                x.projectId(),
+                                                x.sequence(),
+                                                x.label(),
+                                                x.note(),
+                                                x.createdAt()))
+                        .toList();
+        return new PageResult<>(rows, q.page(), q.size(), mapper.releaseCount(project));
+    }
+
+    /**
+     * 管理员版本文件，不允许跨项目查询。
+     *
+     * @param project 项目
+     * @param release 版本
+     * @param actor 身份
+     * @return 不可变文件集合
+     */
+    public List<DeliveryDtos.View> releaseFiles(UUID project, UUID release, Actor actor) {
+        if (!actor.platform().equals("admin") || projects.get(project, actor) == null) missing();
+        return mapper.releaseFiles(project, release).stream().map(this::view).toList();
     }
 
     private void lock(UUID id, Actor actor, boolean withdrawal) {

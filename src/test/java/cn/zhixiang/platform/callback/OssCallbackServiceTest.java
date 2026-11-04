@@ -54,6 +54,7 @@ class OssCallbackServiceTest {
                         UUID.randomUUID(),
                         null,
                         null,
+                        null,
                         store,
                         "demo.txt",
                         3,

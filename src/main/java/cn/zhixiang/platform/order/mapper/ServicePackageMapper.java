@@ -12,17 +12,30 @@ import java.util.*;
 @Mapper
 public interface ServicePackageMapper {
     /**
+     * 校验并锁定可用封面，防止与删除并发。
+     *
+     * @param id 素材标识
+     * @return 可用素材或空
+     */
+    @Select(
+            "SELECT id FROM asset WHERE id=#{id} AND owner_type='MATERIAL' AND state='READY' AND"
+                    + " deleted_at IS NULL AND mime_type IN"
+                    + " ('image/png','image/jpeg','image/webp','image/gif','image/avif') FOR SHARE")
+    UUID cover(UUID id);
+
+    /**
      * 返回当前页持久化投影。
      *
      * @param q 已校验分页条件
      * @return 当前页持久化投影
      */
     @Select(
-            "<script>SELECT id,version,created_at,updated_at,name,code,status FROM"
-                    + " service_package WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\' OR code ILIKE"
-                    + " #{q.pattern} ESCAPE E'\\\\') <if test='q.status != null'>AND"
-                    + " status=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
-                    + " #{q.offset}</script>")
+            "<script>SELECT"
+                + " id,version,created_at,updated_at,name,code,status,details,cover_asset_id FROM"
+                + " service_package WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\' OR code ILIKE"
+                + " #{q.pattern} ESCAPE E'\\\\') <if test='q.status != null'>AND"
+                + " status=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
+                + " #{q.offset}</script>")
     List<ServicePackageEntity> list(@Param("q") PageQuery q);
 
     /**
@@ -44,8 +57,8 @@ public interface ServicePackageMapper {
      * @return 资源或 null
      */
     @Select(
-            "SELECT id,version,created_at,updated_at,name,code,status FROM service_package WHERE"
-                    + " id=#{id}")
+            "SELECT id,version,created_at,updated_at,name,code,status,details,cover_asset_id FROM"
+                    + " service_package WHERE id=#{id}")
     ServicePackageEntity get(UUID id);
 
     /**
@@ -55,8 +68,8 @@ public interface ServicePackageMapper {
      * @return 加锁资源；串行化引用创建、状态更改和删除
      */
     @Select(
-            "SELECT id,version,created_at,updated_at,name,code,status FROM service_package WHERE"
-                    + " id=#{id} FOR UPDATE")
+            "SELECT id,version,created_at,updated_at,name,code,status,details,cover_asset_id FROM"
+                    + " service_package WHERE id=#{id} FOR UPDATE")
     ServicePackageEntity lock(UUID id);
 
     /**
@@ -67,8 +80,9 @@ public interface ServicePackageMapper {
      * @param actor 服务端操作者
      */
     @Insert(
-            "INSERT INTO service_package(id,name,code,status,created_by,updated_by)"
-                    + " VALUES(#{id},#{w.name},#{w.code},#{w.status},#{actor},#{actor})")
+            "INSERT INTO"
+                + " service_package(id,name,code,status,details,cover_asset_id,created_by,updated_by)"
+                + " VALUES(#{id},#{w.name},#{w.code},#{w.status},#{w.details},#{w.coverAssetId},#{actor},#{actor})")
     void insert(UUID id, @Param("w") ServicePackageDtos.Write w, UUID actor);
 
     /**
@@ -82,7 +96,7 @@ public interface ServicePackageMapper {
      */
     @Update(
             "UPDATE service_package SET"
-                + " name=#{w.name},code=#{w.code},status=#{w.status},version=version+1,updated_at=now(),updated_by=#{actor}"
+                + " name=#{w.name},code=#{w.code},status=#{w.status},details=#{w.details},cover_asset_id=#{w.coverAssetId},version=version+1,updated_at=now(),updated_by=#{actor}"
                 + " WHERE id=#{id} AND version=#{version}")
     int update(UUID id, long version, @Param("w") ServicePackageDtos.Write w, UUID actor);
 

@@ -3626,6 +3626,102 @@ class FoundationIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Autowired cn.zhixiang.platform.identity.service.ProfileService profileUpdates;
+
+    @Test
+    void profileAvatarOwnershipAndScanValidation() throws Exception {
+        UUID user = UUID.randomUUID(),
+                other = UUID.randomUUID(),
+                school = UUID.randomUUID(),
+                major = UUID.randomUUID(),
+                store = UUID.randomUUID(),
+                asset = UUID.randomUUID();
+        seed(user, "student", UUID.randomUUID().toString());
+        seed(other, "student", UUID.randomUUID().toString());
+        db.update(
+                "INSERT INTO school(id,name,code,region,status,created_by,updated_by)"
+                    + " VALUES(?,'头像院校',?,'测试','ENABLED',?,?)",
+                school,
+                school.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by)"
+                    + " VALUES(?,'头像专业',?,?,'BACHELOR','ENABLED',?,?)",
+                major,
+                major.toString(),
+                school,
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'头像存储','S3_COMPATIBLE','isolated-avatar','test','https://storage.invalid','test','PRIVATE','ENABLED',?,?)",
+                store,
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,profile_user_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,state,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'PROFILE',?,?,'avatar.png',10,?,'image/png',?,?,'READY',now(),?,?)",
+                asset,
+                UUID.randomUUID(),
+                user,
+                store,
+                "0".repeat(64),
+                "test/" + asset,
+                "test/private/" + asset,
+                user,
+                user);
+        var actor =
+                new cn.zhixiang.platform.identity.model.Actor(
+                        user, "student", 1, UUID.randomUUID());
+        var stranger =
+                new cn.zhixiang.platform.identity.model.Actor(
+                        other, "student", 1, UUID.randomUUID());
+        var view =
+                profileUpdates.update(
+                        actor,
+                        "student",
+                        1,
+                        new cn.zhixiang.platform.identity.dto.ProfileRequest(
+                                "新昵称", school, major, 7, asset));
+        assertEquals(7, view.avatarIndex());
+        assertEquals(asset, view.avatarAssetId());
+        assertEquals(asset, assetAccess.get(asset, actor).id());
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () -> assetAccess.get(asset, stranger));
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () ->
+                        profileUpdates.update(
+                                stranger,
+                                "student",
+                                1,
+                                new cn.zhixiang.platform.identity.dto.ProfileRequest(
+                                        "越权", school, major, 1, asset)));
+        db.update("UPDATE asset SET state='QUARANTINED' WHERE id=?", asset);
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () ->
+                        profileUpdates.update(
+                                actor,
+                                "student",
+                                2,
+                                new cn.zhixiang.platform.identity.dto.ProfileRequest(
+                                        "未扫描", school, major, 1, asset)));
+        var fallback =
+                profileUpdates.update(
+                        actor,
+                        "student",
+                        2,
+                        new cn.zhixiang.platform.identity.dto.ProfileRequest(
+                                "默认头像", school, major, 3, null));
+        assertNull(fallback.avatarAssetId());
+        assertEquals(3, fallback.avatarIndex());
+    }
+
     @Test
     void orderSimplificationAndActivityIsolation() throws Exception {
         db.update(
@@ -3656,7 +3752,7 @@ class FoundationIntegrationTest {
                                         json.writeValueAsString(
                                                 Map.of(
                                                         "name", "测试套餐", "code", code, "status",
-                                                        "ENABLED"))))
+                                                        "ENABLED", "details", "套餐详情选填"))))
                 .andExpect(status().isCreated());
         var body =
                 Map.of(
@@ -3758,8 +3854,7 @@ class FoundationIntegrationTest {
                 seed(boundStudent, "student", UUID.randomUUID().toString());
                 // 绑定证明链另有独立测试，此处仅准备阶段测试的授权归属。
                 db.update(
-                        "UPDATE software_order SET student_id=? WHERE id=?",
-                        boundStudent,
+                        "UPDATE software_order SET receipt_status='UNCONFIRMED' WHERE id=?",
                         UUID.fromString(id));
                 mvc.perform(
                                 post("/api/v1/admin/orders/" + id + "/transition")
@@ -3770,6 +3865,10 @@ class FoundationIntegrationTest {
                                         .content("{\"action\":\"ACTIVATE\"}"))
                         .andExpect(status().isOk());
 
+                db.update(
+                        "UPDATE software_order SET student_id=? WHERE id=?",
+                        boundStudent,
+                        UUID.fromString(id));
                 mvc.perform(
                                 post("/api/v1/admin/projects/" + project + "/stage")
                                         .header("Authorization", "Bearer " + adminToken)
@@ -3855,6 +3954,70 @@ class FoundationIntegrationTest {
                                         + " project_id=?",
                                 Integer.class,
                                 UUID.fromString(project)));
+                String releaseList =
+                        mvc.perform(
+                                        get("/api/v1/admin/projects/"
+                                                        + project
+                                                        + "/delivery-releases")
+                                                .header("Authorization", "Bearer " + adminToken))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.items[0].label").value("v1.0.0"))
+                                .andExpect(jsonPath("$.total").value(1))
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString();
+                String releaseId =
+                        json.readTree(releaseList).get("items").get(0).get("id").asText();
+                mvc.perform(
+                                post("/api/v1/admin/projects/" + project + "/delivery-releases")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .contentType("application/json")
+                                        .content(
+                                                json.writeValueAsString(
+                                                        Map.of(
+                                                                "files",
+                                                                List.of(validFiles.get(0)),
+                                                                "note",
+                                                                "仅更新源码"))))
+                        .andExpect(status().isCreated());
+                mvc.perform(
+                                get("/api/v1/admin/projects/" + project + "/delivery-releases")
+                                        .header("Authorization", "Bearer " + adminToken))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.items[0].label").value("v1.0.1"))
+                        .andExpect(jsonPath("$.total").value(2));
+                mvc.perform(
+                                get("/api/v1/admin/projects/"
+                                                + project
+                                                + "/delivery-releases/"
+                                                + releaseId)
+                                        .header("Authorization", "Bearer " + adminToken))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.length()").value(2));
+                assertEquals(
+                        2,
+                        db.queryForObject(
+                                "SELECT count(*) FROM project_release_file WHERE release_id=(SELECT"
+                                        + " id FROM project_release WHERE project_id=? ORDER BY"
+                                        + " sequence DESC LIMIT 1)",
+                                Integer.class,
+                                UUID.fromString(project)));
+                mvc.perform(
+                                post("/api/v1/admin/projects/" + project + "/delivery-releases")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .contentType("application/json")
+                                        .content(
+                                                json.writeValueAsString(
+                                                        Map.of(
+                                                                "files",
+                                                                validFiles,
+                                                                "note",
+                                                                "重复版本",
+                                                                "label",
+                                                                "v1.0.0"))))
+                        .andExpect(status().isConflict());
                 int version = 2;
                 for (String stage :
                         List.of("PROPOSAL", "DEVELOPMENT", "DOCUMENTATION", "ACCEPTANCE")) {

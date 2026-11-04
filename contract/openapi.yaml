@@ -4732,7 +4732,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4779,7 +4780,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4869,7 +4871,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -4916,7 +4919,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5006,7 +5010,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5053,7 +5058,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5143,7 +5149,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -5189,7 +5196,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -8336,7 +8344,7 @@ paths:
         in: query
         required: false
         description: ''
-        schema: &id033
+        schema: &id051
           type: string
           enum:
           - PENDING
@@ -14406,7 +14414,8 @@ paths:
               schema:
                 type: string
                 description: ''
-              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF Cookie
+              description: 设置或轮换该站点 Host-only Secure HttpOnly 刷新 Cookie 及双提交 CSRF
+                Cookie
         '400': *id001
         '401': *id002
         '403': *id003
@@ -16673,13 +16682,22 @@ paths:
       - name: id
         in: path
         required: true
-        schema: {type: string, format: uuid}
+        schema:
+          type: string
+          format: uuid
       - name: page
         in: query
-        schema: {type: integer, minimum: 1, default: 1}
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
       - name: size
         in: query
-        schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
       responses:
         '200':
           description: 获准管理员可查看的处理历史分页
@@ -16688,22 +16706,33 @@ paths:
               schema:
                 type: object
                 properties:
-                  page: {type: integer}
-                  size: {type: integer}
-                  total: {type: integer}
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
                   items:
                     type: array
                     items:
                       type: object
                       properties:
-                        id: {type: string, format: uuid}
-                        action: {type: string}
-                        reason: {type: string}
-                        actorName: {type: string}
-                        createdAt: {type: string, format: date-time}
-        '403': {description: 无权查看}
-        '404': {description: 内容不存在}
-
+                        id:
+                          type: string
+                          format: uuid
+                        action:
+                          type: string
+                        reason:
+                          type: string
+                        actorName:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+        '403':
+          description: 无权查看
+        '404':
+          description: 内容不存在
   /api/v1/admin/service-packages:
     get:
       operationId: get_admin_service_packages
@@ -17450,6 +17479,101 @@ paths:
       x-permissions-all:
       - post_admin_projects_id_deliveries
       - post_admin_deliveries_id_publish
+    get:
+      operationId: get_admin_projects_id_delivery_releases
+      summary: 发布批次分页
+      tags:
+      - admin
+      x-permission: get_admin_projects_id_deliveries
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReleasePage'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: size
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
   /api/v1/partner/service-packages:
     get:
       operationId: get_partner_service_packages
@@ -17989,6 +18113,93 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/admin/projects/{id}/delivery-releases/{releaseId}:
+    get:
+      operationId: get_admin_projects_id_delivery_releases_releaseId
+      summary: 版本文件快照
+      tags:
+      - admin
+      x-permission: get_admin_projects_id_deliveries
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryVersion'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: releaseId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
 components:
   securitySchemes:
     bearerAuth:
@@ -18111,6 +18322,11 @@ components:
           type: string
           minLength: 1
           maxLength: 1000
+        label:
+          type:
+          - string
+          - 'null'
+          pattern: ^v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$
     ServicePackagePage:
       type: object
       additionalProperties: false
@@ -18153,6 +18369,16 @@ components:
           enum:
           - ENABLED
           - DISABLED
+        details:
+          type:
+          - string
+          - 'null'
+          maxLength: 20000
+        coverAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - name
       - code
@@ -18189,6 +18415,16 @@ components:
           enum:
           - ENABLED
           - DISABLED
+        details:
+          type:
+          - string
+          - 'null'
+          maxLength: 20000
+        coverAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - id
       - version
@@ -18895,6 +19131,15 @@ components:
         roleIds:
           type: array
           items: *id010
+        avatarIndex:
+          type: integer
+          minimum: 0
+          maximum: 9
+        avatarAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - id
       - version
@@ -18936,6 +19181,15 @@ components:
           maxLength: 200
         schoolId: *id010
         majorId: *id010
+        avatarIndex:
+          type: integer
+          minimum: 0
+          maximum: 9
+        avatarAssetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - displayName
       - schoolId
@@ -19142,7 +19396,7 @@ components:
           type: string
           description: ''
           maxLength: 200
-        requirements: &id032
+        requirements: &id034
           type: string
           description: ''
           maxLength: 20000
@@ -19255,11 +19509,11 @@ components:
       properties:
         name: *id011
         dueDate: *id013
-        weight: &id034
+        weight: &id032
           type: integer
           minimum: 1
           maximum: 100
-        completed: &id035
+        completed: &id033
           type: boolean
       required:
       - name
@@ -19277,8 +19531,8 @@ components:
         updatedAt: *id014
         name: *id011
         dueDate: *id013
-        weight: *id034
-        completed: *id035
+        weight: *id032
+        completed: *id033
         projectId: *id010
       required:
       - id
@@ -19294,7 +19548,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        kind: &id036
+        kind:
           type: string
           enum:
           - TASK
@@ -19386,28 +19640,28 @@ components:
       properties:
         title: *id011
         categoryId: *id010
-        tagIds: &id037
+        tagIds: &id035
           type: array
           items: *id010
-        type: &id038
+        type: &id036
           type: string
           enum:
           - VIDEO
           - DOCUMENT
           - MARKDOWN
-        assetId: &id039
+        assetId: &id037
           type:
           - string
           - 'null'
           format: uuid
-        markdown: *id032
-        audience: &id040
+        markdown: *id034
+        audience: &id038
           type: string
           enum:
           - PUBLIC
           - MEMBER
           - PROJECT
-        projectId: &id041
+        projectId: &id039
           type:
           - string
           - 'null'
@@ -19434,12 +19688,12 @@ components:
         updatedAt: *id014
         title: *id011
         categoryId: *id010
-        tagIds: *id037
-        type: *id038
-        assetId: *id039
-        markdown: *id032
-        audience: *id040
-        projectId: *id041
+        tagIds: *id035
+        type: *id036
+        assetId: *id037
+        markdown: *id034
+        audience: *id038
+        projectId: *id039
         state:
           type: string
           enum:
@@ -19671,19 +19925,19 @@ components:
         id: *id010
         runId: *id010
         inputTokens:
-          type: &id042
+          type: &id040
           - integer
           - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         outputTokens:
-          type: &id043
+          type: &id041
           - integer
           - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
         cachedTokens:
-          type: &id044
+          type: &id042
           - integer
           - 'null'
           minimum: 0
@@ -19718,15 +19972,15 @@ components:
           - RECONCILING
         createdAt: *id014
         effectiveInputTokens:
-          type: *id042
+          type: *id040
           minimum: 0
           description: 更正后有效词元，未知仍null，原始值保持不变
         effectiveOutputTokens:
-          type: *id043
+          type: *id041
           minimum: 0
           description: 更正后有效词元，未知仍null，原始值保持不变
         effectiveCachedTokens:
-          type: *id044
+          type: *id042
           minimum: 0
           description: 更正后有效词元，未知仍null，原始值保持不变
         correctionAmount:
@@ -19775,7 +20029,7 @@ components:
       additionalProperties: false
       properties:
         boardId: *id010
-        title: &id045
+        title: &id043
           type: string
           description: ''
           minLength: 1
@@ -19785,12 +20039,12 @@ components:
           minLength: 1
           maxLength: 20000
           description: 纯文本或Markdown，前端必须安全渲染。
-        tagIds: &id046
+        tagIds: &id044
           type: array
           maxItems: 20
           uniqueItems: true
           items: *id010
-        assetIds: &id047
+        assetIds: &id045
           type: array
           maxItems: 20
           uniqueItems: true
@@ -19811,10 +20065,10 @@ components:
         createdAt: *id014
         updatedAt: *id014
         boardId: *id010
-        title: *id045
-        body: *id032
-        tagIds: *id046
-        assetIds: *id047
+        title: *id043
+        body: *id034
+        tagIds: *id044
+        assetIds: *id045
         authorId: *id010
         state:
           type: string
@@ -19842,12 +20096,12 @@ components:
       type: object
       additionalProperties: false
       properties:
-        body: &id048
+        body: &id046
           type: string
           description: ''
           minLength: 1
           maxLength: 5000
-        parentId: &id049
+        parentId: &id047
           type:
           - string
           - 'null'
@@ -19864,8 +20118,8 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        body: *id048
-        parentId: *id049
+        body: *id046
+        parentId: *id047
         postId: *id010
         authorId: *id010
         state:
@@ -20006,7 +20260,8 @@ components:
       - state
       - storageId
     UploadRequest:
-      description: 学生只允许向本人可编辑帖子申请FORUM上传；管理员其他归属类型须具备对应业务权限。先建帖再上传，隔离校验扫描READY后关联正文。 MATERIAL仅管理员可用，ownerId为启用的素材分类。
+      description: 学生只允许向本人可编辑帖子申请FORUM上传；管理员其他归属类型须具备对应业务权限。先建帖再上传，隔离校验扫描READY后关联正文。
+        MATERIAL仅管理员可用，ownerId为启用的素材分类。
       type: object
       additionalProperties: false
       properties:
@@ -20018,6 +20273,7 @@ components:
           - FORUM
           - RECEIPT
           - MATERIAL
+          - PROFILE
         ownerId: *id010
         filename: *id011
         size:
@@ -20204,7 +20460,9 @@ components:
           type: boolean
         createdAt: *id014
         projectId:
-          type: [string, 'null']
+          type:
+          - string
+          - 'null'
           format: uuid
           description: 来源可信业务事件的项目标识，目标接口重新验权
         announcementId:
@@ -20297,11 +20555,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: &id050
+        phone: &id048
           type: string
           description: ''
           pattern: ^1\d{10}$
-        password: &id051
+        password: &id049
           type: string
           description: ''
           minLength: 10
@@ -20309,7 +20567,7 @@ components:
           writeOnly: true
         displayName: *id011
         challengeId: *id010
-        code: &id052
+        code: &id050
           type: string
           description: ''
           pattern: ^\d{6}$
@@ -20325,11 +20583,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: *id050
-        password: *id051
+        phone: *id048
+        password: *id049
         displayName: *id011
         challengeId: *id010
-        code: *id052
+        code: *id050
         termsVersion: *id011
         invitationToken:
           type: string
@@ -20471,7 +20729,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        stage: *id033
+        stage: *id051
         reason:
           type: string
           maxLength: 200
@@ -21493,7 +21751,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        durationDays: &id053
+        durationDays: &id052
           type: integer
           minimum: 1
           maximum: 36500
@@ -21513,7 +21771,7 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        durationDays: *id053
+        durationDays: *id052
         monthlyTokenQuota: *id020
         monthlyAmountLimit: *id022
         effectiveFrom: *id014
@@ -21559,7 +21817,7 @@ components:
           - string
           - 'null'
           format: uuid
-        markdown: *id032
+        markdown: *id034
         state:
           type: string
           enum:
@@ -21887,12 +22145,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Asset'
-        page: &id054
+        page: &id053
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id054
-        total: *id054
+        size: *id053
+        total: *id053
       required:
       - items
       - page
@@ -21912,7 +22170,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: &id055
+        id: &id054
           type: string
           format: uuid
         title:
@@ -21988,7 +22246,7 @@ components:
           type: array
           maxItems: 200
           uniqueItems: true
-          items: *id055
+          items: *id054
           description: ALL必须为空；SELECTED必须包含1至200个启用用户
       required:
       - title
@@ -22000,7 +22258,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id055
+        id: *id054
         displayName:
           type: string
         platform:
@@ -22024,12 +22282,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Announcement'
-        page: &id056
+        page: &id055
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id056
-        total: *id056
+        size: *id055
+        total: *id055
       required:
       - items
       - page
@@ -22043,6 +22301,43 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnnouncementRecipient'
+        page: &id056
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+        size: *id056
+        total: *id056
+      required:
+      - items
+      - page
+      - size
+      - total
+    DeliveryRelease:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        sequence:
+          type: integer
+        label:
+          type: string
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    DeliveryReleasePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRelease'
         page: &id057
           type: integer
           minimum: 0

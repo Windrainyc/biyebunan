@@ -18,6 +18,8 @@ import java.util.*;
  * @param majorId 专业
  * @param mfaSecretRef MFA密钥引用
  * @param createdAt 创建时间
+ * @param avatarIndex 默认头像序号
+ * @param avatarAssetId 本人头像
  * @param updatedAt 更新时间
  */
 public record AuthAccountEntity(
@@ -33,4 +35,6 @@ public record AuthAccountEntity(
         UUID majorId,
         String mfaSecretRef,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt) {}
+        OffsetDateTime updatedAt,
+        int avatarIndex,
+        UUID avatarAssetId) {}

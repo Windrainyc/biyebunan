@@ -13,6 +13,8 @@ import java.util.*;
  * @param updatedAt 更新
  * @param name 名称
  * @param code 代码
+ * @param details 套餐详情
+ * @param coverAssetId 封面资产
  * @param status 状态
  */
 public record ServicePackageEntity(
@@ -22,4 +24,6 @@ public record ServicePackageEntity(
         java.time.OffsetDateTime updatedAt,
         String name,
         String code,
-        ServicePackageDtos.Status status) {}
+        ServicePackageDtos.Status status,
+        String details,
+        UUID coverAssetId) {}

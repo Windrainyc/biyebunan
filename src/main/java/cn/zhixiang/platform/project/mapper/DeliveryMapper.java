@@ -146,4 +146,90 @@ public interface DeliveryMapper {
             "SELECT coalesce(max(release_number),0)+1 FROM project_delivery WHERE"
                     + " project_id=#{project}")
     int nextRelease(UUID project);
+
+    /**
+     * 分页返回项目发布批次。
+     *
+     * @param project 项目
+     * @param q 分页条件
+     * @return 批次摘要
+     */
+    @Select(
+            "SELECT id,project_id,sequence,label,note,created_at FROM project_release WHERE"
+                    + " project_id=#{project} ORDER BY sequence DESC LIMIT #{q.size} OFFSET"
+                    + " #{q.offset}")
+    List<cn.zhixiang.platform.project.entity.ReleaseEntity> releases(
+            UUID project, @Param("q") cn.zhixiang.platform.shared.dto.PageQuery q);
+
+    /**
+     * 批次数量。
+     *
+     * @param project 项目
+     * @return 数量
+     */
+    @Select("SELECT count(*) FROM project_release WHERE project_id=#{project}")
+    long releaseCount(UUID project);
+
+    /**
+     * 最新版本号。
+     *
+     * @param project 项目
+     * @return 版本号或空
+     */
+    @Select(
+            "SELECT label FROM project_release WHERE project_id=#{project} ORDER BY sequence DESC"
+                    + " LIMIT 1")
+    String latestLabel(UUID project);
+
+    /**
+     * 创建不可变发布摘要。
+     *
+     * @param id 批次
+     * @param project 项目
+     * @param sequence 发布顺序
+     * @param label 版本号
+     * @param note 说明
+     */
+    @Insert(
+            "INSERT INTO project_release(id,project_id,sequence,label,note)"
+                    + " VALUES(#{id},#{project},#{sequence},#{label},#{note})")
+    void insertRelease(UUID id, UUID project, int sequence, String label, String note);
+
+    /**
+     * 保存发布当时完整文件集合。
+     *
+     * @param release 批次
+     * @param project 项目
+     */
+    @Insert(
+            "INSERT INTO project_release_file(release_id,delivery_id) SELECT #{release},id FROM"
+                    + " project_delivery WHERE project_id=#{project} AND state='PUBLISHED'")
+    void snapshotRelease(UUID release, UUID project);
+
+    /**
+     * 版本文件集合。
+     *
+     * @param project 项目
+     * @param release 批次
+     * @return 文件
+     */
+    @Select(
+            "SELECT "
+                    + C
+                    + " FROM project_delivery WHERE project_id=#{project} AND id IN (SELECT"
+                    + " delivery_id FROM project_release_file WHERE release_id=#{release}) ORDER BY"
+                    + " kind")
+    List<DeliveryEntity> releaseFiles(UUID project, UUID release);
+
+    /**
+     * 版本号是否被占用。
+     *
+     * @param project 项目
+     * @param label 版本号
+     * @return 是否存在
+     */
+    @Select(
+            "SELECT EXISTS(SELECT 1 FROM project_release WHERE project_id=#{project} AND"
+                    + " label=#{label})")
+    boolean labelExists(UUID project, String label);
 }

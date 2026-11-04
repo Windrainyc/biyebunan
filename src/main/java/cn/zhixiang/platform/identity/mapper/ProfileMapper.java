@@ -10,6 +10,19 @@ import java.util.UUID;
 @Mapper
 public interface ProfileMapper {
     /**
+     * 校验锁定本人已扫描头像。
+     *
+     * @param id 资产
+     * @param user 所属用户
+     * @return 可用资产或空
+     */
+    @Select(
+            "SELECT id FROM asset WHERE id=#{id} AND profile_user_id=#{user} AND"
+                + " owner_type='PROFILE' AND state='READY' AND deleted_at IS NULL AND mime_type IN"
+                + " ('image/png','image/jpeg','image/webp') FOR SHARE")
+    UUID avatar(UUID id, UUID user);
+
+    /**
      * 锁定启用院校。
      *
      * @param id 院校
@@ -40,7 +53,7 @@ public interface ProfileMapper {
      */
     @Update(
             "UPDATE user_account SET"
-                + " display_name=#{w.displayName},school_id=#{w.schoolId},major_id=#{w.majorId},version=version+1,updated_at=now()"
+                + " display_name=#{w.displayName},school_id=#{w.schoolId},major_id=#{w.majorId},avatar_index=coalesce(#{w.avatarIndex},avatar_index),avatar_asset_id=#{w.avatarAssetId},version=version+1,updated_at=now()"
                 + " WHERE id=#{id} AND version=#{version}")
     int update(UUID id, long version, @Param("w") ProfileRequest w);
 }

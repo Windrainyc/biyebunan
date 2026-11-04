@@ -201,4 +201,43 @@ public class DeliveryController {
                     return ResponseEntity.ok().eTag(Versions.etag(r.version())).body(r);
                 });
     }
+
+    /**
+     * 分页查询交付批次。
+     *
+     * @param id 项目
+     * @param page 页码
+     * @param size 页大小
+     * @param actor 身份
+     * @return 批次
+     */
+    @GetMapping("/admin/projects/{id}/delivery-releases")
+    @PreAuthorize("hasAuthority('get_admin_projects_id_deliveries')")
+    public PageResult<cn.zhixiang.platform.project.dto.ReleaseView> releases(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal Actor actor) {
+        return service.releases(
+                id,
+                new cn.zhixiang.platform.shared.dto.PageQuery(page, size, null, null, null),
+                actor);
+    }
+
+    /**
+     * 查看版本文件。
+     *
+     * @param id 项目
+     * @param releaseId 发布批次
+     * @param actor 身份
+     * @return 文件集合
+     */
+    @GetMapping("/admin/projects/{id}/delivery-releases/{releaseId}")
+    @PreAuthorize("hasAuthority('get_admin_projects_id_deliveries')")
+    public List<DeliveryDtos.View> releaseFiles(
+            @PathVariable UUID id,
+            @PathVariable UUID releaseId,
+            @AuthenticationPrincipal Actor actor) {
+        return service.releaseFiles(id, releaseId, actor);
+    }
 }

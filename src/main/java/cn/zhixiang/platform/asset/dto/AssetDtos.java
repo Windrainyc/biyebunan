@@ -12,7 +12,7 @@ public final class AssetDtos {
     /**
      * 上传申请。
      *
-     * @param ownerType PROJECT/RECEIPT/KNOWLEDGE/FORUM/MATERIAL；学生仅允许FORUM
+     * @param ownerType PROJECT/RECEIPT/KNOWLEDGE/FORUM/MATERIAL/PROFILE；学生可上传帖子附件或本人头像
      * @param ownerId 所属项目、订单、知识内容、已存在帖子或素材分类
      * @param filename 原文件名，不作为对象键
      * @param size 字节大小
@@ -20,7 +20,8 @@ public final class AssetDtos {
      * @param mimeType 媒体类型
      */
     public record Upload(
-            @NotNull @Pattern(regexp = "PROJECT|RECEIPT|KNOWLEDGE|FORUM|MATERIAL") String ownerType,
+            @NotNull @Pattern(regexp = "PROJECT|RECEIPT|KNOWLEDGE|FORUM|MATERIAL|PROFILE")
+                    String ownerType,
             @NotNull UUID ownerId,
             @NotBlank @Size(max = 200) String filename,
             @NotNull @Min(1) @Max(2147483648L) Long size,
