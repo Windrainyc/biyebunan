@@ -124,4 +124,18 @@ window_start=CASE WHEN auth_attempt_window.window_start<now()-interval '10 minut
 RETURNING attempts
 """)
     int attempt(String bucket);
+
+    /**
+     * 成功登录事务内保存记录，不将刷新计作新登录。
+     *
+     * @param id 事件
+     * @param user 用户
+     * @param platform 平台
+     * @param ip 观测来源
+     */
+    @Insert(
+            "INSERT INTO user_activity(id,actor_id,platform,kind,path,ip,time_bucket)"
+                + " VALUES(#{id},#{user},#{platform},'LOGIN',concat('/',#{platform}::text,'/login'),#{ip},floor(extract(epoch"
+                + " from now())/30))")
+    void loginActivity(UUID id, UUID user, String platform, String ip);
 }

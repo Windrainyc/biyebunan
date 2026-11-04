@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/** 人工全额收款用例；事务内按订单→凭证资产加锁，不能用Redis余额或客户端标记替代。 */
+/** 人工收款核验用例；事务内按订单→凭证资产加锁，不能用Redis余额或客户端标记替代。 */
 @Service
 public class ReceiptService {
     private final OrderMapper orders;
@@ -47,7 +47,7 @@ public class ReceiptService {
     }
 
     /**
-     * 确认全额到账；幂等重放由外层协调器完成，不允许第二条流水覆盖既有收款。
+     * 确认人工核验结果；幂等重放由外层协调器完成，不允许第二条流水覆盖既有收款。
      *
      * @param id 订单
      * @param version 期望版本
@@ -66,23 +66,27 @@ public class ReceiptService {
             throw new BusinessException(412, "VERSION_CONFLICT", "订单已更新");
         if (!order.status().equals("CONFIRMED") || !order.receiptStatus().equals("UNCONFIRMED"))
             throw new BusinessException(422, "ORDER_RECEIPT_STATE", "仅已确认且未收款的订单可核验");
-        var amount = new BigDecimal(w.amount());
-        if (amount.signum() <= 0 || amount.compareTo(new BigDecimal(order.amount())) != 0)
-            throw new BusinessException(422, "RECEIPT_AMOUNT_MISMATCH", "本接口仅支持订单全额确认");
-        var asset = assets.lock(w.proofAssetId());
-        if (asset == null
-                || asset.deletedAt() != null
-                || !id.equals(asset.receiptOrderId())
-                || !asset.state().equals("READY"))
-            throw new BusinessException(422, "RECEIPT_PROOF_INVALID", "凭证必须属于当前订单且通过扫描");
+        if (w.amount() != null && new BigDecimal(w.amount()).signum() <= 0)
+            throw new BusinessException(422, "RECEIPT_AMOUNT_INVALID", "支付金额应大于零");
+        if (w.proofAssetId() != null) {
+            var asset = assets.lock(w.proofAssetId());
+            if (asset == null
+                    || asset.deletedAt() != null
+                    || !id.equals(asset.receiptOrderId())
+                    || !asset.state().equals("READY"))
+                throw new BusinessException(422, "RECEIPT_PROOF_INVALID", "凭证必须属于当前订单且通过扫描");
+        }
         receipts.insert(
                 id,
                 new ReceiptDtos.Write(
-                        w.reference().trim(),
+                        w.reference() == null || w.reference().isBlank()
+                                ? null
+                                : w.reference().trim(),
                         w.receivedAt(),
                         w.amount(),
                         w.proofAssetId(),
-                        w.reason().trim()),
+                        w.reason() == null ? null : w.reason().trim(),
+                        w.channel()),
                 actor.id());
         if (receipts.confirm(id, version, actor.id()) != 1)
             throw new BusinessException(412, "VERSION_CONFLICT", "订单已更新");

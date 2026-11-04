@@ -116,6 +116,10 @@ class FoundationIntegrationTest {
 
     @BeforeEach
     void seedIdentity() {
+        db.update(
+                "INSERT INTO service_package(id,name,code,status)"
+                    + " VALUES(gen_random_uuid(),'测试标准套餐','STANDARD','ENABLED') ON CONFLICT(code)"
+                    + " DO NOTHING");
         // 仅在隔离测试库种入会话，不提供生产跳过登录的接口或固定密码。
         adminId = UUID.randomUUID();
         adminToken = UUID.randomUUID().toString();
@@ -3619,6 +3623,294 @@ class FoundationIntegrationTest {
                                 .header("If-Match", "\"1\"")
                                 .contentType("application/json")
                                 .content(lower))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void orderSimplificationAndActivityIsolation() throws Exception {
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')", adminId);
+        UUID school = UUID.randomUUID(), major = UUID.randomUUID();
+        db.update(
+                "INSERT INTO school(id,name,code,region,status,created_by,updated_by)"
+                        + " VALUES(?,'改造测试院校',?,'测试','ENABLED',?,?)",
+                school,
+                school.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by)"
+                        + " VALUES(?,'改造测试专业',?,?,'BACHELOR','ENABLED',?,?)",
+                major,
+                major.toString(),
+                school,
+                adminId,
+                adminId);
+        String code = "PKG" + UUID.randomUUID().toString().replace("-", "");
+        mvc.perform(
+                        post("/api/v1/admin/service-packages")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                Map.of(
+                                                        "name", "测试套餐", "code", code, "status",
+                                                        "ENABLED"))))
+                .andExpect(status().isCreated());
+        var body =
+                Map.of(
+                        "title",
+                        "自动编号测试",
+                        "studentPhone",
+                        "13900002222",
+                        "amount",
+                        "100",
+                        "packageCode",
+                        code,
+                        "source",
+                        "MANUAL",
+                        "schoolId",
+                        school,
+                        "majorId",
+                        major);
+        String first = null;
+        for (int n = 0; n < 2; n++) {
+            String result =
+                    mvc.perform(
+                                    post("/api/v1/admin/orders")
+                                            .header("Authorization", "Bearer " + adminToken)
+                                            .header("Idempotency-Key", UUID.randomUUID())
+                                            .contentType("application/json")
+                                            .content(json.writeValueAsString(body)))
+                            .andExpect(status().isCreated())
+                            .andExpect(jsonPath("$.currency").value("CNY"))
+                            .andReturn()
+                            .getResponse()
+                            .getContentAsString();
+            var row = json.readTree(result);
+            String id = row.get("id").asText(), number = row.get("orderNo").asText();
+            assertTrue(number.matches("ZX[0-9]{14}[A-F0-9]{10}"));
+            assertNotEquals(first, number);
+            first = number;
+            if (n == 0) {
+                mvc.perform(
+                                delete("/api/v1/admin/orders/" + id)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"1\""))
+                        .andExpect(status().isNoContent());
+            } else {
+                mvc.perform(
+                                post("/api/v1/admin/orders/" + id + "/transition")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"1\"")
+                                        .contentType("application/json")
+                                        .content("{\"action\":\"CONFIRM\"}"))
+                        .andExpect(status().isOk());
+                mvc.perform(
+                                post("/api/v1/admin/orders/" + id + "/receipt")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"2\"")
+                                        .contentType("application/json")
+                                        .content("{}"))
+                        .andExpect(status().isOk());
+                assertNull(
+                        db.queryForObject(
+                                "SELECT amount FROM order_receipt WHERE order_id=?",
+                                java.math.BigDecimal.class,
+                                UUID.fromString(id)));
+                mvc.perform(
+                                delete("/api/v1/admin/orders/" + id)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"3\""))
+                        .andExpect(status().isConflict());
+                String projectResult =
+                        mvc.perform(
+                                        post("/api/v1/admin/projects")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("Idempotency-Key", UUID.randomUUID())
+                                                .contentType("application/json")
+                                                .content(
+                                                        json.writeValueAsString(
+                                                                Map.of(
+                                                                        "orderId",
+                                                                        id,
+                                                                        "title",
+                                                                        "项目",
+                                                                        "requirements",
+                                                                        "需求",
+                                                                        "deliveryDate",
+                                                                        java.time.LocalDate.now()
+                                                                                .plusDays(7)
+                                                                                .toString(),
+                                                                        "requirementAssetIds",
+                                                                        List.of()))))
+                                .andExpect(status().isCreated())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString();
+                String project = json.readTree(projectResult).get("id").asText();
+                UUID boundStudent = UUID.randomUUID();
+                seed(boundStudent, "student", UUID.randomUUID().toString());
+                // 绑定证明链另有独立测试，此处仅准备阶段测试的授权归属。
+                db.update(
+                        "UPDATE software_order SET student_id=? WHERE id=?",
+                        boundStudent,
+                        UUID.fromString(id));
+                mvc.perform(
+                                post("/api/v1/admin/orders/" + id + "/transition")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"3\"")
+                                        .contentType("application/json")
+                                        .content("{\"action\":\"ACTIVATE\"}"))
+                        .andExpect(status().isOk());
+
+                mvc.perform(
+                                post("/api/v1/admin/projects/" + project + "/stage")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .header("If-Match", "\"1\"")
+                                        .contentType("application/json")
+                                        .content("{\"stage\":\"REQUIREMENTS\"}"))
+                        .andExpect(status().isOk());
+                var files =
+                        List.of(
+                                Map.of("kind", "TASK", "assetId", UUID.randomUUID(), "note", "测试"),
+                                Map.of(
+                                        "kind",
+                                        "SOURCE_CODE",
+                                        "assetId",
+                                        UUID.randomUUID(),
+                                        "note",
+                                        "测试"));
+                mvc.perform(
+                                post("/api/v1/admin/projects/" + project + "/delivery-releases")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .contentType("application/json")
+                                        .content(
+                                                json.writeValueAsString(
+                                                        Map.of("files", files, "note", "版本1"))))
+                        .andExpect(status().isUnprocessableEntity());
+                assertEquals(
+                        0,
+                        db.queryForObject(
+                                "SELECT count(*) FROM project_delivery WHERE project_id=?",
+                                Integer.class,
+                                UUID.fromString(project)));
+                UUID store = UUID.randomUUID();
+                db.update(
+                        "INSERT INTO"
+                            + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                            + " VALUES(?,'测试存储','S3_COMPATIBLE','isolated-orders','test','https://storage.invalid','test','PRIVATE','ENABLED',?,?)",
+                        store,
+                        adminId,
+                        adminId);
+                var validFiles = new ArrayList<Map<String, Object>>();
+                for (String deliveryKind : List.of("SOURCE_CODE", "THESIS_TEMPLATE")) {
+                    UUID asset = UUID.randomUUID();
+                    // READY数据仅用于状态机测试，不代表本轮实际上传扫描通过。
+                    db.update(
+                            "INSERT INTO"
+                                + " asset(id,upload_id,owner_type,project_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,state,upload_expires_at,created_by,updated_by)"
+                                + " VALUES(?,?,'PROJECT',?,?,'测试.zip',10,?,'application/zip',?,?,'READY',now(),?,?)",
+                            asset,
+                            UUID.randomUUID(),
+                            UUID.fromString(project),
+                            store,
+                            "0".repeat(64),
+                            "isolated/" + asset,
+                            "isolated/private/" + asset,
+                            adminId,
+                            adminId);
+                    validFiles.add(Map.of("kind", deliveryKind, "assetId", asset, "note", "测试"));
+                }
+                String batch = json.writeValueAsString(Map.of("files", validFiles, "note", "统一版本"));
+                UUID key = UUID.randomUUID();
+                for (int retry = 0; retry < 2; retry++)
+                    mvc.perform(
+                                    post("/api/v1/admin/projects/" + project + "/delivery-releases")
+                                            .header("Authorization", "Bearer " + adminToken)
+                                            .header("Idempotency-Key", key)
+                                            .contentType("application/json")
+                                            .content(batch))
+                            .andExpect(status().isCreated())
+                            .andExpect(jsonPath("$[0].releaseNumber").value(1))
+                            .andExpect(jsonPath("$[1].releaseNumber").value(1));
+                assertEquals(
+                        2,
+                        db.queryForObject(
+                                "SELECT count(*) FROM project_delivery WHERE project_id=?",
+                                Integer.class,
+                                UUID.fromString(project)));
+                assertEquals(
+                        1,
+                        db.queryForObject(
+                                "SELECT count(DISTINCT release_id) FROM project_delivery WHERE"
+                                        + " project_id=?",
+                                Integer.class,
+                                UUID.fromString(project)));
+                int version = 2;
+                for (String stage :
+                        List.of("PROPOSAL", "DEVELOPMENT", "DOCUMENTATION", "ACCEPTANCE")) {
+                    mvc.perform(
+                                    post("/api/v1/admin/projects/" + project + "/stage")
+                                            .header("Authorization", "Bearer " + adminToken)
+                                            .header("Idempotency-Key", UUID.randomUUID())
+                                            .header("If-Match", "\"" + (version++) + "\"")
+                                            .contentType("application/json")
+                                            .content(
+                                                    json.writeValueAsString(
+                                                            Map.of("stage", stage))))
+                            .andExpect(status().isOk());
+                }
+                mvc.perform(
+                                get("/api/v1/admin/projects/" + project)
+                                        .header("Authorization", "Bearer " + adminToken))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.progress").value(90));
+            }
+        }
+        String event =
+                json.writeValueAsString(
+                        Map.of("id", UUID.randomUUID(), "path", "/admin/orders", "seconds", 20));
+        for (int n = 0; n < 2; n++)
+            mvc.perform(
+                            post("/api/v1/admin/activity")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .contentType("application/json")
+                                    .content(event))
+                    .andExpect(status().isNoContent());
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM user_activity WHERE actor_id=?",
+                        Integer.class,
+                        adminId));
+        mvc.perform(
+                        post("/api/v1/student/activity")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .contentType("application/json")
+                                .content(event))
+                .andExpect(status().isForbidden());
+        String day = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).toString();
+        mvc.perform(
+                        get("/api/v1/admin/activity/summary")
+                                .param("from", day)
+                                .param("to", day)
+                                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].activeSeconds").value(20));
+        mvc.perform(
+                        get("/api/v1/admin/activity")
+                                .param("from", day)
+                                .param("to", day)
+                                .header("Authorization", "Bearer " + partnerToken))
                 .andExpect(status().isForbidden());
     }
 
@@ -9267,7 +9559,7 @@ class FoundationIntegrationTest {
             }
             mvc.perform(get(path + "/" + project).header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.progress").value(60))
+                    .andExpect(jsonPath("$.progress").value(0))
                     .andExpect(jsonPath("$.version").value(2));
             mvc.perform(
                             put(path + "/" + project)

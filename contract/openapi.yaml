@@ -7322,6 +7322,105 @@ paths:
             schema:
               $ref: '#/components/schemas/OrderWrite'
   /api/v1/admin/orders/{id}:
+    delete:
+      operationId: delete_admin_orders_id
+      summary: 删除无业务引用订单
+      tags:
+      - admin
+      x-permission: delete_admin_orders_id
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '204':
+          description: 成功
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: GET 返回的强 ETag，如 "3"
+        schema:
+          type: string
+          description: ''
+          pattern: ^"[0-9]+"$
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      description: 被引用返回 409；内置对象禁止；已使用价格版本不可改内容只能停用。删除规则见数据库文档。
     get:
       operationId: get_admin_orders_id
       summary: 订单详情
@@ -16605,6 +16704,1291 @@ paths:
         '403': {description: 无权查看}
         '404': {description: 内容不存在}
 
+  /api/v1/admin/service-packages:
+    get:
+      operationId: get_admin_service_packages
+      summary: 分页查询服务套餐
+      tags:
+      - admin
+      x-permission: packages:read
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackagePage'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: page
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: size
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: q
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: string
+          description: ''
+          maxLength: 100
+      - name: status
+        in: query
+        required: false
+        description: 状态取值遵循返回资源定义；未知状态 400
+        schema:
+          type: string
+          description: ''
+          maxLength: 200
+      - name: sort
+        in: query
+        required: false
+        description: 稳定排序附加 id 同序
+        schema:
+          type: string
+          enum:
+          - createdAt:desc
+          - createdAt:asc
+          - updatedAt:desc
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+    post:
+      operationId: post_admin_service_packages
+      summary: 新增服务套餐
+      tags:
+      - admin
+      x-permission: packages:write
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackage'
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                type: string
+                description: ''
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePackageWrite'
+  /api/v1/admin/service-packages/{id}:
+    get:
+      operationId: get_admin_service_packages_id
+      summary: 读取服务套餐
+      tags:
+      - admin
+      x-permission: packages:read
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackage'
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                type: string
+                description: ''
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+    put:
+      operationId: put_admin_service_packages_id
+      summary: 编辑服务套餐
+      tags:
+      - admin
+      x-permission: packages:write
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackage'
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                type: string
+                description: ''
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: GET 返回的强 ETag，如 "3"
+        schema:
+          type: string
+          description: ''
+          pattern: ^"[0-9]+"$
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePackageWrite'
+    delete:
+      operationId: delete_admin_service_packages_id
+      summary: 删除服务套餐
+      tags:
+      - admin
+      x-permission: packages:write
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '204':
+          description: 成功
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: GET 返回的强 ETag，如 "3"
+        schema:
+          type: string
+          description: ''
+          pattern: ^"[0-9]+"$
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      description: 被引用返回 409；内置对象禁止；已使用价格版本不可改内容只能停用。删除规则见数据库文档。
+  /api/v1/admin/service-packages/{id}/status:
+    post:
+      operationId: post_admin_service_packages_id_status
+      summary: 启停服务套餐
+      tags:
+      - admin
+      x-permission: packages:write
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackage'
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                type: string
+                description: ''
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: If-Match
+        in: header
+        required: true
+        description: GET 返回的强 ETag，如 "3"
+        schema:
+          type: string
+          description: ''
+          pattern: ^"[0-9]+"$
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StateChange'
+  /api/v1/admin/projects/{id}/delivery-releases:
+    post:
+      operationId: post_admin_projects_id_delivery_releases
+      summary: 原子发布一批交付文件
+      tags:
+      - admin
+      x-permission: post_admin_projects_id_deliveries
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryVersion'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: 资源标识
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          minLength: 16
+          maxLength: 128
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryBatch'
+      x-permissions-all:
+      - post_admin_projects_id_deliveries
+      - post_admin_deliveries_id_publish
+  /api/v1/partner/service-packages:
+    get:
+      operationId: get_partner_service_packages
+      summary: 下单可选启用套餐
+      tags:
+      - partner
+      x-permission: post_partner_orders
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePackagePage'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: page
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: size
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: q
+        in: query
+        required: false
+        description: ''
+        schema:
+          type: string
+          description: ''
+          maxLength: 100
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+  /api/v1/admin/activity:
+    post:
+      operationId: post_admin_activity
+      summary: 上报当前账户可见活跃片段
+      tags:
+      - admin
+      x-authenticated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityWrite'
+      responses:
+        '204':
+          description: 已接收或幂等忽略
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      operationId: get_admin_activity
+      summary: 查询真实用户活动分页
+      tags:
+      - admin
+      x-permission: activity:read
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: from
+        in: query
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          format: date
+      - name: to
+        in: query
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          format: date
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      - name: userId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: query
+        schema:
+          type: string
+          enum:
+          - LOGIN
+          - VIEW
+          - ACTION
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: size
+        in: query
+        schema:
+          type: integer
+          default: 20
+  /api/v1/admin/activity/summary:
+    get:
+      operationId: get_admin_activity_summary
+      summary: 查询真实用户活动日汇总
+      tags:
+      - admin
+      x-permission: activity:read
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivityDaily'
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: from
+        in: query
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          format: date
+      - name: to
+        in: query
+        required: true
+        description: ''
+        schema:
+          type: string
+          description: ''
+          format: date
+      - name: X-Request-ID
+        in: header
+        required: false
+        description: 可选关联 ID；服务端生成可信 traceId
+        schema:
+          type: string
+          description: ''
+          maxLength: 128
+      - name: userId
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: query
+        schema:
+          type: string
+          enum:
+          - LOGIN
+          - VIEW
+          - ACTION
+  /api/v1/student/activity:
+    post:
+      operationId: post_student_activity
+      summary: 上报当前账户可见活跃片段
+      tags:
+      - student
+      x-authenticated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityWrite'
+      responses:
+        '204':
+          description: 已接收或幂等忽略
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/partner/activity:
+    post:
+      operationId: post_partner_activity
+      summary: 上报当前账户可见活跃片段
+      tags:
+      - partner
+      x-authenticated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivityWrite'
+      responses:
+        '204':
+          description: 已接收或幂等忽略
+        '400':
+          description: 参数或格式错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 会话无效
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 缺少平台/操作权限
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 不存在或不可见
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 业务冲突/幂等键内容不一致
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '412':
+          description: ETag 版本冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: 状态或引用规则不满足
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 限流
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: 依赖服务不可用
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -16624,6 +18008,195 @@ components:
       in: cookie
       name: zx_admin_refresh
   schemas:
+    ActivityWrite:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - path
+      - seconds
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          maxLength: 160
+          pattern: ^/(admin|student|partner)(/[a-z-]+){0,2}$
+        contentId:
+          type: string
+          format: uuid
+        seconds:
+          type: integer
+          minimum: 0
+          maximum: 30
+    ActivityDaily:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+        loginUsers:
+          type: integer
+        logins:
+          type: integer
+        views:
+          type: integer
+        activeSeconds:
+          type: integer
+        learningSeconds:
+          type: integer
+    ActivityPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+    Activity:
+      type: object
+      properties:
+        displayName:
+          type: string
+        platform:
+          type: string
+        kind:
+          type: string
+        path:
+          type: string
+        ip:
+          type: string
+        location:
+          type: string
+        id:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        contentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        contentTitle:
+          type:
+          - string
+          - 'null'
+        seconds:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    DeliveryBatch:
+      type: object
+      additionalProperties: false
+      required:
+      - files
+      - note
+      properties:
+        files:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/DeliveryVersionWrite'
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    ServicePackagePage:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicePackage'
+        page:
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+        size:
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+        total:
+          type: integer
+          minimum: 0
+          maximum: 9223372036854775807
+      required:
+      - items
+      - page
+      - size
+      - total
+    ServicePackageWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: ''
+          maxLength: 100
+        code:
+          type: string
+          description: ''
+          maxLength: 64
+        status:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+      required:
+      - name
+      - code
+      - status
+    ServicePackage:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 资源标识
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        updatedAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        name:
+          type: string
+          description: ''
+          maxLength: 100
+        code:
+          type: string
+          description: ''
+          maxLength: 64
+        status:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+      required:
+      - id
+      - version
+      - createdAt
+      - updatedAt
+      - name
+      - code
+      - status
     SchoolWrite:
       type: object
       additionalProperties: false
@@ -17408,7 +18981,10 @@ components:
       additionalProperties: false
       properties:
         title: *id011
-        orderNo: *id011
+        orderNo:
+          type: string
+          maxLength: 200
+          description: 新增时服务端自动生成，编辑不可更改
         studentPhone:
           type: string
           description: ''
@@ -17420,11 +18996,13 @@ components:
           format: uuid
         amount: *id022
         currency:
+          default: CNY
           type: string
           enum:
           - CNY
         packageCode: *id011
         source:
+          default: MANUAL
           type: string
           enum:
           - MANUAL
@@ -17435,11 +19013,9 @@ components:
         majorId: *id010
       required:
       - title
-      - orderNo
       - studentPhone
       - partnerId
       - amount
-      - currency
       - packageCode
       - source
       - schoolId
@@ -17558,13 +19134,28 @@ components:
       type: object
       additionalProperties: false
       properties:
-        orderId: *id010
-        title: *id011
+        orderId:
+          type: string
+          description: 资源标识
+          format: uuid
+        title:
+          type: string
+          description: ''
+          maxLength: 200
         requirements: &id032
           type: string
           description: ''
           maxLength: 20000
-        deliveryDate: *id013
+        deliveryDate:
+          type: string
+          description: ''
+          format: date
+        requirementAssetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 20
       required:
       - orderId
       - title
@@ -17575,19 +19166,58 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id010
-        version: *id016
-        createdAt: *id014
-        updatedAt: *id014
-        orderId: *id010
-        title: *id011
-        requirements: *id032
-        deliveryDate: *id013
-        stage: *id033
+        id:
+          type: string
+          description: 资源标识
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        updatedAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        orderId:
+          type: string
+          description: 资源标识
+          format: uuid
+        title:
+          type: string
+          description: ''
+          maxLength: 200
+        requirements:
+          type: string
+          description: ''
+          maxLength: 20000
+        deliveryDate:
+          type: string
+          description: ''
+          format: date
+        stage:
+          type: string
+          enum:
+          - PENDING
+          - REQUIREMENTS
+          - PROPOSAL
+          - DEVELOPMENT
+          - DOCUMENTATION
+          - ACCEPTANCE
+          - DONE
+          - PAUSED
         progress:
           type: integer
           minimum: 0
           maximum: 100
+        requirementAssetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 20
       required:
       - id
       - version
@@ -17683,14 +19313,42 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id010
-        version: *id016
-        createdAt: *id014
-        updatedAt: *id014
-        kind: *id036
-        assetId: *id010
-        note: *id011
-        projectId: *id010
+        id:
+          type: string
+          description: 资源标识
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        updatedAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        kind:
+          type: string
+          enum:
+          - TASK
+          - PROPOSAL
+          - THESIS_TEMPLATE
+          - SOURCE_CODE
+          - QA_ATTACHMENT
+          - RECORDING
+        assetId:
+          type: string
+          description: 资源标识
+          format: uuid
+        note:
+          type: string
+          description: ''
+          maxLength: 200
+        projectId:
+          type: string
+          description: 资源标识
+          format: uuid
         versionNumber:
           type: integer
           minimum: 1
@@ -17701,6 +19359,15 @@ components:
           - PUBLISHED
           - SUPERSEDED
           - WITHDRAWN
+        releaseId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        releaseNumber:
+          type:
+          - integer
+          - 'null'
       required:
       - id
       - version
@@ -18800,15 +20467,16 @@ components:
       required:
       - status
     StageChange:
-      description: 订单须ACTIVE。阶段顺序推进，可暂停并恢复原阶段；DONE仅由学生验收产生。进入ACCEPTANCE须进度100并发布源码与论文模板。
+      description: 订单须ACTIVE。阶段顺序推进，可暂停并恢复原阶段；DONE仅由学生验收产生。进入ACCEPTANCE须发布源码与论文模板。
       type: object
       additionalProperties: false
       properties:
         stage: *id033
-        reason: *id011
+        reason:
+          type: string
+          maxLength: 200
       required:
       - stage
-      - reason
     OrderTransition:
       type: object
       additionalProperties: false
@@ -18821,27 +20489,38 @@ components:
           - COMPLETE
           - CANCEL
           - ARCHIVE
-        reason: *id011
+        reason:
+          type: string
+          maxLength: 200
       required:
       - action
-      - reason
       description: CONFIRM为人工核实，不代表收款；金额必须大于0，否则返回422 ORDER_AMOUNT_INVALID并保留草稿供修改。零金额仅允许暂存草稿，当前无免费订单履约流程。ACTIVATE须已绑定学生、已确认收款并有项目；COMPLETE须项目DONE。CANCEL允许DRAFT/CONFIRMED/ACTIVE，但存在运行中答疑或未决预占时返回ORDER_CANCEL_UNSETTLED；同事务暂停未完成项目、失效挑战并记录快照，已收款保留财务核对标记，不自动退款。
     Receipt:
-      description: 已确认未收款订单全额核验；流水号全局唯一，凭证须属于订单且READY，核验记录不可覆盖，不支持分期与退款。
       type: object
       additionalProperties: false
+      description: 人工核验；补充资料可选，不填写金额时不作为实付金额统计。
       properties:
-        reference: *id011
-        receivedAt: *id014
-        amount: *id022
-        proofAssetId: *id010
-        reason: *id011
-      required:
-      - reference
-      - receivedAt
-      - amount
-      - proofAssetId
-      - reason
+        reference:
+          type: string
+          maxLength: 200
+        receivedAt:
+          type: string
+          format: date-time
+        amount:
+          type: string
+          pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
+        proofAssetId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          maxLength: 1000
+        channel:
+          type: string
+          enum:
+          - WECHAT
+          - ALIPAY
+          - BANK_CARD
     Assignment:
       type: object
       additionalProperties: false
@@ -18851,10 +20530,11 @@ components:
           - string
           - 'null'
           format: uuid
-        reason: *id011
+        reason:
+          type: string
+          maxLength: 200
       required:
       - partnerId
-      - reason
     Moderation:
       type: object
       additionalProperties: false

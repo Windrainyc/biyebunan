@@ -129,6 +129,57 @@ public class DeliveryService {
         return view(mapper.get(id));
     }
 
+    /**
+     * 同事务创建并发布多类文件，任一文件不合法时整批回滚。
+     *
+     * @param project 项目
+     * @param w 批次
+     * @param actor 管理员
+     * @return 本次发布的文件快照
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public List<DeliveryDtos.View> publishBatch(UUID project, DeliveryDtos.Batch w, Actor actor) {
+        lock(project, actor, false);
+        Set<String> kinds = new HashSet<>();
+        for (var file : w.files()) {
+            if (!kinds.add(file.kind()))
+                throw new BusinessException(422, "DUPLICATE_DELIVERY_KIND", "同一版本每类资料只能提交一次");
+        }
+        // 固定资产锁顺序，减少跨请求死锁风险。
+        w.files().stream()
+                .map(DeliveryDtos.Write::assetId)
+                .sorted()
+                .forEach(id -> validAsset(id, project));
+        UUID batch = UUID.randomUUID();
+        int number = mapper.nextRelease(project);
+        List<DeliveryDtos.View> result = new ArrayList<>();
+        for (var file : w.files()) {
+            UUID id = UUID.randomUUID();
+            mapper.insert(
+                    id,
+                    project,
+                    new DeliveryDtos.Write(file.kind(), file.assetId(), w.note()),
+                    actor.id());
+            mapper.release(id, batch, number);
+            mapper.supersede(project, file.kind(), actor.id());
+            mapper.state(id, "PUBLISHED", actor.id());
+            audit(id, actor.id(), "PUBLISHED", w.note());
+            result.add(view(mapper.get(id)));
+        }
+        var p = projects.get(project, actor);
+        var order = orders.get(p.orderId(), actor);
+        if (order.studentId() != null) {
+            UUID event = UUID.randomUUID();
+            writes.event(
+                    event,
+                    result.getFirst().id(),
+                    "delivery.PUBLISHED",
+                    "{\"id\":\"" + result.getFirst().id() + "\"}");
+            notifications.enqueueDelivery(order.studentId(), event);
+        }
+        return result;
+    }
+
     private void lock(UUID id, Actor actor, boolean withdrawal) {
         if (!actor.platform().equals("admin")) missing();
         var p = projects.get(id, actor);
@@ -177,6 +228,8 @@ public class DeliveryService {
                 r.note(),
                 r.projectId(),
                 r.versionNumber(),
-                r.state());
+                r.state(),
+                r.releaseId(),
+                r.releaseNumber());
     }
 }

@@ -39,6 +39,10 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
 server:
+  forward-headers-strategy: ${ZX_FORWARDED_HEADERS_STRATEGY:NONE}
+  tomcat:
+    remoteip:
+      internal-proxies: ${ZX_TRUSTED_PROXY_REGEX:127\\.0\\.0\\.1}
   address: ${ZX_BIND_ADDRESS:127.0.0.1}
   port: ${ZX_PORT:18080}
   shutdown: graceful

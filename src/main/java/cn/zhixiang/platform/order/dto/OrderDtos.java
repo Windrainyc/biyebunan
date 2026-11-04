@@ -28,11 +28,11 @@ public final class OrderDtos {
      */
     public record Write(
             @NotBlank @Size(max = 200) String title,
-            @NotBlank @Size(max = 200) String orderNo,
+            @Size(max = 200) String orderNo,
             @NotNull @Pattern(regexp = "1[0-9]{10}") String studentPhone,
             UUID partnerId,
             @NotNull @Pattern(regexp = "[0-9]{1,14}(\\.[0-9]{1,6})?") String amount,
-            @NotNull @Pattern(regexp = "CNY") String currency,
+            @Pattern(regexp = "CNY") String currency,
             @NotBlank @Size(max = 200) String packageCode,
             @NotNull @Pattern(regexp = "MANUAL|IMPORT|PARTNER") String source,
             @NotNull UUID schoolId,
@@ -94,7 +94,7 @@ public final class OrderDtos {
      * @param partnerId 新中介，null表示取消中介归属
      * @param reason 审计原因
      */
-    public record Assignment(UUID partnerId, @NotBlank @Size(max = 200) String reason) {}
+    public record Assignment(UUID partnerId, @Size(max = 200) String reason) {}
 
     /**
      * 无手机号的订单响应。
@@ -209,5 +209,5 @@ public final class OrderDtos {
      */
     public record Transition(
             @NotNull @Pattern(regexp = "CONFIRM|ACTIVATE|COMPLETE|CANCEL|ARCHIVE") String action,
-            @NotBlank @Size(max = 200) String reason) {}
+            @Size(max = 200) String reason) {}
 }

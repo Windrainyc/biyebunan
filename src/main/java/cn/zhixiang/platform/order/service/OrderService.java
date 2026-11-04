@@ -103,7 +103,19 @@ public class OrderService {
         platform(actor, "admin");
         if (w.source().equals("PARTNER"))
             throw new BusinessException(422, "ORDER_SOURCE_INVALID", "中介来源只允许中介平台创建");
-        return createInternal(w, actor, "", w.source());
+        var input =
+                new OrderDtos.Write(
+                        w.title(),
+                        generatedNumber(),
+                        w.studentPhone(),
+                        w.partnerId(),
+                        w.amount(),
+                        w.currency() == null || w.currency().isBlank() ? "CNY" : w.currency(),
+                        w.packageCode(),
+                        w.source(),
+                        w.schoolId(),
+                        w.majorId());
+        return createInternal(input, actor, "", w.source());
     }
 
     /**
@@ -119,7 +131,7 @@ public class OrderService {
         var input =
                 new OrderDtos.Write(
                         w.title(),
-                        "ZX" + UUID.randomUUID().toString().replace("-", ""),
+                        generatedNumber(),
                         w.studentPhone(),
                         actor.id(),
                         "0",
@@ -135,6 +147,8 @@ public class OrderService {
             OrderDtos.Write w, Actor actor, String note, String source) {
         references(w.schoolId(), w.majorId());
         partner(w.partnerId());
+        if (mapper.enabledPackage(w.packageCode()) == null)
+            throw new BusinessException(422, "PACKAGE_UNAVAILABLE", "请选择启用的服务套餐");
         UUID id = UUID.randomUUID();
         mapper.insert(
                 id,
@@ -163,6 +177,9 @@ public class OrderService {
         references(w.schoolId(), w.majorId());
         var old = checked(id, version, actor);
         draft(old);
+        if (!old.packageCode().equals(w.packageCode())
+                && mapper.enabledPackage(w.packageCode()) == null)
+            throw new BusinessException(422, "PACKAGE_UNAVAILABLE", "请选择启用的服务套餐");
         if (!old.source().equals(w.source())
                 || !old.orderNo().equals(w.orderNo())
                 || !java.util.Objects.equals(old.partnerId(), w.partnerId()))
@@ -217,8 +234,23 @@ public class OrderService {
         partner(w.partnerId());
         if (java.util.Objects.equals(old.partnerId(), w.partnerId())) return view(old);
         if (mapper.assign(id, version, w.partnerId(), actor.id()) != 1) conflict();
-        audit(id, actor.id(), "ASSIGNED", w.reason());
+        audit(
+                id,
+                actor.id(),
+                "ASSIGNED",
+                (w.reason() == null || w.reason().isBlank() ? "管理员操作" : w.reason().trim()));
         return get(id, actor);
+    }
+
+    private String generatedNumber() {
+        return "ZX"
+                + java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Shanghai"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                + UUID.randomUUID()
+                        .toString()
+                        .replace("-", "")
+                        .substring(0, 10)
+                        .toUpperCase(java.util.Locale.ROOT);
     }
 
     private void references(UUID school, UUID major) {
@@ -338,14 +370,21 @@ public class OrderService {
                         if (cancellation.unsettled(id))
                             throw new BusinessException(
                                     422, "ORDER_CANCEL_UNSETTLED", "请先处理运行中的答疑及待核对费用");
-                        cancellation.pause(id, actor.id(), w.reason());
+                        cancellation.pause(
+                                id,
+                                actor.id(),
+                                (w.reason() == null || w.reason().isBlank()
+                                        ? "管理员操作"
+                                        : w.reason().trim()));
                         cancellation.invalidate(id);
                         cancellation.record(
                                 id,
                                 old.status(),
                                 old.receiptStatus().equals("CONFIRMED"),
                                 actor.id(),
-                                w.reason());
+                                (w.reason() == null || w.reason().isBlank()
+                                        ? "管理员操作"
+                                        : w.reason().trim()));
                         yield "CANCELLED";
                     }
                     case "ARCHIVE" -> {
@@ -355,12 +394,37 @@ public class OrderService {
                     default -> throw new BusinessException(422, "ORDER_ACTION_INVALID", "订单动作无效");
                 };
         if (mapper.transition(id, version, next, actor.id()) != 1) conflict();
-        audit(id, actor.id(), "TRANSITION_" + next, w.reason());
+        audit(
+                id,
+                actor.id(),
+                "TRANSITION_" + next,
+                (w.reason() == null || w.reason().isBlank() ? "管理员操作" : w.reason().trim()));
         return get(id, actor);
     }
 
     private void requireState(OrderEntity r, String expected) {
         if (!r.status().equals(expected))
             throw new BusinessException(422, "ORDER_STATE_INVALID", "订单状态不允许此动作");
+    }
+
+    /**
+     * 删除未绑定、未收款且没有项目引用的草稿或取消订单。
+     *
+     * @param id 订单
+     * @param version 版本
+     * @param actor 管理员
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(UUID id, long version, Actor actor) {
+        platform(actor, "admin");
+        var old = checked(id, version, actor);
+        if (!java.util.Set.of("DRAFT", "CANCELLED").contains(old.status())
+                || old.studentId() != null
+                || !"UNCONFIRMED".equals(old.receiptStatus())
+                || mapper.projectStage(id) != null)
+            throw new BusinessException(
+                    409, "ORDER_DELETE_REFERENCED", "仅可删除未绑定、未收款且无关联项目的草稿或取消订单");
+        if (mapper.delete(id, version) != 1) conflict();
+        audit(id, actor.id(), "DELETED", "管理员删除订单");
     }
 }

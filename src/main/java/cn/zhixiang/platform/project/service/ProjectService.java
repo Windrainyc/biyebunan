@@ -92,6 +92,7 @@ public class ProjectService {
         order(w.orderId(), actor);
         UUID id = UUID.randomUUID();
         mapper.insert(id, w, actor.id());
+        requirements(id, w.requirementAssetIds());
         audit(id, actor.id(), "CREATED");
         return get(id, actor);
     }
@@ -118,12 +119,22 @@ public class ProjectService {
             throw new BusinessException(412, "VERSION_CONFLICT", "项目已更新");
         if (current.stage().equals("DONE"))
             throw new BusinessException(422, "PROJECT_FINISHED", "已验收项目不可修改主体");
-        if (mapper.lateMilestone(id, w.deliveryDate()))
-            throw new BusinessException(422, "PROJECT_DATE_INVALID", "交付日期不能早于已有里程碑");
         if (mapper.update(id, version, w, actor.id()) != 1)
             throw new BusinessException(412, "VERSION_CONFLICT", "项目已更新");
+        requirements(id, w.requirementAssetIds());
         audit(id, actor.id(), "UPDATED");
         return get(id, actor);
+    }
+
+    private void requirements(UUID project, java.util.List<UUID> ids) {
+        if (ids == null) return;
+        var unique = ids.stream().distinct().sorted().toList();
+        for (UUID id : unique) {
+            if (mapper.lockRequirementAsset(id) == null)
+                throw new BusinessException(422, "REQUIREMENT_ASSET_INVALID", "需求附件必须为已扫描通过的素材");
+        }
+        mapper.clearRequirements(project);
+        unique.forEach(id -> mapper.requirement(project, id));
     }
 
     private void order(UUID id, Actor actor) {
@@ -159,7 +170,8 @@ public class ProjectService {
                 r.requirements(),
                 r.deliveryDate(),
                 r.stage(),
-                r.progress());
+                r.progress(),
+                mapper.requirementAssets(r.id()));
     }
 
     /**

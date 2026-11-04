@@ -15,6 +15,8 @@ import java.util.*;
  * @param note 说明
  * @param projectId 项目
  * @param versionNumber 业务序号
+ * @param releaseId 发布批次，历史单文件版本为空
+ * @param releaseNumber 批次序号，历史单文件版本为空
  * @param state 状态
  */
 public record DeliveryEntity(
@@ -27,4 +29,6 @@ public record DeliveryEntity(
         String note,
         UUID projectId,
         int versionNumber,
-        String state) {}
+        String state,
+        UUID releaseId,
+        Integer releaseNumber) {}

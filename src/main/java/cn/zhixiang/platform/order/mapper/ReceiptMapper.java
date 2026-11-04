@@ -18,9 +18,9 @@ public interface ReceiptMapper {
      */
     @Insert(
             "INSERT INTO"
-                + " order_receipt(order_id,reference,received_at,amount,currency,proof_asset_id,reason,confirmed_by)"
+                + " order_receipt(order_id,reference,received_at,amount,currency,proof_asset_id,reason,confirmed_by,channel)"
                 + " VALUES(#{orderId},#{w.reference},#{w.receivedAt},CAST(#{w.amount} AS"
-                + " numeric),'CNY',#{w.proofAssetId},#{w.reason},#{actor})")
+                + " numeric),'CNY',#{w.proofAssetId},#{w.reason},#{actor},#{w.channel})")
     void insert(UUID orderId, @Param("w") ReceiptDtos.Write w, UUID actor);
 
     /**

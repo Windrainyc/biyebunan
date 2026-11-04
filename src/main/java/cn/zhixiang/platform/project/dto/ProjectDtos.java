@@ -18,13 +18,27 @@ public final class ProjectDtos {
      * @param orderId 已确认订单，创建后不可转移
      * @param title 项目题目
      * @param requirements 项目需求，最多20000字
+     * @param requirementAssetIds 需求附件，最多20个已扫描素材
      * @param deliveryDate 交付日期
      */
     public record Write(
             @NotNull UUID orderId,
             @NotBlank @Size(max = 200) String title,
             @NotNull @Size(max = 20000) String requirements,
-            @NotNull LocalDate deliveryDate) {}
+            @NotNull LocalDate deliveryDate,
+            @Size(max = 20) java.util.List<@NotNull UUID> requirementAssetIds) {
+        /**
+         * 兼容无附件的已有调用。
+         *
+         * @param orderId 关联订单
+         * @param title 标题
+         * @param requirements 需求
+         * @param deliveryDate 交付日
+         */
+        public Write(UUID orderId, String title, String requirements, LocalDate deliveryDate) {
+            this(orderId, title, requirements, deliveryDate, null);
+        }
+    }
 
     /**
      * 项目响应。
@@ -38,7 +52,8 @@ public final class ProjectDtos {
      * @param requirements 需求
      * @param deliveryDate 交付日期
      * @param stage 阶段
-     * @param progress 完成里程碑权重之和，0至100
+     * @param requirementAssetIds 当前需求附件
+     * @param progress 阶段进度，0至100
      */
     public record View(
             UUID id,
@@ -50,7 +65,8 @@ public final class ProjectDtos {
             String requirements,
             LocalDate deliveryDate,
             String stage,
-            int progress) {}
+            int progress,
+            java.util.List<UUID> requirementAssetIds) {}
 
     /**
      * 项目查询。

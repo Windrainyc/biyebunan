@@ -6,6 +6,7 @@
  <name>知项平台后端</name><description>三端隔离的项目答疑平台模块化单体</description>
  <properties><java.version>21</java.version><mybatis.version>4.0.1</mybatis.version></properties>
  <dependencies>
+  <dependency><groupId>org.lionsoul</groupId><artifactId>ip2region</artifactId><version>3.3.7</version></dependency>
   <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-opentelemetry</artifactId></dependency>
   <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
   <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-sdk-testing</artifactId><scope>test</scope></dependency>

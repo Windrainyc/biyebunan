@@ -154,6 +154,33 @@ public class DeliveryController {
         return change(id, w, match, key, actor, false);
     }
 
+    /**
+     * 原子发布整批资料，沿用交付新增及发布双权限。
+     *
+     * @param id 项目
+     * @param w 批次资料
+     * @param key 幂等键
+     * @param actor 管理员
+     * @return 发布快照
+     */
+    @PostMapping("/admin/projects/{id}/delivery-releases")
+    @PreAuthorize(
+            "hasAuthority('post_admin_projects_id_deliveries') and"
+                    + " hasAuthority('post_admin_deliveries_id_publish')")
+    public ResponseEntity<String> publishBatch(
+            @PathVariable UUID id,
+            @Valid @RequestBody DeliveryDtos.Batch w,
+            @RequestHeader("Idempotency-Key") String key,
+            @AuthenticationPrincipal Actor actor) {
+        return writes.execute(
+                actor.id(),
+                "POST",
+                "/api/v1/admin/projects/" + id + "/delivery-releases",
+                key,
+                w,
+                () -> ResponseEntity.status(201).body(service.publishBatch(id, w, actor)));
+    }
+
     private ResponseEntity<String> change(
             UUID id,
             DeliveryDtos.Reason w,

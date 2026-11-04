@@ -12,7 +12,7 @@ import java.util.*;
 public interface DeliveryMapper {
     /** 内部投影。 */
     String C =
-            "id,version,created_at,updated_at,kind,asset_id,note,project_id,version_number,state";
+            "id,version,created_at,updated_at,kind,asset_id,note,project_id,version_number,state,release_id,release_number";
 
     /** 共用列表过滤，学生只能读取当前发布版。 */
     String F =
@@ -123,4 +123,27 @@ public interface DeliveryMapper {
             "INSERT INTO delivery_event(id,delivery_id,action,reason,actor_id)"
                     + " VALUES(#{id},#{delivery},#{action},#{reason},#{actor})")
     void event(UUID id, UUID delivery, String action, String reason, UUID actor);
+
+    /**
+     * 将同次发布的不可变文件归入一个版本。
+     *
+     * @param id 文件交付
+     * @param batch 批次
+     * @param number 项目整体版本号
+     */
+    @Update(
+            "UPDATE project_delivery SET release_id=#{batch},release_number=#{number} WHERE"
+                    + " id=#{id} AND release_id IS NULL")
+    void release(UUID id, UUID batch, int number);
+
+    /**
+     * 在项目锁内计算下一个整批版本号。
+     *
+     * @param project 项目
+     * @return 下一序号
+     */
+    @Select(
+            "SELECT coalesce(max(release_number),0)+1 FROM project_delivery WHERE"
+                    + " project_id=#{project}")
+    int nextRelease(UUID project);
 }

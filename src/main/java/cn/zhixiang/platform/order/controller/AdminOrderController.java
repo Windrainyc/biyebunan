@@ -190,4 +190,33 @@ public class AdminOrderController {
                     return ResponseEntity.ok().eTag(Versions.etag(result.version())).body(result);
                 });
     }
+
+    /**
+     * 删除无业务引用订单，保留独立审计。
+     *
+     * @param id 订单
+     * @param match 期望版本
+     * @param key 幂等键
+     * @param actor 管理员
+     * @return 删除结果
+     */
+    @PreAuthorize("hasAuthority('delete_admin_orders_id')")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> delete(
+            @PathVariable UUID id,
+            @RequestHeader("If-Match") String match,
+            @RequestHeader("Idempotency-Key") String key,
+            @AuthenticationPrincipal Actor actor) {
+        long version = Versions.parse(match);
+        return writes.execute(
+                actor.id(),
+                "DELETE",
+                "/api/v1/admin/orders/" + id,
+                key,
+                version,
+                () -> {
+                    service.delete(id, version, actor);
+                    return ResponseEntity.noContent().build();
+                });
+    }
 }

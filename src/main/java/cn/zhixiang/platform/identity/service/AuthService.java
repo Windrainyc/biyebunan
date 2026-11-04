@@ -87,6 +87,7 @@ public class AuthService {
                         if (mapper.consumeMfa(current.id(), step) != 1)
                             throw new BusinessException(401, "MFA_INVALID", "二次验证码已使用");
                     }
+                    mapper.loginActivity(UUID.randomUUID(), current.id(), platform, ip);
                     return issue(
                             current,
                             UUID.randomUUID(),

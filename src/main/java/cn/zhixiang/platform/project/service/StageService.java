@@ -82,7 +82,13 @@ public class StageService {
             if (n < 0 || n + 1 >= FLOW.size() || !FLOW.get(n + 1).equals(target)) invalid();
         }
         if (target.equals("ACCEPTANCE")) ready(p);
-        return save(p, target, paused, w.reason(), null, actor);
+        return save(
+                p,
+                target,
+                paused,
+                (w.reason() == null || w.reason().isBlank() ? "阶段操作" : w.reason().trim()),
+                null,
+                actor);
     }
 
     /**
@@ -101,7 +107,13 @@ public class StageService {
         if (!p.stage().equals("ACCEPTANCE")) invalid();
         boolean accepted = w.decision().equals("ACCEPT");
         if (accepted) ready(p);
-        return save(p, accepted ? "DONE" : "DEVELOPMENT", null, w.reason(), w.decision(), actor);
+        return save(
+                p,
+                accepted ? "DONE" : "DEVELOPMENT",
+                null,
+                (w.reason() == null || w.reason().isBlank() ? "阶段操作" : w.reason().trim()),
+                w.decision(),
+                actor);
     }
 
     private ProjectEntity lock(UUID id, long version, Actor actor) {
@@ -116,8 +128,8 @@ public class StageService {
     }
 
     private void ready(ProjectEntity p) {
-        if (p.progress() != 100 || !mapper.deliverable(p.id()))
-            throw new BusinessException(422, "PROJECT_NOT_DELIVERABLE", "须完成100%里程碑并发布源码与论文模板");
+        if (!mapper.deliverable(p.id()))
+            throw new BusinessException(422, "PROJECT_NOT_DELIVERABLE", "须先发布源码与论文模板");
     }
 
     private ProjectDtos.View save(

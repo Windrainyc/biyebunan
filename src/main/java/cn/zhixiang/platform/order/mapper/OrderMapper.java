@@ -195,4 +195,23 @@ public interface OrderMapper {
                 + " status=#{state},version=version+1,updated_at=now(),updated_by=#{actor} WHERE"
                 + " id=#{id} AND version=#{version}")
     int transition(UUID id, long version, String state, UUID actor);
+
+    /**
+     * 锁定启用套餐代码，防止创建订单时并发停用或删除。
+     *
+     * @param code 套餐代码
+     * @return 启用代码或空
+     */
+    @Select("SELECT code FROM service_package WHERE code=#{code} AND status='ENABLED' FOR SHARE")
+    String enabledPackage(String code);
+
+    /**
+     * 删除未引用订单，关联外键仍保护完整业务数据。
+     *
+     * @param id 订单
+     * @param version 并发版本
+     * @return 删除数量
+     */
+    @Delete("DELETE FROM software_order WHERE id=#{id} AND version=#{version}")
+    int delete(UUID id, long version);
 }

@@ -29,6 +29,16 @@ public final class DeliveryDtos {
             @NotBlank @Size(max = 1000) String note) {}
 
     /**
+     * 一次发布多类交付文件，各类最多一个文件，不覆盖历史版本。
+     *
+     * @param files 本次更新的资料，未提交的类别保留当前发布版
+     * @param note 本次版本说明
+     */
+    public record Batch(
+            @NotEmpty @Size(max = 6) List<@jakarta.validation.Valid Write> files,
+            @NotBlank @Size(max = 1000) String note) {}
+
+    /**
      * 发布或撤回依据。
      *
      * @param reason 操作原因
@@ -47,6 +57,8 @@ public final class DeliveryDtos {
      * @param note 说明
      * @param projectId 项目
      * @param versionNumber 同项目同类别递增序号
+     * @param releaseId 发布批次，历史单文件版本为空
+     * @param releaseNumber 整体版本号，历史单文件版本为空
      * @param state 发布状态
      */
     public record View(
@@ -59,7 +71,9 @@ public final class DeliveryDtos {
             String note,
             UUID projectId,
             int versionNumber,
-            String state) {}
+            String state,
+            UUID releaseId,
+            Integer releaseNumber) {}
 
     /**
      * 分页过滤。

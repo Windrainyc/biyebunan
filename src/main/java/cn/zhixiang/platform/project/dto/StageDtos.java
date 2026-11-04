@@ -18,7 +18,7 @@ public final class StageDtos {
                             regexp =
                                     "PENDING|REQUIREMENTS|PROPOSAL|DEVELOPMENT|DOCUMENTATION|ACCEPTANCE|DONE|PAUSED")
                     String stage,
-            @NotBlank @Size(max = 1000) String reason) {}
+            @Size(max = 1000) String reason) {}
 
     /**
      * 学生验收。

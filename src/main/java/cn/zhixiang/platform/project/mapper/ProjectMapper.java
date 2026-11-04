@@ -21,12 +21,13 @@ public interface ProjectMapper {
      */
     @Select(
             "<script>SELECT"
-                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,COALESCE((SELECT"
-                + " sum(weight) FROM project_milestone WHERE project_id=software_project.id AND"
-                + " completed),0)::int AS progress FROM software_project WHERE EXISTS(SELECT 1 FROM"
-                + " software_order o WHERE o.id=software_project.order_id AND"
-                + " (#{actor.platform}='admin' OR (#{actor.platform}='student' AND"
-                + " o.student_id=#{actor.id} AND o.status IN"
+                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,CASE"
+                + " COALESCE(NULLIF(stage,'PAUSED'),paused_from) WHEN 'REQUIREMENTS' THEN 10 WHEN"
+                + " 'PROPOSAL' THEN 25 WHEN 'DEVELOPMENT' THEN 50 WHEN 'DOCUMENTATION' THEN 75 WHEN"
+                + " 'ACCEPTANCE' THEN 90 WHEN 'DONE' THEN 100 ELSE 0 END AS progress FROM"
+                + " software_project WHERE EXISTS(SELECT 1 FROM software_order o WHERE"
+                + " o.id=software_project.order_id AND (#{actor.platform}='admin' OR"
+                + " (#{actor.platform}='student' AND o.student_id=#{actor.id} AND o.status IN"
                 + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR (#{actor.platform}='partner'"
                 + " AND o.partner_id=#{actor.id})) <if test='q.studentId != null'>AND"
                 + " o.student_id=#{q.studentId}</if>) AND title ILIKE #{q.pattern} <if"
@@ -61,12 +62,13 @@ public interface ProjectMapper {
      */
     @Select(
             "SELECT"
-                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,COALESCE((SELECT"
-                + " sum(weight) FROM project_milestone WHERE project_id=software_project.id AND"
-                + " completed),0)::int AS progress FROM software_project WHERE id=#{id} AND"
-                + " EXISTS(SELECT 1 FROM software_order o WHERE o.id=software_project.order_id AND"
-                + " (#{actor.platform}='admin' OR (#{actor.platform}='student' AND"
-                + " o.student_id=#{actor.id} AND o.status IN"
+                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,CASE"
+                + " COALESCE(NULLIF(stage,'PAUSED'),paused_from) WHEN 'REQUIREMENTS' THEN 10 WHEN"
+                + " 'PROPOSAL' THEN 25 WHEN 'DEVELOPMENT' THEN 50 WHEN 'DOCUMENTATION' THEN 75 WHEN"
+                + " 'ACCEPTANCE' THEN 90 WHEN 'DONE' THEN 100 ELSE 0 END AS progress FROM"
+                + " software_project WHERE id=#{id} AND EXISTS(SELECT 1 FROM software_order o WHERE"
+                + " o.id=software_project.order_id AND (#{actor.platform}='admin' OR"
+                + " (#{actor.platform}='student' AND o.student_id=#{actor.id} AND o.status IN"
                 + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR (#{actor.platform}='partner'"
                 + " AND o.partner_id=#{actor.id})))")
     ProjectEntity get(UUID id, @Param("actor") Actor actor);
@@ -79,9 +81,11 @@ public interface ProjectMapper {
      */
     @Select(
             "SELECT"
-                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,COALESCE((SELECT"
-                + " sum(weight) FROM project_milestone WHERE project_id=software_project.id AND"
-                + " completed),0)::int AS progress FROM software_project WHERE id=#{id} FOR UPDATE")
+                + " id,version,created_at,updated_at,order_id,title,requirements,delivery_date,stage,CASE"
+                + " COALESCE(NULLIF(stage,'PAUSED'),paused_from) WHEN 'REQUIREMENTS' THEN 10 WHEN"
+                + " 'PROPOSAL' THEN 25 WHEN 'DEVELOPMENT' THEN 50 WHEN 'DOCUMENTATION' THEN 75 WHEN"
+                + " 'ACCEPTANCE' THEN 90 WHEN 'DONE' THEN 100 ELSE 0 END AS progress FROM"
+                + " software_project WHERE id=#{id} FOR UPDATE")
     ProjectEntity lock(UUID id);
 
     /**
@@ -123,4 +127,45 @@ public interface ProjectMapper {
             "SELECT EXISTS(SELECT 1 FROM project_milestone WHERE project_id=#{id} AND"
                     + " due_date>#{date})")
     boolean lateMilestone(UUID id, LocalDate date);
+
+    /**
+     * 读取已授权项目的附件标识。
+     *
+     * @param project 项目
+     * @return 附件列表
+     */
+    @Select(
+            "SELECT asset_id FROM project_requirement_asset WHERE project_id=#{project} ORDER BY"
+                    + " asset_id")
+    List<UUID> requirementAssets(UUID project);
+
+    /**
+     * 锁定可用素材以防并发删除。
+     *
+     * @param id 素材
+     * @return 可用标识或空
+     */
+    @Select(
+            "SELECT id FROM asset WHERE id=#{id} AND owner_type='MATERIAL' AND state='READY' AND"
+                    + " deleted_at IS NULL FOR UPDATE")
+    UUID lockRequirementAsset(UUID id);
+
+    /**
+     * 替换需求附件关系，资产本身保留。
+     *
+     * @param project 项目
+     */
+    @Delete("DELETE FROM project_requirement_asset WHERE project_id=#{project}")
+    void clearRequirements(UUID project);
+
+    /**
+     * 新增需求附件引用。
+     *
+     * @param project 项目
+     * @param asset 素材
+     */
+    @Insert(
+            "INSERT INTO project_requirement_asset(project_id,asset_id)"
+                    + " VALUES(#{project},#{asset})")
+    void requirement(UUID project, UUID asset);
 }

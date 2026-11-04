@@ -26,6 +26,10 @@ for (method, path), route in implemented.items():
         if spec.get('security') != [] or route['permission']:
             failures.append('OSS回调必须使用独立供应商签名而非用户权限')
     elif not path.startswith('/api/v1/auth/'):
+        if spec.get('x-authenticated') and path in ('/api/v1/admin/activity','/api/v1/student/activity','/api/v1/partner/activity') and method == 'post' and route['permission'] == 'isAuthenticated()':
+            continue
+        if spec.get('x-permissions-all') and route['permission'] == ' and '.join("hasAuthority('%s')" % permission for permission in spec['x-permissions-all']):
+            continue
         match = re.fullmatch(r"hasAuthority\('([^']+)'\)", route['permission'])
         if not match or match[1] != spec.get('x-permission'):
             failures.append(f'{method.upper()} {path}: 权限表达式与契约不一致')

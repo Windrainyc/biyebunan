@@ -17,7 +17,7 @@ public interface StageMapper {
     String pausedFrom(UUID id);
 
     /**
-     * 校验验收最低交付门槛；当前要求源码及论文模板发布，进度100。
+     * 校验验收最低交付门槛；当前要求源码及论文模板已发布。
      *
      * @param id 项目
      * @return 是否满足
