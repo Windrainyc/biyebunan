@@ -1,0 +1,15 @@
+{
+  "history": {
+    "total": 3,
+    "pageSize": 2,
+    "actions": [
+      "PUBLISH",
+      "REVIEW"
+    ]
+  },
+  "notificationShape": true,
+  "partnerProjects": 2,
+  "unrelatedStudentProjects": 0,
+  "historyPartnerDenied": true,
+  "studentNotificationTargets": 2
+}

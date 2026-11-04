@@ -60,8 +60,22 @@ public final class ProjectDtos {
      * @param q 题目搜索
      * @param status 项目阶段
      * @param sort 白名单排序
+     * @param studentId 可选学生筛选，不扩大服务端归属范围
      */
-    public record Query(int page, int size, String q, String status, String sort) {
+    public record Query(int page, int size, String q, String status, String sort, UUID studentId) {
+        /**
+         * 保留不指定学生的查询入口。
+         *
+         * @param page 页码
+         * @param size 页大小
+         * @param q 搜索词
+         * @param status 阶段
+         * @param sort 排序
+         */
+        public Query(int page, int size, String q, String status, String sort) {
+            this(page, size, q, status, sort, null);
+        }
+
         /**
          * 验证查询。
          *

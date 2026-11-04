@@ -40,6 +40,7 @@ public class PartnerProjectController {
      * @param status 状态
      * @param sort 排序
      * @param actor 权威身份
+     * @param studentId 可选学生筛选
      * @return 范围内分页
      */
     @PreAuthorize("hasAuthority('get_partner_projects')")
@@ -50,8 +51,10 @@ public class PartnerProjectController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String sort,
+            @RequestParam(required = false) UUID studentId,
             @AuthenticationPrincipal Actor actor) {
-        return service.partnerList(new ProjectDtos.Query(page, size, q, status, sort), actor);
+        return service.partnerList(
+                new ProjectDtos.Query(page, size, q, status, sort, studentId), actor);
     }
 
     /**

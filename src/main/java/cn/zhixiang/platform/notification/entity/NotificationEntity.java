@@ -12,6 +12,7 @@ import java.util.*;
  * @param readAt 已读时间，未读为空
  * @param announcementId 关联公告，可空表示业务提醒
  * @param createdAt 创建时间
+ * @param projectId 关联项目标识，可空，访问时仍须重新验权
  */
 public record NotificationEntity(
         UUID id,
@@ -19,4 +20,5 @@ public record NotificationEntity(
         String body,
         OffsetDateTime readAt,
         OffsetDateTime createdAt,
-        UUID announcementId) {}
+        UUID announcementId,
+        UUID projectId) {}

@@ -28,9 +28,10 @@ public interface ProjectMapper {
                 + " (#{actor.platform}='admin' OR (#{actor.platform}='student' AND"
                 + " o.student_id=#{actor.id} AND o.status IN"
                 + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR (#{actor.platform}='partner'"
-                + " AND o.partner_id=#{actor.id}))) AND title ILIKE #{q.pattern} <if test='q.status"
-                + " != null'>AND stage=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT #{q.size}"
-                + " OFFSET #{q.offset}</script>")
+                + " AND o.partner_id=#{actor.id})) <if test='q.studentId != null'>AND"
+                + " o.student_id=#{q.studentId}</if>) AND title ILIKE #{q.pattern} <if"
+                + " test='q.status != null'>AND stage=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT"
+                + " #{q.size} OFFSET #{q.offset}</script>")
     List<ProjectEntity> list(@Param("q") ProjectDtos.Query q, @Param("actor") Actor actor);
 
     /**
@@ -46,8 +47,9 @@ public interface ProjectMapper {
                 + " (#{actor.platform}='admin' OR (#{actor.platform}='student' AND"
                 + " o.student_id=#{actor.id} AND o.status IN"
                 + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR (#{actor.platform}='partner'"
-                + " AND o.partner_id=#{actor.id}))) AND title ILIKE #{q.pattern} <if test='q.status"
-                + " != null'>AND stage=#{q.status}</if></script>")
+                + " AND o.partner_id=#{actor.id})) <if test='q.studentId != null'>AND"
+                + " o.student_id=#{q.studentId}</if>) AND title ILIKE #{q.pattern} <if"
+                + " test='q.status != null'>AND stage=#{q.status}</if></script>")
     long count(@Param("q") ProjectDtos.Query q, @Param("actor") Actor actor);
 
     /**

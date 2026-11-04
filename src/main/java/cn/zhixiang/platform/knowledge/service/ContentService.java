@@ -97,6 +97,40 @@ public class ContentService {
     }
 
     /**
+     * 管理员分页查看处理原因；禁止学生和中介访问。
+     *
+     * @param id 内容标识
+     * @param page 页码
+     * @param size 页大小
+     * @param actor 服务端身份
+     * @return 稳定分页历史
+     */
+    @Transactional(
+            readOnly = true,
+            isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public PageResult<cn.zhixiang.platform.knowledge.dto.ContentEventResponse> history(
+            UUID id, int page, int size, Actor actor) {
+        if (!"admin".equals(actor.platform()))
+            throw new BusinessException(403, "FORBIDDEN", "无权查看处理历史");
+        get(id, actor);
+        var q = new cn.zhixiang.platform.shared.dto.PageQuery(page, size, null, null, null);
+        return new PageResult<>(
+                mapper.history(id, q.size(), q.offset()).stream()
+                        .map(
+                                e ->
+                                        new cn.zhixiang.platform.knowledge.dto.ContentEventResponse(
+                                                e.id(),
+                                                e.action(),
+                                                e.reason(),
+                                                e.actorName(),
+                                                e.createdAt()))
+                        .toList(),
+                page,
+                size,
+                mapper.historyCount(id));
+    }
+
+    /**
      * 新建草稿。
      *
      * @param w 输入

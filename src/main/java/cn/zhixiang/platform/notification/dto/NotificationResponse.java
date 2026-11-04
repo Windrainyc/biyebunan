@@ -14,6 +14,7 @@ import java.util.*;
  * @param read 已读标志
  * @param announcementId 关联公告，可空表示业务提醒
  * @param createdAt 创建时间
+ * @param projectId 关联项目标识，可空，访问时仍须重新验权
  */
 public record NotificationResponse(
         UUID id,
@@ -21,4 +22,5 @@ public record NotificationResponse(
         String body,
         boolean read,
         OffsetDateTime createdAt,
-        UUID announcementId) {}
+        UUID announcementId,
+        UUID projectId) {}

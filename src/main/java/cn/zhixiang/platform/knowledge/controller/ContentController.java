@@ -304,4 +304,23 @@ public class ContentController {
                     return ResponseEntity.ok().eTag(Versions.etag(r.version())).body(r);
                 });
     }
+
+    /**
+     * 复用内容详情权限读取审核和编辑历史。
+     *
+     * @param id 内容标识
+     * @param page 页码
+     * @param size 页大小
+     * @param actor 管理员身份
+     * @return 历史分页
+     */
+    @GetMapping("/admin/knowledge/{id}/history")
+    @PreAuthorize("hasAuthority('get_admin_knowledge_id')")
+    public PageResult<cn.zhixiang.platform.knowledge.dto.ContentEventResponse> history(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal Actor actor) {
+        return service.history(id, page, size, actor);
+    }
 }

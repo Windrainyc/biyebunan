@@ -9308,6 +9308,13 @@ paths:
         '429': *id008
         '503': *id009
       parameters:
+      - name: studentId
+        in: query
+        required: false
+        description: 按学生筛选且始终叠加当前中介归属
+        schema:
+          type: string
+          format: uuid
       - name: page
         in: query
         required: false
@@ -16558,6 +16565,46 @@ paths:
           type: string
           description: ''
           maxLength: 128
+  /api/v1/admin/knowledge/{id}/history:
+    get:
+      operationId: get_admin_knowledge_id_history
+      summary: 内容审核与编辑历史
+      x-permission: get_admin_knowledge_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+      - name: page
+        in: query
+        schema: {type: integer, minimum: 1, default: 1}
+      - name: size
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+      responses:
+        '200':
+          description: 获准管理员可查看的处理历史分页
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page: {type: integer}
+                  size: {type: integer}
+                  total: {type: integer}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string, format: uuid}
+                        action: {type: string}
+                        reason: {type: string}
+                        actorName: {type: string}
+                        createdAt: {type: string, format: date-time}
+        '403': {description: 无权查看}
+        '404': {description: 内容不存在}
+
 components:
   securitySchemes:
     bearerAuth:
@@ -18489,6 +18536,10 @@ components:
         read:
           type: boolean
         createdAt: *id014
+        projectId:
+          type: [string, 'null']
+          format: uuid
+          description: 来源可信业务事件的项目标识，目标接口重新验权
         announcementId:
           type:
           - string
@@ -18502,6 +18553,7 @@ components:
       - read
       - createdAt
       - announcementId
+      - projectId
     Membership:
       type: object
       additionalProperties: false

@@ -222,4 +222,29 @@ public interface ContentMapper {
             "INSERT INTO knowledge_event(id,content_id,action,reason,actor_id)"
                     + " VALUES(#{id},#{content},#{action},#{reason},#{actor})")
     void event(UUID id, UUID content, String action, String reason, UUID actor);
+
+    /**
+     * 管理员内容处理历史，按时间和标识稳定倒序。
+     *
+     * @param id 内容标识
+     * @param size 页大小
+     * @param offset 偏移行数
+     * @return 历史行
+     */
+    @Select(
+            "SELECT e.id,e.action,e.reason,u.display_name actor_name,e.created_at FROM"
+                + " knowledge_event e JOIN user_account u ON u.id=e.actor_id WHERE"
+                + " e.content_id=#{id} ORDER BY e.created_at DESC,e.id DESC LIMIT #{size} OFFSET"
+                + " #{offset}")
+    java.util.List<cn.zhixiang.platform.knowledge.entity.ContentEventEntity> history(
+            UUID id, int size, int offset);
+
+    /**
+     * 内容历史总量。
+     *
+     * @param id 内容标识
+     * @return 条数
+     */
+    @Select("SELECT count(*) FROM knowledge_event WHERE content_id=#{id}")
+    long historyCount(UUID id);
 }

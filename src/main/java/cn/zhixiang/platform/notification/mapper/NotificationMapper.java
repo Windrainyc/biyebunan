@@ -22,11 +22,15 @@ public interface NotificationMapper {
     @Select(
             "<script>SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
                 + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
-                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
-                + " in_app_notification WHERE recipient_id=#{user} AND (title ILIKE #{q.pattern}"
-                + " ESCAPE E'\\\\' OR body ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='unread !="
-                + " null'>AND (read_at IS NULL)=#{unread}</if> ORDER BY ${q.orderBy} LIMIT"
-                + " #{q.size} OFFSET #{q.offset}</script>")
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id, (SELECT CASE"
+                + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
+                + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
+                + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
+                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
+                + " WHERE recipient_id=#{user} AND (title ILIKE #{q.pattern} ESCAPE E'\\\\' OR body"
+                + " ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='unread != null'>AND (read_at IS"
+                + " NULL)=#{unread}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
+                + " #{q.offset}</script>")
     List<NotificationEntity> list(UUID user, @Param("q") PageQuery q, Boolean unread);
 
     /**
@@ -53,8 +57,12 @@ public interface NotificationMapper {
     @Select(
             "SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
                 + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
-                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
-                + " in_app_notification WHERE id=#{id} AND recipient_id=#{user} FOR UPDATE")
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id, (SELECT CASE"
+                + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
+                + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
+                + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
+                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
+                + " WHERE id=#{id} AND recipient_id=#{user} FOR UPDATE")
     NotificationEntity lock(UUID id, UUID user);
 
     /**
@@ -92,8 +100,12 @@ public interface NotificationMapper {
     @Select(
             "SELECT id,title,body,read_at,created_at,(SELECT announcement_id FROM"
                 + " announcement_recipient ar WHERE ar.event_id=in_app_notification.event_id AND"
-                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id FROM"
-                + " in_app_notification WHERE recipient_id=#{user} AND event_id=#{event}")
+                + " ar.recipient_id=in_app_notification.recipient_id) announcement_id, (SELECT CASE"
+                + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
+                + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
+                + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
+                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
+                + " WHERE recipient_id=#{user} AND event_id=#{event}")
     NotificationEntity event(UUID user, UUID event);
 
     /**
