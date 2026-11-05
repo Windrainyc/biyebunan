@@ -27,7 +27,7 @@ public final class OfficialModelCatalog {
      */
     public static List<Model> models() {
         return List.of(
-                new Model("deepseek-flash", "DeepSeek Flash", false, "2", "8", "0.04"),
-                new Model("deepseek-v4-pro", "DeepSeek V4 Pro", false, "9", "27", "0.30"));
+                new Model("deepseek-flash", "DeepSeek V4.1 Flash · 1017", false, "2", "8", "0.04"),
+                new Model("deepseek-v4-pro", "DeepSeek V4 Pro · 0813", false, "9", "27", "0.30"));
     }
 }
