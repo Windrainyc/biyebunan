@@ -3640,14 +3640,14 @@ class FoundationIntegrationTest {
         seed(other, "student", UUID.randomUUID().toString());
         db.update(
                 "INSERT INTO school(id,name,code,region,status,created_by,updated_by)"
-                    + " VALUES(?,'头像院校',?,'测试','ENABLED',?,?)",
+                        + " VALUES(?,'头像院校',?,'测试','ENABLED',?,?)",
                 school,
                 school.toString(),
                 adminId,
                 adminId);
         db.update(
                 "INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by)"
-                    + " VALUES(?,'头像专业',?,?,'BACHELOR','ENABLED',?,?)",
+                        + " VALUES(?,'头像专业',?,?,'BACHELOR','ENABLED',?,?)",
                 major,
                 major.toString(),
                 school,
@@ -9836,5 +9836,136 @@ class FoundationIntegrationTest {
                 .andReturn()
                 .getResponse()
                 .getStatus();
+    }
+
+    @Test
+    void forumCommunityFiltersPrivateContentAndUsesRealCounts() throws Exception {
+        UUID student = UUID.randomUUID(), other = UUID.randomUUID(), board = UUID.randomUUID();
+        String token = UUID.randomUUID().toString(), otherToken = UUID.randomUUID().toString();
+        seed(student, "student", token);
+        seed(other, "student", otherToken);
+        for (UUID u : List.of(student, other))
+            db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')", u);
+        db.update(
+                "INSERT INTO"
+                    + " forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'词云专项',?,false,0,'ENABLED',?,?)",
+                board,
+                board.toString(),
+                adminId,
+                adminId);
+        UUID published = UUID.randomUUID(),
+                pending = UUID.randomUUID(),
+                hidden = UUID.randomUUID(),
+                parent = UUID.randomUUID();
+        for (UUID id : List.of(published, pending, hidden))
+            db.update(
+                    "INSERT INTO forum_post(id,board_id,author_id,title,body,state)"
+                            + " VALUES(?,?,?,?,?,?)",
+                    id,
+                    board,
+                    student,
+                    "隔离热度测试",
+                    "正文",
+                    id.equals(published) ? "PUBLISHED" : id.equals(pending) ? "PENDING" : "HIDDEN");
+        db.update(
+                "INSERT INTO forum_comment(id,post_id,author_id,body,state)"
+                        + " VALUES(?,?,?,'公开回复','PUBLISHED')",
+                UUID.randomUUID(),
+                published,
+                other);
+        db.update(
+                "INSERT INTO forum_comment(id,post_id,author_id,body,state)"
+                        + " VALUES(?,?,?,'隐藏父评论','HIDDEN')",
+                parent,
+                published,
+                other);
+        db.update(
+                "INSERT INTO forum_comment(id,post_id,author_id,parent_id,body,state)"
+                        + " VALUES(?,?,?,?,'父隐藏的回复','PUBLISHED')",
+                UUID.randomUUID(),
+                published,
+                other,
+                parent);
+        String base = "/api/v1/student/forum/feed";
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + token)
+                                .param("boardId", board.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + otherToken)
+                                .param("boardId", board.toString())
+                                .param("mode", "hot"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].replyCount").value(1))
+                .andExpect(jsonPath("$.items[0].heat").value(8));
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + otherToken)
+                                .param("boardId", board.toString())
+                                .param("scope", "participated"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + otherToken)
+                                .param("boardId", board.toString())
+                                .param("scope", "mine"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + token)
+                                .param("boardId", board.toString())
+                                .param("mode", "unanswered"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        mvc.perform(get(base).header("Authorization", "Bearer " + token).param("mode", "invalid"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + token)
+                                .param("boardId", board.toString())
+                                .param("q", "词云专项"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+        var result =
+                mvc.perform(
+                                get("/api/v1/student/forum/community")
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        String body = result.getResponse().getContentAsString();
+        assertTrue(body.contains(published.toString()));
+        assertFalse(body.contains(pending.toString()));
+        assertFalse(body.contains(hidden.toString()));
+        assertTrue(body.contains("词云专项"));
+        assertFalse(body.contains("phoneMasked"));
+        assertFalse(body.contains("avatarAssetId"));
+        mvc.perform(
+                        get("/api/v1/student/forum/community")
+                                .header("Authorization", "Bearer " + partnerToken))
+                .andExpect(status().isForbidden());
+        db.update("UPDATE forum_board SET status='DISABLED' WHERE id=?", board);
+        mvc.perform(
+                        get(base)
+                                .header("Authorization", "Bearer " + token)
+                                .param("boardId", board.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        String after =
+                mvc.perform(
+                                get("/api/v1/student/forum/community")
+                                        .header("Authorization", "Bearer " + token))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        assertFalse(after.contains("词云专项"));
+        assertFalse(after.contains(published.toString()));
     }
 }
