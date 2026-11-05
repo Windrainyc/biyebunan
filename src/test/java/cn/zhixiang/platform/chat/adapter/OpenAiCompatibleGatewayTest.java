@@ -35,7 +35,7 @@ class OpenAiCompatibleGatewayTest {
                     String body =
                             "data: {\"choices\":[{\"delta\":{\"content\":\"回答\"}}]}\n\n"
                                 + "data:"
-                                + " {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"prompt_tokens_details\":{\"cached_tokens\":3}}}\n\n"
+                                + " {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"prompt_tokens_details\":{\"cached_tokens\":0},\"prompt_cache_hit_tokens\":3}}\n\n"
                                 + "data: [DONE]\n\n";
                     ex.getResponseHeaders().set("Content-Type", "text/event-stream");
                     ex.sendResponseHeaders(200, 0);
@@ -121,7 +121,7 @@ class OpenAiCompatibleGatewayTest {
                     assertThrows(ModelGateway.Failure.class, () -> gateway.stream(invalid, x -> {}))
                             .noCharge());
             assertEquals(3, calls.get());
-            var disabled = new OpenAiCompatibleGateway(new MockEnvironment(), json);
+            var disabled = new OpenAiCompatibleGateway(new MockEnvironment(), json, null);
             assertTrue(
                     assertThrows(
                                     ModelGateway.Failure.class,
@@ -187,5 +187,28 @@ class OpenAiCompatibleGatewayTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void managedSwitchOnlyOpensExactOfficialEndpoint() {
+        var mapper =
+                org.mockito.Mockito.mock(
+                        cn.zhixiang.platform.model.mapper.ManagedModelMapper.class);
+        var gateway =
+                new OpenAiCompatibleGateway(
+                        new MockEnvironment(), JsonMapper.builder().build(), mapper);
+        String official = cn.zhixiang.platform.model.service.OfficialModelCatalog.ENDPOINT;
+        assertThrows(ModelGateway.Failure.class, () -> gateway.check(official));
+        org.mockito.Mockito.when(mapper.enabled()).thenReturn(true);
+        assertDoesNotThrow(() -> gateway.check(official));
+        for (String path :
+                List.of(
+                        official + "/",
+                        official + "?redirect=1",
+                        "https://api.deepseek.com.attacker.test/chat/completions",
+                        "http://api.deepseek.com/chat/completions"))
+            assertThrows(ModelGateway.Failure.class, () -> gateway.check(path));
+        org.mockito.Mockito.when(mapper.enabled()).thenReturn(false);
+        assertThrows(ModelGateway.Failure.class, () -> gateway.check(official));
     }
 }

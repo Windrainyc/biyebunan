@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 @Component
 public class OpenAiCompatibleGateway implements ModelGateway {
     private final boolean enabled;
+    private cn.zhixiang.platform.model.mapper.ManagedModelMapper managed;
     private final Set<String> hosts;
     private final boolean localTest;
     private final JsonMapper json;
@@ -27,16 +28,21 @@ public class OpenAiCompatibleGateway implements ModelGateway {
      * 从部署环境读取明确开关及允许的主机，不从客户端参数放宽限制。
      *
      * @param env ZX_MODEL_CALLS_ENABLED默认false，ZX_MODEL_ALLOWED_HOSTS逗号分隔
+     * @param managed 官方服务共享开关
      * @param json JSON编解码
      */
     @org.springframework.beans.factory.annotation.Autowired
-    public OpenAiCompatibleGateway(Environment env, JsonMapper json) {
+    public OpenAiCompatibleGateway(
+            Environment env,
+            JsonMapper json,
+            cn.zhixiang.platform.model.mapper.ManagedModelMapper managed) {
         this(
                 env.getProperty("ZX_MODEL_CALLS_ENABLED", Boolean.class, false),
                 new HashSet<>(
                         Arrays.asList(env.getProperty("ZX_MODEL_ALLOWED_HOSTS", "").split(","))),
                 false,
                 json);
+        this.managed = managed;
     }
 
     // 包内构造仅供隔离HTTP协议测试；生产Bean始终要求HTTPS。
@@ -91,17 +97,20 @@ public class OpenAiCompatibleGateway implements ModelGateway {
         okhttp3.Request call;
         try {
             var payload =
-                    Map.of(
-                            "model",
-                            request.model(),
-                            "messages",
-                            request.messages(),
-                            "max_tokens",
-                            request.maxOutputTokens(),
-                            "stream",
-                            true,
-                            "stream_options",
-                            Map.of("include_usage", true));
+                    new java.util.HashMap<String, Object>(
+                            Map.of(
+                                    "model",
+                                    request.model(),
+                                    "messages",
+                                    request.messages(),
+                                    "max_tokens",
+                                    request.maxOutputTokens(),
+                                    "stream",
+                                    true,
+                                    "stream_options",
+                                    Map.of("include_usage", true)));
+            if (cn.zhixiang.platform.model.service.OfficialModelCatalog.ENDPOINT.equals(
+                    request.endpoint())) payload.put("thinking", Map.of("type", "disabled"));
             call =
                     new okhttp3.Request.Builder()
                             .url(uri.toString())
@@ -166,6 +175,8 @@ public class OpenAiCompatibleGateway implements ModelGateway {
                                                 || !details.hasNonNull("cached_tokens")
                                         ? 0
                                         : integer(details.get("cached_tokens"));
+                        if (u.hasNonNull("prompt_cache_hit_tokens"))
+                            cached = integer(u.get("prompt_cache_hit_tokens"));
                         if (cached > input) throw new Failure("MODEL_USAGE_INVALID", false);
                         usage = new Usage(input, output, cached, providerId);
                     }
@@ -191,6 +202,12 @@ public class OpenAiCompatibleGateway implements ModelGateway {
      */
     @Override
     public void check(String endpoint) {
+        if (managed != null
+                && cn.zhixiang.platform.model.service.OfficialModelCatalog.ENDPOINT.equals(
+                        endpoint)) {
+            if (!managed.enabled()) throw new Failure("MODEL_PROVIDER_DISABLED", true);
+            return;
+        }
         if (!enabled) throw new Failure("MODEL_PROVIDER_DISABLED", true);
         try {
             URI uri = URI.create(endpoint);

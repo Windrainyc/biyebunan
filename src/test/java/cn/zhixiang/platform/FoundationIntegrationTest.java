@@ -9968,4 +9968,126 @@ class FoundationIntegrationTest {
         assertFalse(after.contains("词云专项"));
         assertFalse(after.contains(published.toString()));
     }
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    cn.zhixiang.platform.model.service.ManagedModelNetwork managedNetwork;
+
+    @Test
+    void managedModelServiceRequiresCheckedConfigurationAndExplicitEnable() throws Exception {
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"
+                        + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
+                adminId);
+        String path = "/api/v1/admin/model-service";
+        mvc.perform(get(path).header("Authorization", "Bearer " + partnerToken))
+                .andExpect(status().isForbidden());
+        var initial =
+                json.readTree(
+                        mvc.perform(get(path).header("Authorization", "Bearer " + adminToken))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        long v = initial.get("version").asLong();
+        String body =
+                "{\"secretValue\":\"isolated-managed-test-key-never-real\",\"codes\":[\"deepseek-flash\"]}";
+        String idem = UUID.randomUUID().toString();
+        var saved =
+                mvc.perform(
+                                put(path)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("If-Match", "\"" + v + "\"")
+                                        .header("Idempotency-Key", idem)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        assertFalse(saved.contains("isolated-managed-test-key"));
+        mvc.perform(
+                        put(path)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + v + "\"")
+                                .header("Idempotency-Key", idem)
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string(saved));
+        v = json.readTree(saved).get("version").asLong();
+        mvc.perform(
+                        post(path + "/status")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + v + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content("{\"enabled\":true}"))
+                .andExpect(status().isUnprocessableEntity());
+        org.mockito.Mockito.when(managedNetwork.models(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(List.of("deepseek-flash"));
+        var checked =
+                json.readTree(
+                        mvc.perform(
+                                        post(path + "/check")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("If-Match", "\"" + v + "\"")
+                                                .header("Idempotency-Key", UUID.randomUUID()))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        assertFalse(checked.get("enabled").asBoolean());
+        v = checked.get("version").asLong();
+        var enabled =
+                json.readTree(
+                        mvc.perform(
+                                        post(path + "/status")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("If-Match", "\"" + v + "\"")
+                                                .header("Idempotency-Key", UUID.randomUUID())
+                                                .contentType("application/json")
+                                                .content("{\"enabled\":true}"))
+                                .andExpect(status().isOk())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        assertTrue(enabled.get("enabled").asBoolean());
+        assertEquals(
+                "OPENAI_COMPATIBLE",
+                db.queryForObject(
+                        "SELECT provider FROM model_definition WHERE code='deepseek-flash'",
+                        String.class));
+        assertEquals(
+                "ENABLED",
+                db.queryForObject(
+                        "SELECT status FROM model_definition WHERE code='deepseek-flash'",
+                        String.class));
+        mvc.perform(
+                        post(path + "/status")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + v + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content("{\"enabled\":false}"))
+                .andExpect(status().isPreconditionFailed());
+        v = enabled.get("version").asLong();
+        mvc.perform(
+                        post(path + "/status")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + v + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content("{\"enabled\":false}"))
+                .andExpect(status().isOk());
+        assertEquals(
+                false,
+                db.queryForObject(
+                        "SELECT enabled FROM managed_model_service WHERE provider='deepseek'",
+                        Boolean.class));
+        assertEquals(
+                "DISABLED",
+                db.queryForObject(
+                        "SELECT status FROM model_definition WHERE code='deepseek-flash'",
+                        String.class));
+    }
 }
