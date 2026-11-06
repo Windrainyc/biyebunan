@@ -196,6 +196,20 @@ public class NotificationService {
         }
     }
 
+    /**
+     * 在业务事务中给拥有对应权限的管理员追加工作通知，不包含学生私聊或敏感正文。
+     *
+     * @param event 本事务领域事件
+     * @param permission 目标业务读取权限
+     * @param title 安全标题
+     * @param body 安全摘要
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void enqueueAdministrators(UUID event, String permission, String title, String body) {
+        for (UUID recipient : mapper.administrators(permission))
+            enqueue(recipient, event, title, body);
+    }
+
     private NotificationResponse view(NotificationEntity r) {
         return new NotificationResponse(
                 r.id(),
@@ -204,6 +218,8 @@ public class NotificationService {
                 r.readAt() != null,
                 r.createdAt(),
                 r.announcementId(),
-                r.projectId());
+                r.projectId(),
+                r.eventType(),
+                r.targetId());
     }
 }

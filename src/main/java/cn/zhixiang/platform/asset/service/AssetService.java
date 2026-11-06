@@ -110,7 +110,8 @@ public class AssetService {
             throw new BusinessException(422, "CATEGORY_DISABLED", "素材分类已停用，不能新增上传");
         UUID storeId;
         try {
-            storeId = UUID.fromString(configured);
+            storeId = stores.defaultUpload();
+            if (storeId == null) storeId = UUID.fromString(configured);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(503, "UPLOAD_STORAGE_UNCONFIGURED", "尚未指定上传存储配置");
         }

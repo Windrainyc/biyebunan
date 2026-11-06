@@ -145,6 +145,12 @@ public class StageService {
         writes.audit(UUID.randomUUID(), actor.id(), "STAGE_CHANGED", "project", p.id());
         UUID event = UUID.randomUUID();
         writes.event(event, p.id(), "project.STAGE_CHANGED", "{\"id\":\"" + p.id() + "\"}");
+        if (actor.platform().equals("student"))
+            notifications.enqueueAdministrators(
+                    event,
+                    "get_admin_projects",
+                    "学生提交了验收结果",
+                    "ACCEPT".equals(decision) ? "学生已确认验收，请查看项目记录。" : "学生要求继续修改，请查看项目验收记录。");
         var order = orders.get(p.orderId(), actor);
         if (order.studentId() != null)
             notifications.enqueue(order.studentId(), event, "项目进度已更新", "你的项目阶段已更新，请进入项目空间查看最新进展。");

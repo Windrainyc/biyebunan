@@ -29,6 +29,7 @@ public class PostService {
     private final CategoryMapper tree;
     private final TagMapper tags;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.notification.service.NotificationService notifications;
 
     /**
      * 注入领域端口。
@@ -38,6 +39,7 @@ public class PostService {
      * @param boards 板块
      * @param tree 标签配置互斥
      * @param tags 标签
+     * @param notifications 管理员工作通知
      * @param writes 审计事件
      */
     public PostService(
@@ -46,13 +48,15 @@ public class PostService {
             BoardMapper boards,
             CategoryMapper tree,
             TagMapper tags,
-            WriteMapper writes) {
+            WriteMapper writes,
+            cn.zhixiang.platform.notification.service.NotificationService notifications) {
         this.assets = assets;
         this.posts = posts;
         this.boards = boards;
         this.tree = tree;
         this.tags = tags;
         this.writes = writes;
+        this.notifications = notifications;
     }
 
     /**
@@ -315,7 +319,13 @@ public class PostService {
 
     private void audit(UUID id, Actor actor, String action, String reason) {
         writes.auditReason(UUID.randomUUID(), actor.id(), action, "forum_post", id, reason);
-        writes.event(UUID.randomUUID(), id, "forum_post." + action, "{\"id\":\"" + id + "\"}");
+        UUID event = UUID.randomUUID();
+        writes.event(event, id, "forum_post." + action, "{\"id\":\"" + id + "\"}");
+        if (actor.platform().equals("student")
+                && Set.of("CREATED", "UPDATED").contains(action)
+                && posts.get(id).state().equals("PENDING"))
+            notifications.enqueueAdministrators(
+                    event, "get_admin_posts", "学生帖子待审核", "学生提交了待审核帖子，请查看内容并处理。");
     }
 
     private PostDtos.View view(PostEntity r) {

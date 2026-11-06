@@ -26,14 +26,14 @@ public final class PostDtos {
             @NotNull @Size(max = 20) List<@NotNull UUID> assetIds) {}
 
     /**
-     * 审核动作必须携带依据。
+     * 审核动作保留审计，处理原因可选。
      *
      * @param action APPROVE/HIDE/LOCK/UNLOCK/PIN/UNPIN
-     * @param reason 审核依据，不包含秘密
+     * @param reason 可选审核依据，不包含秘密
      */
     public record Moderation(
             @NotBlank @Pattern(regexp = "APPROVE|HIDE|LOCK|UNLOCK|PIN|UNPIN") String action,
-            @NotBlank @Size(max = 200) String reason) {}
+            @Size(max = 200) String reason) {}
 
     /**
      * 帖子响应。

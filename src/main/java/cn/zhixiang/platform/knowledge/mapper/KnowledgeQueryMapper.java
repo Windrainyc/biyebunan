@@ -103,4 +103,25 @@ public interface KnowledgeQueryMapper {
      */
     @Select("<script>SELECT count(DISTINCT c.id)" + SF + "</script>")
     long searchCount(@Param("q") ContentDtos.Query q, UUID student);
+
+    /**
+     * 问句关键词召回；发布代次与访问控制先过滤，结果按命中词数稳定排序。
+     *
+     * @param terms 安全词列表
+     * @param student 学生身份
+     * @return 最多三篇候选资料
+     */
+    @Select(
+            "<script>SELECT content_id,version_id,title,snippet,score,chunk_id,quote FROM (SELECT"
+                + " DISTINCT ON(c.id) c.id AS content_id,k.version_id,c.title,left(k.body,1000) AS"
+                + " snippet,k.id AS chunk_id,k.body AS quote,(<foreach collection='terms' item='t'"
+                + " separator=' + '>CASE WHEN position(#{t} in lower(c.title || ' ' || k.body))>0"
+                + " THEN 1.0 ELSE 0.0 END</foreach>)::double precision AS score FROM"
+                + " knowledge_content c JOIN knowledge_chunk k ON k.content_id=c.id AND"
+                + " k.generation=c.index_generation AND k.version_id=c.published_version_id WHERE"
+                + " c.deleted_at IS NULL AND c.state='PUBLISHED' AND c.index_state='READY' AND "
+                    + ContentMapper.ACCESS
+                    + " ORDER BY c.id,score DESC,k.ordinal) h WHERE score>0 ORDER BY score"
+                    + " DESC,content_id LIMIT 3</script>")
+    List<KnowledgeQueryHitRowEntity> question(List<String> terms, UUID student);
 }

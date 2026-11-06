@@ -28,6 +28,7 @@ public class DiscussionService {
     private final BoardMapper boards;
     private final PostService access;
     private final WriteMapper writes;
+    private final cn.zhixiang.platform.notification.service.NotificationService notifications;
 
     /**
      * 创建用例。
@@ -36,6 +37,7 @@ public class DiscussionService {
      * @param posts 帖子锁
      * @param boards 板块锁
      * @param access 可见性
+     * @param notifications 管理员工作通知
      * @param writes 审计
      */
     public DiscussionService(
@@ -43,12 +45,14 @@ public class DiscussionService {
             PostMapper posts,
             BoardMapper boards,
             PostService access,
-            WriteMapper writes) {
+            WriteMapper writes,
+            cn.zhixiang.platform.notification.service.NotificationService notifications) {
         this.mapper = mapper;
         this.posts = posts;
         this.boards = boards;
         this.access = access;
         this.writes = writes;
+        this.notifications = notifications;
     }
 
     /**
@@ -261,8 +265,11 @@ public class DiscussionService {
 
     private void audit(UUID id, Actor actor, String action, String reason) {
         writes.auditReason(UUID.randomUUID(), actor.id(), action, "forum_discussion", id, reason);
-        writes.event(
-                UUID.randomUUID(), id, "forum_discussion." + action, "{\"id\":\"" + id + "\"}");
+        UUID event = UUID.randomUUID();
+        writes.event(event, id, "forum_discussion." + action, "{\"id\":\"" + id + "\"}");
+        if (action.equals("REPORTED"))
+            notifications.enqueueAdministrators(
+                    event, "get_admin_reports", "学生举报待处理", "收到新的论坛举报，请核查并处理。");
     }
 
     private CommentDtos.View commentView(DiscussionCommentRowEntity r) {

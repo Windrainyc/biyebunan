@@ -121,6 +121,7 @@ public class KnowledgeQueryController {
             @RequestParam(required = false) String contentType,
             @RequestParam(defaultValue = "KEYWORD") String mode,
             @AuthenticationPrincipal Actor actor) {
+        if (mode.equals("QUESTION")) return service.question(q, actor);
         if (mode.equals("SEMANTIC"))
             return semantic.search(
                     new ContentDtos.Query(
@@ -128,7 +129,7 @@ public class KnowledgeQueryController {
                     actor);
         if (!mode.equals("KEYWORD"))
             throw new cn.zhixiang.platform.shared.exception.BusinessException(
-                    400, "INVALID_FILTER", "检索模式必须为KEYWORD或SEMANTIC");
+                    400, "INVALID_FILTER", "检索模式必须为KEYWORD、QUESTION或SEMANTIC");
         return service.search(
                 new ContentDtos.Query(page, size, q, status, sort, categoryId, tagId, contentType),
                 actor);

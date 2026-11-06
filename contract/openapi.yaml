@@ -10848,12 +10848,13 @@ paths:
       - name: mode
         in: query
         required: false
-        description: KEYWORD默认；SEMANTIC需部署嵌入服务，否则503。相似度阈值0.2，分页遵循sort。
+        description: KEYWORD默认；QUESTION按问题关键词检索最多3个可见已发布知识；SEMANTIC需部署嵌入服务，否则503。
         schema:
           type: string
           enum:
           - KEYWORD
           - SEMANTIC
+          - QUESTION
           default: KEYWORD
       - name: page
         in: query
@@ -12703,7 +12704,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Moderation'
+              $ref: '#/components/schemas/PostModeration'
   /api/v1/admin/comments/{id}/moderation:
     post:
       operationId: post_admin_comments_id_moderation
@@ -18758,6 +18759,149 @@ paths:
               properties:
                 enabled:
                   type: boolean
+  /api/v1/admin/oss-service:
+    get:
+      operationId: get_admin_oss_service
+      summary: 读取脱敏OSS配置
+      tags:
+      - admin
+      x-permission: storages:read
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OssView'
+    post:
+      operationId: save_admin_oss_service
+      summary: 加密保存OSS密钥
+      tags:
+      - admin
+      x-permission: storages:write
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OssView'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OssSave'
+  /api/v1/admin/oss-service/migration:
+    get:
+      operationId: get_admin_oss_migration
+      summary: 读取迁移清单统计
+      tags:
+      - admin
+      x-permission: storages:read
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageMigrationView'
+  /api/v1/admin/oss-service/{id}/check:
+    post:
+      operationId: check_admin_oss_service
+      summary: OSS安全检查或存储操作
+      tags:
+      - admin
+      x-permission: storages:write
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OssView'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/oss-service/{id}/activate:
+    post:
+      operationId: activate_admin_oss_service
+      summary: OSS安全检查或存储操作
+      tags:
+      - admin
+      x-permission: storages:write
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OssView'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+  /api/v1/admin/oss-service/{id}/migrate:
+    post:
+      operationId: migrate_admin_oss_service
+      summary: OSS安全检查或存储操作
+      tags:
+      - admin
+      x-permission: storages:write
+      responses:
+        '202':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageMigrationView'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
 components:
   securitySchemes:
     bearerAuth:
@@ -18777,6 +18921,111 @@ components:
       in: cookie
       name: zx_admin_refresh
   schemas:
+    OssView:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        bucket:
+          type: string
+        region:
+          type: string
+        endpoint:
+          type: string
+        accessTail:
+          type: string
+        checkedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        checkError:
+          type:
+          - string
+          - 'null'
+        defaultUpload:
+          type: boolean
+      required:
+      - id
+      - version
+      - bucket
+      - region
+      - endpoint
+      - accessTail
+      - checkedAt
+      - checkError
+      - defaultUpload
+    OssSave:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        version:
+          type: integer
+          minimum: 0
+        bucket:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$
+        region:
+          type: string
+          pattern: ^[a-z]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$
+        accessKeyId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          writeOnly: true
+        accessKeySecret:
+          type: string
+          minLength: 1
+          maxLength: 256
+          writeOnly: true
+      required:
+      - version
+      - bucket
+      - region
+      - accessKeyId
+      - accessKeySecret
+    StorageMigrationView:
+      type: object
+      additionalProperties: false
+      properties:
+        queued:
+          type: integer
+          format: int64
+        running:
+          type: integer
+          format: int64
+        done:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        remainingAssets:
+          type: integer
+          format: int64
+        remainingExports:
+          type: integer
+          format: int64
+        canStopOldStorage:
+          type: boolean
+      required:
+      - queued
+      - running
+      - done
+      - failed
+      - remainingAssets
+      - remainingExports
+      - canStopOldStorage
     ActivityWrite:
       type: object
       additionalProperties: false
@@ -21028,6 +21277,13 @@ components:
           - 'null'
           format: uuid
           description: 关联公告，普通业务提醒为空
+        eventType:
+          type: [string, 'null']
+          description: 来源可信业务事件的类型
+        targetId:
+          type: [string, 'null']
+          format: uuid
+          description: 业务目标标识，目标接口重新验权
       required:
       - id
       - title
@@ -21036,6 +21292,8 @@ components:
       - createdAt
       - announcementId
       - projectId
+      - eventType
+      - targetId
     Membership:
       type: object
       additionalProperties: false
@@ -21350,6 +21608,24 @@ components:
           maxLength: 200
       required:
       - partnerId
+    PostModeration:
+      type: object
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - HIDE
+          - LOCK
+          - UNLOCK
+          - PIN
+          - UNPIN
+        reason:
+          type: string
+          maxLength: 200
+      required:
+      - action
     Moderation:
       type: object
       additionalProperties: false

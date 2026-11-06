@@ -12,6 +12,14 @@ import java.util.*;
 @Mapper
 public interface StorageMapper {
     /**
+     * 按存储配置的权限、版本与生命周期约束执行操作。
+     *
+     * @return 已激活的默认上传配置，可空使用原部署配置
+     */
+    @Select("SELECT storage_id FROM storage_default WHERE singleton")
+    UUID defaultUpload();
+
+    /**
      * 返回当前页持久化投影。
      *
      * @param q 已校验分页条件

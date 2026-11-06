@@ -12,6 +12,19 @@ import java.util.*;
 @Mapper
 public interface NotificationMapper {
     /**
+     * 按当前启用角色权限选择管理员，不读取学生私聊。
+     *
+     * @param permission 业务读取权限
+     * @return 去重后的管理员标识
+     */
+    @Select(
+            "SELECT DISTINCT u.id FROM user_account u JOIN user_role ur ON ur.user_id=u.id JOIN"
+                    + " role r ON r.id=ur.role_id JOIN role_permission rp ON rp.role_id=r.id WHERE"
+                    + " u.platform='admin' AND u.status='ENABLED' AND r.platform='admin' AND"
+                    + " r.status='ENABLED' AND rp.permission_code=#{permission} ORDER BY u.id")
+    List<UUID> administrators(String permission);
+
+    /**
      * 收件人分页。
      *
      * @param user 服务端身份
@@ -26,11 +39,13 @@ public interface NotificationMapper {
                 + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
                 + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
                 + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
-                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
-                + " WHERE recipient_id=#{user} AND (title ILIKE #{q.pattern} ESCAPE E'\\\\' OR body"
-                + " ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='unread != null'>AND (read_at IS"
-                + " NULL)=#{unread}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
-                + " #{q.offset}</script>")
+                + " WHERE e.id=in_app_notification.event_id) project_id, (SELECT e.event_type FROM"
+                + " outbox_event e WHERE e.id=in_app_notification.event_id) event_type, (SELECT"
+                + " e.aggregate_id FROM outbox_event e WHERE e.id=in_app_notification.event_id)"
+                + " target_id FROM in_app_notification WHERE recipient_id=#{user} AND (title ILIKE"
+                + " #{q.pattern} ESCAPE E'\\\\' OR body ILIKE #{q.pattern} ESCAPE E'\\\\') <if"
+                + " test='unread != null'>AND (read_at IS NULL)=#{unread}</if> ORDER BY"
+                + " ${q.orderBy} LIMIT #{q.size} OFFSET #{q.offset}</script>")
     List<NotificationEntity> list(UUID user, @Param("q") PageQuery q, Boolean unread);
 
     /**
@@ -61,8 +76,11 @@ public interface NotificationMapper {
                 + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
                 + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
                 + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
-                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
-                + " WHERE id=#{id} AND recipient_id=#{user} FOR UPDATE")
+                + " WHERE e.id=in_app_notification.event_id) project_id, (SELECT e.event_type FROM"
+                + " outbox_event e WHERE e.id=in_app_notification.event_id) event_type, (SELECT"
+                + " e.aggregate_id FROM outbox_event e WHERE e.id=in_app_notification.event_id)"
+                + " target_id FROM in_app_notification WHERE id=#{id} AND recipient_id=#{user} FOR"
+                + " UPDATE")
     NotificationEntity lock(UUID id, UUID user);
 
     /**
@@ -104,8 +122,11 @@ public interface NotificationMapper {
                 + " WHEN e.event_type='project.STAGE_CHANGED' THEN e.aggregate_id WHEN"
                 + " e.event_type='delivery.PUBLISHED' THEN (SELECT d.project_id FROM"
                 + " project_delivery d WHERE d.id=e.aggregate_id) ELSE NULL END FROM outbox_event e"
-                + " WHERE e.id=in_app_notification.event_id) project_id FROM in_app_notification"
-                + " WHERE recipient_id=#{user} AND event_id=#{event}")
+                + " WHERE e.id=in_app_notification.event_id) project_id, (SELECT e.event_type FROM"
+                + " outbox_event e WHERE e.id=in_app_notification.event_id) event_type, (SELECT"
+                + " e.aggregate_id FROM outbox_event e WHERE e.id=in_app_notification.event_id)"
+                + " target_id FROM in_app_notification WHERE recipient_id=#{user} AND"
+                + " event_id=#{event}")
     NotificationEntity event(UUID user, UUID event);
 
     /**

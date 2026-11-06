@@ -126,6 +126,39 @@ public class KnowledgeQueryService {
     }
 
     /**
+     * 问句召回返回最多三篇真实候选；不调用embedding，不绕过发布权限。
+     *
+     * @param question 原问题
+     * @param actor 学生
+     * @return 有界候选集合，总数为本次返回候选数
+     */
+    public PageResult<KnowledgeQueryDtos.Hit> question(String question, Actor actor) {
+        if (!actor.platform().equals("student"))
+            throw new BusinessException(403, "FORBIDDEN", "仅学生检索入口");
+        var terms = QuestionKeywords.terms(question);
+        if (terms.isEmpty()) return new PageResult<>(List.of(), 1, 3, 0);
+        var rows =
+                mapper.question(terms, actor.id()).stream()
+                        .map(
+                                r ->
+                                        new KnowledgeQueryDtos.Hit(
+                                                r.contentId(),
+                                                r.versionId(),
+                                                r.title(),
+                                                r.snippet(),
+                                                r.score(),
+                                                List.of(
+                                                        new KnowledgeQueryDtos.Citation(
+                                                                "KNOWLEDGE",
+                                                                r.versionId(),
+                                                                r.chunkId(),
+                                                                0,
+                                                                r.quote()))))
+                        .toList();
+        return new PageResult<>(rows, 1, 3, rows.size());
+    }
+
+    /**
      * 重建当前发布版本，立即使旧分片不可查询。
      *
      * @param id 内容

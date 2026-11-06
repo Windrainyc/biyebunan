@@ -102,7 +102,7 @@ public interface RunMapper {
      *
      * @param version 快照
      * @param student 学生
-     * @return 最多4个已授权分片
+     * @return 最多100个候选已授权分片，由服务按问题选择
      */
     @Select(
             "SELECT k.id AS chunk_id,k.version_id,k.body AS quote,k.ordinal+1 AS page FROM"
@@ -111,7 +111,7 @@ public interface RunMapper {
                     + " c.index_generation=k.generation AND c.index_state='READY' AND"
                     + " c.state='PUBLISHED' AND c.deleted_at IS NULL AND "
                     + ContentMapper.ACCESS
-                    + " ORDER BY k.ordinal LIMIT 4")
+                    + " ORDER BY k.ordinal LIMIT 100")
     List<RunSourceEntity> sources(UUID version, UUID student);
 
     /**

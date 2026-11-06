@@ -6,7 +6,9 @@ import cn.zhixiang.platform.billing.entity.QuotaBenefitEntity;
 import cn.zhixiang.platform.billing.entity.QuotaHoldEntity;
 import cn.zhixiang.platform.billing.mapper.QuotaMapper;
 import cn.zhixiang.platform.model.mapper.PriceMapper;
+import cn.zhixiang.platform.notification.service.NotificationService;
 import cn.zhixiang.platform.shared.exception.BusinessException;
+import cn.zhixiang.platform.shared.mapper.WriteMapper;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +22,26 @@ public class QuotaService {
     private static final BigDecimal ZERO = new BigDecimal("0.000000");
     private final QuotaMapper mapper;
     private final PriceMapper prices;
+    private final NotificationService notifications;
+    private final WriteMapper writes;
 
     /**
      * 创建用例。
      *
      * @param mapper 额度端口
      * @param prices 不可变生效价格
+     * @param notifications 管理员安全工作通知
+     * @param writes 事务事件
      */
-    public QuotaService(QuotaMapper mapper, PriceMapper prices) {
+    public QuotaService(
+            QuotaMapper mapper,
+            PriceMapper prices,
+            NotificationService notifications,
+            WriteMapper writes) {
         this.mapper = mapper;
         this.prices = prices;
+        this.notifications = notifications;
+        this.writes = writes;
     }
 
     /**
@@ -206,6 +218,10 @@ public class QuotaService {
         if (!h.state().equals("RESERVED")) return;
         delta(h.accountId(), run, "RECONCILING", 0, 0, 0, ZERO, ZERO, ZERO);
         mapper.state(run, "RECONCILING", null, null, null, null);
+        UUID event = UUID.randomUUID();
+        writes.event(event, run, "billing.RECONCILING", "{\"id\":\"" + run + "\"}");
+        notifications.enqueueAdministrators(
+                event, "billing:reconcile", "调用账务需要核查", "原调用结果尚未确认，额度保持预占。请核对供应商证据，不要重复发起生成。");
     }
 
     /**

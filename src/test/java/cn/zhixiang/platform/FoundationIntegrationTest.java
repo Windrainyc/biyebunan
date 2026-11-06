@@ -8939,6 +8939,13 @@ class FoundationIntegrationTest {
                                     .param("q", needle))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.total").value(0));
+            mvc.perform(
+                            get("/api/v1/student/knowledge-search")
+                                    .header("Authorization", "Bearer " + st)
+                                    .param("q", "事务幂等")
+                                    .param("mode", "QUESTION"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[?(@.contentId == '" + id + "')]").isEmpty());
             UUID plan = UUID.randomUUID(), pv = UUID.randomUUID(), member = UUID.randomUUID();
             db.update(
                     "INSERT INTO membership_plan(id,name,code,status,created_by,updated_by)"
@@ -8971,6 +8978,13 @@ class FoundationIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.total").value(1))
                     .andExpect(jsonPath("$.items[0].citations[0].sourceType").value("KNOWLEDGE"));
+            mvc.perform(
+                            get("/api/v1/student/knowledge-search")
+                                    .header("Authorization", "Bearer " + st)
+                                    .param("q", "事务幂等")
+                                    .param("mode", "QUESTION"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[0].contentId").value(id.toString()));
             mvc.perform(
                             get("/api/v1/student/knowledge/" + id + "/versions")
                                     .header("Authorization", "Bearer " + st))
@@ -9204,7 +9218,7 @@ class FoundationIntegrationTest {
         db.update(
                 "INSERT INTO"
                     + " software_order(id,order_no,title,student_id,student_phone_digest,student_phone_ciphertext,amount,currency,package_code,source,school_id,major_id,created_by,updated_by,status)"
-                    + " VALUES(?,?,'账务夹具',?,'test','test',0,'CNY','test','MANUAL',?,?,?,?,'CONFIRMED')",
+                    + " VALUES(?,?,'账务夹具',?,'test','test',0,'CNY','STANDARD','MANUAL',?,?,?,?,'CONFIRMED')",
                 quotaOrder,
                 quotaOrder.toString(),
                 student,
@@ -10089,5 +10103,123 @@ class FoundationIntegrationTest {
                 db.queryForObject(
                         "SELECT status FROM model_definition WHERE code='deepseek-flash'",
                         String.class));
+    }
+
+    @Test
+    void ossSecretsAreEncryptedIdempotentAndNotActivatedBeforeCheck() throws Exception {
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"
+                        + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
+                adminId);
+        String path = "/api/v1/admin/oss-service";
+        mvc.perform(get(path).header("Authorization", "Bearer " + partnerToken))
+                .andExpect(status().isForbidden());
+        String body =
+                "{\"version\":0,\"bucket\":\"isolated-private-test\",\"region\":\"cn-beijing\",\"accessKeyId\":\"isolated-access-1234\",\"accessKeySecret\":\"isolated-secret-never-real\"}";
+        String key = UUID.randomUUID().toString();
+        String saved =
+                mvc.perform(
+                                post(path)
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", key)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        assertFalse(saved.contains("isolated-secret"));
+        assertFalse(saved.contains("isolated-access"));
+        mvc.perform(
+                        post(path)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", key)
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isOk())
+                .andExpect(content().string(saved));
+        UUID id = UUID.fromString(json.readTree(saved).get("id").asText());
+        String encrypted =
+                db.queryForObject(
+                        "SELECT secret_cipher FROM storage_secret WHERE storage_id=?",
+                        String.class,
+                        id);
+        assertTrue(encrypted.startsWith("v1:"));
+        assertFalse(encrypted.contains("isolated-secret"));
+        mvc.perform(
+                        post(path + "/" + id + "/activate")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"1\"")
+                                .header("Idempotency-Key", UUID.randomUUID()))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(
+                        post(path + "/" + id + "/migrate")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"1\"")
+                                .header("Idempotency-Key", UUID.randomUUID()))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(get(path + "/migration").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        assertEquals(
+                0L,
+                db.queryForObject(
+                        "SELECT count(*) FROM storage_migration WHERE target_id=?",
+                        Long.class,
+                        id));
+    }
+
+    @Test
+    void adminWorkNotificationsRespectRecipientsAndDeduplicate() throws Exception {
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT"
+                        + " role_id,'get_admin_posts' FROM user_role WHERE user_id=? ON CONFLICT DO"
+                        + " NOTHING",
+                adminId);
+        UUID event = UUID.randomUUID(), target = UUID.randomUUID();
+        db.update(
+                "INSERT INTO outbox_event(id,aggregate_id,event_type,payload)"
+                        + " VALUES(?,?,'forum_post.CREATED','{}'::jsonb)",
+                event,
+                target);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        tx.executeWithoutResult(
+                s -> {
+                    notifications.enqueueAdministrators(
+                            event, "get_admin_posts", "学生帖子待审核", "学生提交了待审核帖子，请查看内容并处理。");
+                    notifications.enqueueAdministrators(
+                            event, "get_admin_posts", "学生帖子待审核", "学生提交了待审核帖子，请查看内容并处理。");
+                    notifications.processEvent(event);
+                });
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification WHERE event_id=? AND"
+                                + " recipient_id=?",
+                        Integer.class,
+                        event,
+                        adminId));
+        assertEquals(
+                0,
+                db.queryForObject(
+                        "SELECT count(*) FROM in_app_notification n JOIN user_account u ON"
+                                + " u.id=n.recipient_id WHERE n.event_id=? AND u.platform!='admin'",
+                        Integer.class,
+                        event));
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT"
+                        + " role_id,'get_admin_notifications' FROM user_role WHERE user_id=? ON"
+                        + " CONFLICT DO NOTHING",
+                adminId);
+        String response =
+                mvc.perform(
+                                get("/api/v1/admin/notifications")
+                                        .param("q", "学生帖子待审核")
+                                        .header("Authorization", "Bearer " + adminToken))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        assertTrue(response.contains(target.toString()));
+        assertTrue(response.contains("forum_post.CREATED"));
     }
 }
