@@ -19,7 +19,6 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/v1/admin/oss-service")
 public class OssController {
-    private final cn.zhixiang.platform.configuration.service.StorageMigrationService migration;
     private final OssService service;
     private final IdempotentWrites writes;
 
@@ -28,13 +27,8 @@ public class OssController {
      *
      * @param service 配置用例
      * @param writes 幂等协调
-     * @param migration 迁移服务
      */
-    public OssController(
-            OssService service,
-            IdempotentWrites writes,
-            cn.zhixiang.platform.configuration.service.StorageMigrationService migration) {
-        this.migration = migration;
+    public OssController(OssService service, IdempotentWrites writes) {
         this.service = service;
         this.writes = writes;
     }
@@ -114,42 +108,5 @@ public class OssController {
                 key,
                 List.of(id, v),
                 () -> ResponseEntity.ok(service.activate(id, v, actor.id())));
-    }
-
-    /**
-     * 按存储配置的权限、版本与生命周期约束执行操作。
-     *
-     * @return 迁移清单真实计数
-     */
-    @GetMapping("/migration")
-    @PreAuthorize("hasAuthority('storages:read')")
-    public cn.zhixiang.platform.configuration.dto.StorageMigrationView migration() {
-        return migration.status();
-    }
-
-    /**
-     * 按存储配置的权限、版本与生命周期约束执行操作。
-     *
-     * @param id 目标配置
-     * @param match 密钥版本
-     * @param key 幂等键
-     * @param actor 管理员
-     * @return 排队进度
-     */
-    @PostMapping("/{id}/migrate")
-    @PreAuthorize("hasAuthority('storages:write')")
-    public ResponseEntity<String> migrate(
-            @PathVariable UUID id,
-            @RequestHeader("If-Match") String match,
-            @RequestHeader("Idempotency-Key") String key,
-            @AuthenticationPrincipal Actor actor) {
-        long v = Versions.parse(match);
-        return writes.execute(
-                actor.id(),
-                "POST",
-                "/api/v1/admin/oss-service/" + id + "/migrate",
-                key,
-                List.of(id, v),
-                () -> ResponseEntity.accepted().body(migration.start(id, v, actor.id())));
     }
 }

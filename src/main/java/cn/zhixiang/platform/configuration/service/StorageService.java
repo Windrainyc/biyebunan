@@ -171,9 +171,6 @@ public class StorageService {
         try {
             var uri = java.net.URI.create(w.endpoint());
             String host = uri.getHost();
-            boolean local =
-                    java.util.Set.of("localhost", "127.0.0.1", "minio")
-                            .contains(host == null ? "" : host);
             if (uri.getPort() == 0
                     || uri.getPort() > 65535
                     || host == null
@@ -181,10 +178,8 @@ public class StorageService {
                     || uri.getRawQuery() != null
                     || uri.getRawFragment() != null
                     || !(uri.getPath().isEmpty() || uri.getPath().equals("/"))
-                    || !("https".equalsIgnoreCase(uri.getScheme())
-                            || (w.provider() == StorageDtos.Provider.S3_COMPATIBLE
-                                    && local
-                                    && "http".equalsIgnoreCase(uri.getScheme()))))
+                    || w.provider() != StorageDtos.Provider.ALIYUN_OSS
+                    || !"https".equalsIgnoreCase(uri.getScheme()))
                 throw new IllegalArgumentException();
             String normalized =
                     new java.net.URI(

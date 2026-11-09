@@ -123,7 +123,12 @@ public class AssetService {
                 || w.filename().chars().anyMatch(Character::isISOControl))
             throw new BusinessException(422, "FILENAME_INVALID", "文件名不能包含路径或控制字符");
         UUID id = UUID.randomUUID(), upload = UUID.randomUUID();
-        String key = "quarantine/" + id + "/" + upload;
+        String key =
+                AssetObjectKeys.prefix(w.mimeType(), w.filename())
+                        + "quarantine/"
+                        + id
+                        + "/"
+                        + upload;
         var grant = storage.upload(target(store), key, w.size(), w.mimeType(), w.sha256());
         mapper.insert(id, upload, w, storeId, key, grant.expiresAt(), actor.id());
         audit(id, actor.id(), "UPLOAD_CREATED");

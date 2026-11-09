@@ -4077,6 +4077,71 @@ class FoundationIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Autowired cn.zhixiang.platform.asset.service.DownloadGrantGuard downloadGuard;
+
+    @Test
+    void downloadGrantLimitsAreAtomicAndRollbackAcrossWindows() throws Exception {
+        UUID user = UUID.randomUUID();
+        long minute = java.time.Instant.now().getEpochSecond() / 60;
+        db.update(
+                "INSERT INTO download_grant_counter VALUES(?,?,59,now()+interval '2 minutes')",
+                "account-minute:" + user,
+                minute);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var calls =
+                    java.util.List.<java.util.concurrent.Callable<Boolean>>of(
+                            () -> {
+                                try {
+                                    downloadGuard.acquire(user, "192.0.2.10");
+                                    return true;
+                                } catch (
+                                        cn.zhixiang.platform.shared.exception.BusinessException e) {
+                                    assertEquals("DOWNLOAD_RATE_LIMITED", e.code());
+                                    return false;
+                                }
+                            },
+                            () -> {
+                                try {
+                                    downloadGuard.acquire(user, "192.0.2.11");
+                                    return true;
+                                } catch (
+                                        cn.zhixiang.platform.shared.exception.BusinessException e) {
+                                    assertEquals("DOWNLOAD_RATE_LIMITED", e.code());
+                                    return false;
+                                }
+                            });
+            int success = 0;
+            for (var f : pool.invokeAll(calls)) if (f.get()) success++;
+            assertEquals(1, success);
+            assertEquals(
+                    60L,
+                    db.queryForObject(
+                            "SELECT used FROM download_grant_counter WHERE counter_key=? AND"
+                                    + " window_start=?",
+                            Long.class,
+                            "account-minute:" + user,
+                            minute));
+        } finally {
+            pool.shutdownNow();
+        }
+        UUID dailyUser = UUID.randomUUID();
+        long day = java.time.Instant.now().getEpochSecond() / 86400;
+        db.update(
+                "INSERT INTO download_grant_counter VALUES(?,?,1000,now()+interval '2 days')",
+                "account-day:" + dailyUser,
+                day);
+        assertThrows(
+                cn.zhixiang.platform.shared.exception.BusinessException.class,
+                () -> downloadGuard.acquire(dailyUser, "192.0.2.12"));
+        assertEquals(
+                0,
+                db.queryForObject(
+                        "SELECT count(*) FROM download_grant_counter WHERE counter_key=?",
+                        Integer.class,
+                        "account-minute:" + dailyUser));
+    }
+
     @Test
     void exportImplementedRoutesForContractReview() throws Exception {
         var rows = new java.util.ArrayList<Map<String, String>>();

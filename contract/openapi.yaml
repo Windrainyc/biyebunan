@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.35
+  version: 1.0.36
   description: '工程实现契约。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     路由映射与字段校验不代表全部业务验收或生产部署；实际验证及外部配置边界见docs/开发进度.md。'
@@ -18800,20 +18800,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OssSave'
-  /api/v1/admin/oss-service/migration:
-    get:
-      operationId: get_admin_oss_migration
-      summary: 读取迁移清单统计
-      tags:
-      - admin
-      x-permission: storages:read
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StorageMigrationView'
   /api/v1/admin/oss-service/{id}/check:
     post:
       operationId: check_admin_oss_service
@@ -18854,37 +18840,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OssView'
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      - name: If-Match
-        in: header
-        required: true
-        schema:
-          type: string
-      - name: Idempotency-Key
-        in: header
-        required: true
-        schema:
-          type: string
-  /api/v1/admin/oss-service/{id}/migrate:
-    post:
-      operationId: migrate_admin_oss_service
-      summary: OSS安全检查或存储操作
-      tags:
-      - admin
-      x-permission: storages:write
-      responses:
-        '202':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StorageMigrationView'
       parameters:
       - name: id
         in: path
@@ -18994,38 +18949,6 @@ components:
       - region
       - accessKeyId
       - accessKeySecret
-    StorageMigrationView:
-      type: object
-      additionalProperties: false
-      properties:
-        queued:
-          type: integer
-          format: int64
-        running:
-          type: integer
-          format: int64
-        done:
-          type: integer
-          format: int64
-        failed:
-          type: integer
-          format: int64
-        remainingAssets:
-          type: integer
-          format: int64
-        remainingExports:
-          type: integer
-          format: int64
-        canStopOldStorage:
-          type: boolean
-      required:
-      - queued
-      - running
-      - done
-      - failed
-      - remainingAssets
-      - remainingExports
-      - canStopOldStorage
     ActivityWrite:
       type: object
       additionalProperties: false

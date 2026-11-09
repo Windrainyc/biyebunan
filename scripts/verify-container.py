@@ -23,9 +23,9 @@ for line in source.read_text().splitlines():
     if line.strip() and not line.lstrip().startswith('#'):
         key, value = line.removeprefix('export ').split('=', 1)
         loaded[key] = shlex.split(value)[0] if value else ''
-names = ['ZX_DB_USER', 'ZX_DB_PASSWORD', 'ZX_REDIS_USER', 'ZX_REDIS_PASSWORD', 'ZX_RABBIT_USER', 'ZX_RABBIT_PASSWORD', 'ZX_RABBIT_VHOST', 'ZX_S3_ACCESS_KEY', 'ZX_S3_SECRET_KEY', 'ZX_S3_REGION']
+names = ['ZX_DB_USER', 'ZX_DB_PASSWORD', 'ZX_REDIS_USER', 'ZX_REDIS_PASSWORD', 'ZX_RABBIT_USER', 'ZX_RABBIT_PASSWORD', 'ZX_RABBIT_VHOST']
 env = {key: loaded[key] for key in names}
-env.update(ZX_S3_ENDPOINT='http://minio:9000', ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
+env.update(ZX_DB_URL='jdbc:postgresql://postgres:5432/zhixiang?currentSchema=app', ZX_REDIS_HOST='redis', ZX_REDIS_PORT='6379', ZX_RABBIT_HOST='rabbitmq', ZX_RABBIT_PORT='5672', ZX_AUTH_HMAC_KEY=(root/'secrets/auth-hmac').read_text().strip(), ZX_SMS_ENABLED='false', ZX_CLAMAV_HOST='clamav', ZX_CLAMAV_PORT='3310', ZX_TIKA_ENDPOINT='http://tika:9998/tika')
 # 验证容器必须使用当前UI隔离库与对应vhost，禁止消费公共业务队列。
 ui = json.loads((root/'docs/ui-verification-state.json').read_text())
 if not ui['isolatedDatabase'] or not ui['database'].startswith('zx_ui_'):

@@ -88,7 +88,7 @@ public class VideoService {
             try (var input = storage.open(target, asset.privateKey(), source);
                     var output = processor.process(input, asset.size())) {
                 String key =
-                        "verified/"
+                        "videos/verified/"
                                 + asset.id()
                                 + "/playback-"
                                 + task.generation()

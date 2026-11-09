@@ -103,7 +103,14 @@ public class AssetValidation {
                     return true;
                 }
             }
-            privateKey = "verified/" + row.id() + "/" + job.generation() + "-" + UUID.randomUUID();
+            privateKey =
+                    AssetObjectKeys.prefix(row.mimeType(), row.filename())
+                            + "verified/"
+                            + row.id()
+                            + "/"
+                            + job.generation()
+                            + "-"
+                            + UUID.randomUUID();
             String attemptedKey = privateKey;
             tx.executeWithoutResult(
                     s -> garbage.track(row.id(), row.storageId(), attemptedKey, job.generation()));

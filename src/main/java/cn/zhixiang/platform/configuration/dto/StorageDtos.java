@@ -21,7 +21,7 @@ public final class StorageDtos {
     public enum Provider {
         /** 阿里云 OSS。 */
         ALIYUN_OSS,
-        /** MinIO 等兼容服务。 */
+        /** 仅用于读取历史记录；已停止支持，禁止新建。 */
         S3_COMPATIBLE
     }
 

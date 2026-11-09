@@ -54,6 +54,4 @@ board = call('/admin/forum-boards', dict(name='联调交流区', code='UI-BOARD-
 (directory / 'business.json').write_text(json.dumps(dict(orderId=order['id'], projectId=project['id'], boardId=board['id']), ensure_ascii=False))
 print('隔离环境院校、专业、已确认未收款订单、项目和需审核板块已通过正式API创建。')
 
-store = call('/admin/storages', dict(name='本地联调私有文件', provider='S3_COMPATIBLE', bucket='zx-project-private', region='us-east-1', endpoint='http://127.0.0.1:19000', credentialRef='local-minio', access='PRIVATE', status='ENABLED'))
-(directory / 'runtime-overrides.json').write_text(json.dumps({'ZX_UPLOAD_STORAGE_ID': store['id']}))
-print('已保存当前隔离库的上传配置ID，恢复API后生效。')
+print('文件存储请在管理员 OSS 页面配置并检查后启用，不创建本地兼容存储。')
