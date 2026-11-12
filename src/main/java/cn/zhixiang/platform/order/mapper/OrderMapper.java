@@ -12,6 +12,20 @@ import java.util.*;
 @Mapper
 public interface OrderMapper {
     /**
+     * 与订单创建同一事务生成唯一项目，初始需求为空、交付日为七天后。
+     *
+     * @param id 项目标识
+     * @param order 订单标识
+     * @param title 项目题目
+     * @param actor 操作者
+     */
+    @Insert(
+            "INSERT INTO"
+                + " software_project(id,order_id,title,requirements,delivery_date,stage,created_by,updated_by)"
+                + " VALUES(#{id},#{order},#{title},'',CURRENT_DATE+7,'REQUIREMENTS',#{actor},#{actor})")
+    void createProject(UUID id, UUID order, String title, UUID actor);
+
+    /**
      * 按真实身份过滤后分页。
      *
      * @param q 查询

@@ -159,10 +159,11 @@ public interface RunMapper {
      */
     @Select(
             "SELECT r.student_id FROM generation_run r JOIN chat_conversation c ON"
-                + " c.id=r.conversation_id JOIN software_project p ON p.id=c.project_id JOIN"
-                + " software_order o ON o.id=p.order_id JOIN user_account u ON u.id=r.student_id"
-                + " WHERE r.id=#{run} AND c.deleted_at IS NULL AND c.student_id=r.student_id AND"
-                + " o.student_id=r.student_id AND u.status='ENABLED' AND u.platform='student' AND"
-                + " o.status IN ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')")
+                + " c.id=r.conversation_id LEFT JOIN software_project p ON p.id=c.project_id LEFT"
+                + " JOIN software_order o ON o.id=p.order_id JOIN user_account u ON"
+                + " u.id=r.student_id WHERE r.id=#{run} AND c.deleted_at IS NULL AND"
+                + " c.student_id=r.student_id AND u.status='ENABLED' AND u.platform='student' AND"
+                + " (c.project_id IS NULL OR (o.student_id=r.student_id AND o.status IN"
+                + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')))")
     UUID executorStudent(UUID run);
 }

@@ -23,7 +23,7 @@ public final class RunDtos {
             @NotNull UUID conversationId,
             @NotNull UUID clientMessageId,
             @NotBlank @Size(max = 16000) String text,
-            @NotNull UUID modelId,
+            UUID modelId,
             @NotNull @Size(max = 8) List<@NotNull UUID> sourceVersionIds,
             @Min(1) @Max(8192) int maxOutputTokens) {
         /**

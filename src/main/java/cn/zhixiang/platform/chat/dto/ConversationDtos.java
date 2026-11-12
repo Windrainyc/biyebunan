@@ -17,7 +17,7 @@ public final class ConversationDtos {
      * @param projectId 当前学生已绑定且可服务项目
      * @param title 会话标题
      */
-    public record Write(@NotNull UUID projectId, @NotBlank @Size(max = 200) String title) {}
+    public record Write(UUID projectId, @NotBlank @Size(max = 200) String title) {}
 
     /**
      * 会话元信息。

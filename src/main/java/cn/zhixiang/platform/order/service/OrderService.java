@@ -158,7 +158,12 @@ public class OrderService {
                 cipher.encrypt("order-phone:" + id, w.studentPhone()),
                 note,
                 source);
-        audit(id, actor.id(), "CREATED", "创建订单草稿");
+        UUID projectId = UUID.randomUUID();
+        mapper.createProject(projectId, id, w.title(), actor.id());
+        writes.audit(UUID.randomUUID(), actor.id(), "CREATED", "project", projectId);
+        writes.event(
+                UUID.randomUUID(), projectId, "project.CREATED", "{\"id\":\"" + projectId + "\"}");
+        audit(id, actor.id(), "CREATED", "创建启动中订单及需求确认项目");
         return get(id, actor);
     }
 
@@ -278,10 +283,10 @@ public class OrderService {
     }
 
     private void draft(OrderEntity r) {
-        if (!r.status().equals("DRAFT")
+        if (!java.util.Set.of("DRAFT", "ACTIVE").contains(r.status())
                 || r.studentId() != null
                 || !r.receiptStatus().equals("UNCONFIRMED"))
-            throw new BusinessException(422, "ORDER_NOT_EDITABLE", "仅未绑定且未确认收款的草稿可编辑");
+            throw new BusinessException(422, "ORDER_NOT_EDITABLE", "仅未绑定且未确认收款的启动中订单或历史草稿可编辑");
     }
 
     private void platform(Actor a, String p) {
@@ -356,8 +361,6 @@ public class OrderService {
                     }
                     case "COMPLETE" -> {
                         requireState(old, "ACTIVE");
-                        if (!"DONE".equals(mapper.projectStage(id)))
-                            throw new BusinessException(422, "PROJECT_NOT_ACCEPTED", "项目尚未验收完成");
                         yield "COMPLETED";
                     }
                     case "CANCEL" -> {

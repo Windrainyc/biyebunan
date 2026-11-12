@@ -18,12 +18,13 @@ public interface RunStreamAccess {
      */
     @Select(
             "SELECT EXISTS(SELECT 1 FROM generation_run r JOIN chat_conversation c ON"
-                + " c.id=r.conversation_id JOIN software_project p ON p.id=c.project_id JOIN"
-                + " software_order o ON o.id=p.order_id JOIN user_account u ON u.id=r.student_id"
-                + " JOIN auth_session s ON s.id=#{actor.sessionId} AND s.user_id=u.id WHERE"
-                + " r.id=#{run} AND r.student_id=#{actor.id} AND c.student_id=u.id AND c.deleted_at"
-                + " IS NULL AND o.student_id=u.id AND o.status IN"
-                + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED') AND u.platform='student' AND"
+                + " c.id=r.conversation_id LEFT JOIN software_project p ON p.id=c.project_id LEFT"
+                + " JOIN software_order o ON o.id=p.order_id JOIN user_account u ON"
+                + " u.id=r.student_id JOIN auth_session s ON s.id=#{actor.sessionId} AND"
+                + " s.user_id=u.id WHERE r.id=#{run} AND r.student_id=#{actor.id} AND"
+                + " c.student_id=u.id AND c.deleted_at IS NULL AND (c.project_id IS NULL OR"
+                + " (o.student_id=u.id AND o.status IN"
+                + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED'))) AND u.platform='student' AND"
                 + " #{actor.platform}='student' AND u.status='ENABLED' AND"
                 + " u.auth_version=#{actor.authVersion} AND s.auth_version=u.auth_version AND"
                 + " s.revoked_at IS NULL AND s.expires_at>clock_timestamp())")

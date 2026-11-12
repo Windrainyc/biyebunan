@@ -163,7 +163,7 @@ public class DomainService {
     }
 
     private DomainDtos.Write normalize(DomainDtos.Write w) {
-        String host = w.hostname().toLowerCase(java.util.Locale.ROOT);
+        String host = w.hostname().strip().toLowerCase(java.util.Locale.ROOT);
         if (!host.matches("(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}"))
             throw new BusinessException(422, "DOMAIN_INVALID", "域名标签格式不合法");
         return new DomainDtos.Write(w.name(), host, w.platform(), w.certificateRef(), w.status());

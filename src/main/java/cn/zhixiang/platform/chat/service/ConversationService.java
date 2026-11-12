@@ -107,12 +107,15 @@ public class ConversationService {
         lockOrder(r.projectId(), actor);
         r = mapper.lock(id, actor.id());
         if (r == null) missing();
+        if (mapper.running(id))
+            throw new BusinessException(409, "CONVERSATION_BUSY", "请先停止当前回答，待处理结束后删除对话");
         if (r.version() != version || mapper.delete(id, version) != 1)
             throw new BusinessException(412, "VERSION_CONFLICT", "会话已更新");
         audit(id, actor.id(), "HIDDEN");
     }
 
     private void lockOrder(UUID project, Actor actor) {
+        if (project == null) return;
         var p = projects.get(project, actor);
         if (p == null) missing();
         var o = orders.lock(p.orderId(), actor);

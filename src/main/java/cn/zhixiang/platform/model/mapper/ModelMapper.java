@@ -12,6 +12,19 @@ import java.util.*;
 @Mapper
 public interface ModelMapper {
     /**
+     * 服务端统一选择启用且有价格和凭证的模型；学生请求不能覆盖选择。
+     *
+     * @return 按创建时间和标识稳定排序的默认模型，无配置返回空
+     */
+    @Select(
+            "SELECT d.id FROM model_definition d WHERE d.status='ENABLED' AND"
+                + " d.provider='OPENAI_COMPATIBLE' AND EXISTS(SELECT 1 FROM model_price p WHERE"
+                + " p.model_id=d.id AND p.status='ENABLED' AND p.effective_from<=clock_timestamp())"
+                + " AND EXISTS(SELECT 1 FROM model_key k WHERE k.model_id=d.id AND"
+                + " k.status='ENABLED') ORDER BY d.created_at,d.id LIMIT 1")
+    UUID defaultModel();
+
+    /**
      * 返回当前页持久化投影。
      *
      * @param q 已校验分页条件

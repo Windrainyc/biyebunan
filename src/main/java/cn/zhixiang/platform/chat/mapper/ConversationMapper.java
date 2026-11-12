@@ -10,15 +10,26 @@ import java.util.*;
 /** 私聊查询在SQL层校验当前归属，不能只依赖会话创建者。 */
 @Mapper
 public interface ConversationMapper {
+    /**
+     * 检查会话中是否仍有运行中的回答；调用者先持会话锁以排除新任务。
+     *
+     * @param id 会话标识
+     * @return 是否存在未终止运行
+     */
+    @Select(
+            "SELECT EXISTS(SELECT 1 FROM generation_run WHERE conversation_id=#{id} AND state IN"
+                    + " ('RESERVED','RUNNING'))")
+    boolean running(UUID id);
+
     /** 元数据投影。 */
     String C = "c.id,c.version,c.created_at,c.updated_at,c.project_id,c.title,c.student_id";
 
     /** 有效订单范围。 */
     String ACCESS =
-            "c.student_id=#{student} AND c.deleted_at IS NULL AND EXISTS(SELECT 1 FROM"
-                    + " software_project p JOIN software_order o ON o.id=p.order_id WHERE"
-                    + " p.id=c.project_id AND o.student_id=#{student} AND o.status IN"
-                    + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED'))";
+            "c.student_id=#{student} AND c.deleted_at IS NULL AND (c.project_id IS NULL OR"
+                    + " EXISTS(SELECT 1 FROM software_project p JOIN software_order o ON"
+                    + " o.id=p.order_id WHERE p.id=c.project_id AND o.student_id=#{student} AND"
+                    + " o.status IN ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')))";
 
     /**
      * 授权分页。

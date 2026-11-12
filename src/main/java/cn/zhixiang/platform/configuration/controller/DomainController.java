@@ -1,6 +1,8 @@
 package cn.zhixiang.platform.configuration.controller;
 
 import cn.zhixiang.platform.configuration.dto.DomainDtos;
+import cn.zhixiang.platform.configuration.dto.DomainRuntimeView;
+import cn.zhixiang.platform.configuration.service.DomainRuntimeService;
 import cn.zhixiang.platform.configuration.service.DomainService;
 import cn.zhixiang.platform.identity.model.Actor;
 import cn.zhixiang.platform.shared.dto.PageQuery;
@@ -23,16 +25,33 @@ import java.util.*;
 public class DomainController {
     private final DomainService service;
     private final IdempotentWrites writes;
+    private final DomainRuntimeService runtime;
 
     /**
      * 初始化模块组件，所需端口和配置由构造器注入。
      *
      * @param service 用例服务
      * @param writes 幂等事务协调器
+     * @param runtime 当前部署入口查询
      */
-    public DomainController(DomainService service, IdempotentWrites writes) {
+    public DomainController(
+            DomainService service, IdempotentWrites writes, DomainRuntimeService runtime) {
         this.service = service;
         this.writes = writes;
+        this.runtime = runtime;
+    }
+
+    /**
+     * 展示服务器实际生效的域名入口。
+     *
+     * @return 当前运行入口与探测设置，禁止缓存以免切换后显示旧入口
+     */
+    @PreAuthorize("hasAuthority('domains:read')")
+    @GetMapping("/runtime")
+    public ResponseEntity<DomainRuntimeView> runtime() {
+        return ResponseEntity.ok()
+                .cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(runtime.get());
     }
 
     /**

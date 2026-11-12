@@ -24,6 +24,36 @@ tags:
 - name: health
   description: 内部健康检查
 paths:
+  /api/v1/admin/domains/runtime:
+    get:
+      operationId: get_admin_domains_runtime
+      summary: 查询正在运行的三端入口与域名检查设置
+      tags: [admin]
+      x-permission: domains:read
+      responses:
+        '200':
+          description: 当前进程实际配置，不代表公网可达
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [endpoints, probesEnabled]
+                properties:
+                  probesEnabled:
+                    type: boolean
+                  endpoints:
+                    type: array
+                    items:
+                      type: object
+                      required: [platform, origin, probeAllowed]
+                      properties:
+                        platform:
+                          type: string
+                          enum: [student, admin, partner]
+                        origin:
+                          type: string
+                        probeAllowed:
+                          type: boolean
   /api/v1/admin/schools:
     get:
       operationId: get_admin_schools
@@ -20512,10 +20542,12 @@ components:
       type: object
       additionalProperties: false
       properties:
-        projectId: *id010
+        projectId:
+          type: [string, 'null']
+          format: uuid
+          description: 可不关联项目；关联时校验当前订单归属
         title: *id011
       required:
-      - projectId
       - title
     Conversation:
       type: object
@@ -20525,7 +20557,10 @@ components:
         version: *id016
         createdAt: *id014
         updatedAt: *id014
-        projectId: *id010
+        projectId:
+          type: [string, 'null']
+          format: uuid
+          description: 可不关联项目；关联时校验当前订单归属
         title: *id011
         studentId: *id010
       required:
@@ -20581,7 +20616,11 @@ components:
           description: ''
           minLength: 1
           maxLength: 16000
-        modelId: *id010
+        modelId:
+          type: string
+          format: uuid
+          deprecated: true
+          description: 兼容旧客户端输入，服务端忽略此值并统一选择启用模型
         sourceVersionIds:
           type: array
           description: 当前支持已发布且索引就绪的Markdown知识版本；最多8个不重复版本，服务端重新验证访问权限。
@@ -20596,7 +20635,6 @@ components:
       - conversationId
       - clientMessageId
       - text
-      - modelId
       - sourceVersionIds
       - maxOutputTokens
     Run:

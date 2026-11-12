@@ -142,10 +142,23 @@ public class RunService {
         }
         var c = conversations.get(w.conversationId(), actor.id());
         if (c == null) missing();
-        var project = projects.get(c.projectId(), actor);
-        if (project == null || orders.lock(project.orderId(), actor) == null) missing();
+        if (c.projectId() != null) {
+            var project = projects.get(c.projectId(), actor);
+            if (project == null || orders.lock(project.orderId(), actor) == null) missing();
+        }
         if (conversations.lock(c.id(), actor.id()) == null) missing();
-        var model = models.lock(w.modelId());
+        UUID selectedModel = models.defaultModel();
+        if (selectedModel == null)
+            throw new BusinessException(503, "MODEL_UNAVAILABLE", "管理员尚未启用可用模型");
+        w =
+                new RunDtos.Create(
+                        w.conversationId(),
+                        w.clientMessageId(),
+                        w.text(),
+                        selectedModel,
+                        w.sourceVersionIds(),
+                        w.maxOutputTokens());
+        var model = models.lock(selectedModel);
         if (model == null
                 || model.status() != ModelDtos.Status.ENABLED
                 || !model.provider().equals("OPENAI_COMPATIBLE"))

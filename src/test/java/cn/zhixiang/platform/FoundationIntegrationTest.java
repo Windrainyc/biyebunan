@@ -3786,6 +3786,9 @@ class FoundationIntegrationTest {
                             .getContentAsString();
             var row = json.readTree(result);
             String id = row.get("id").asText(), number = row.get("orderNo").asText();
+            // 本方法继续回归迁移前草稿流程；新建自动项目另有独立端到端测试。
+            db.update("DELETE FROM software_project WHERE order_id=?", UUID.fromString(id));
+            db.update("UPDATE software_order SET status='DRAFT' WHERE id=?", UUID.fromString(id));
             assertTrue(number.matches("ZX[0-9]{14}[A-F0-9]{10}"));
             assertNotEquals(first, number);
             first = number;
@@ -4984,6 +4987,63 @@ class FoundationIntegrationTest {
     }
 
     @Test
+    void domainRuntimeAndHostnameSearch() throws Exception {
+        UUID role = UUID.fromString("00000000-0000-4000-8000-000000000001");
+        db.update("INSERT INTO user_role VALUES(?,?)", adminId, role);
+        try {
+            mvc.perform(
+                            get("/api/v1/admin/domains/runtime")
+                                    .header("Authorization", "Bearer " + adminToken))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.endpoints.length()").value(3));
+            mvc.perform(
+                            get("/api/v1/admin/domains/runtime")
+                                    .header("Authorization", "Bearer " + partnerToken))
+                    .andExpect(status().isForbidden());
+            String host = "review-" + UUID.randomUUID() + ".example.com";
+            mvc.perform(
+                            post("/api/v1/admin/domains")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID())
+                                    .contentType("application/json")
+                                    .content(
+                                            json.writeValueAsString(
+                                                    Map.of(
+                                                            "name",
+                                                            "学生入口",
+                                                            "hostname",
+                                                            " "
+                                                                    + host.toUpperCase(
+                                                                            java.util.Locale.ROOT)
+                                                                    + " ",
+                                                            "platform",
+                                                            "student",
+                                                            "certificateRef",
+                                                            "site-tls",
+                                                            "status",
+                                                            "DISABLED"))))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.hostname").value(host));
+            mvc.perform(
+                            get("/api/v1/admin/domains")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .param("q", host))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.total").value(1))
+                    .andExpect(jsonPath("$.items[0].hostname").value(host));
+            mvc.perform(
+                            get("/api/v1/admin/domains")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .param("q", "%"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.total").value(0));
+        } finally {
+            db.update("DELETE FROM user_role WHERE user_id=? AND role_id=?", adminId, role);
+        }
+    }
+
+    @Test
     void storageAndDomainConfigurationBoundaries() throws Exception {
         UUID superRole = UUID.fromString("00000000-0000-4000-8000-000000000001");
         db.update("INSERT INTO user_role VALUES(?,?)", adminId, superRole);
@@ -5185,7 +5245,7 @@ class FoundationIntegrationTest {
                                             .contentType("application/json")
                                             .content(json.writeValueAsString(body)))
                             .andExpect(status().isCreated())
-                            .andExpect(jsonPath("$.status").value("DRAFT"))
+                            .andExpect(jsonPath("$.status").value("ACTIVE"))
                             .andExpect(jsonPath("$.studentPhone").doesNotExist())
                             .andReturn()
                             .getResponse();
@@ -9633,6 +9693,10 @@ class FoundationIntegrationTest {
                                             .getContentAsString())
                             .get("id")
                             .asText();
+            // 准备迁移前的草稿，验证历史确认和手工项目创建路径仍可用。
+            db.update("DELETE FROM software_project WHERE order_id=?", UUID.fromString(order));
+            db.update(
+                    "UPDATE software_order SET status='DRAFT' WHERE id=?", UUID.fromString(order));
             String path = "/api/v1/admin/projects",
                     date = java.time.LocalDate.now().plusDays(30).toString();
             var body =
@@ -9757,8 +9821,8 @@ class FoundationIntegrationTest {
                                     .header("Idempotency-Key", UUID.randomUUID())
                                     .header("If-Match", "\"2\"")
                                     .contentType("application/json")
-                                    .content("{\"action\":\"ACTIVATE\",\"reason\":\"测试缺少收款的拒绝\"}"))
-                    .andExpect(status().isUnprocessableEntity());
+                                    .content("{\"action\":\"ACTIVATE\",\"reason\":\"测试无收款也可启动\"}"))
+                    .andExpect(status().isOk());
             String milestones = path + "/" + project + "/milestones";
             var start = new java.util.concurrent.CountDownLatch(1);
             try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
@@ -9842,7 +9906,7 @@ class FoundationIntegrationTest {
                                 post(cancelPath)
                                         .header("Authorization", "Bearer " + adminToken)
                                         .header("Idempotency-Key", cancelKey)
-                                        .header("If-Match", "\"2\"")
+                                        .header("If-Match", "\"3\"")
                                         .contentType("application/json")
                                         .content("{\"action\":\"CANCEL\",\"reason\":\"终止项目服务\"}"))
                         .andExpect(status().isOk())
@@ -10286,5 +10350,286 @@ class FoundationIntegrationTest {
                         .getContentAsString();
         assertTrue(response.contains(target.toString()));
         assertTrue(response.contains("forum_post.CREATED"));
+    }
+
+    @Test
+    void optionalConversationsAndAutomaticOrderProjects() throws Exception {
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')", adminId);
+        UUID student = UUID.randomUUID(), other = UUID.randomUUID();
+        String token = UUID.randomUUID().toString(), otherToken = UUID.randomUUID().toString();
+        seed(student, "student", token);
+        seed(other, "student", otherToken);
+        for (UUID id : List.of(student, other))
+            db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')", id);
+        String key = UUID.randomUUID().toString(), conversation = null;
+        for (int n = 0; n < 2; n++) {
+            String response =
+                    mvc.perform(
+                                    post("/api/v1/student/conversations")
+                                            .header("Authorization", "Bearer " + token)
+                                            .header("Idempotency-Key", key)
+                                            .contentType("application/json")
+                                            .content("{\"title\":\"普通答疑\"}"))
+                            .andExpect(status().isCreated())
+                            .andReturn()
+                            .getResponse()
+                            .getContentAsString();
+            String id = json.readTree(response).get("id").asText();
+            if (conversation != null) assertEquals(conversation, id);
+            conversation = id;
+        }
+        mvc.perform(
+                        get("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        get("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(
+                        post("/api/v1/student/conversations")
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                Map.of(
+                                                        "title",
+                                                        "越权项目",
+                                                        "projectId",
+                                                        UUID.randomUUID()))))
+                .andExpect(status().isNotFound());
+        UUID model = UUID.randomUUID(),
+                price = UUID.randomUUID(),
+                plan = UUID.randomUUID(),
+                planVersion = UUID.randomUUID();
+        // 限定测试默认模型，测试适配器不会访问外部服务。
+        db.update(
+                "UPDATE model_definition SET status='DISABLED' WHERE provider='OPENAI_COMPATIBLE'");
+        db.update(
+                "INSERT INTO"
+                    + " model_definition(id,name,code,provider,endpoint,context_limit,max_output_tokens,status,created_by,updated_by)"
+                    + " VALUES(?,'统一模型',?,'OPENAI_COMPATIBLE','https://model.invalid/chat/completions',65536,1024,'ENABLED',?,?)",
+                model,
+                model.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " model_price(id,model_id,currency,input_per_million,output_per_million,cached_input_per_million,effective_from,status,created_by,updated_by)"
+                    + " VALUES(?,?,'CNY',1,1,1,now()-interval '1 day','ENABLED',?,?)",
+                price,
+                model,
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " model_key(id,model_id,name,secret_ref,masked_suffix,status,created_by,updated_by)"
+                    + " VALUES(?,?,'隔离凭据',?,'****','ENABLED',?,?)",
+                UUID.randomUUID(),
+                model,
+                modelSecrets.put("isolated-only-key"),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO membership_plan(id,name,code,status,created_by,updated_by)"
+                        + " VALUES(?,'测试会员',?,'ENABLED',?,?)",
+                plan,
+                plan.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " membership_plan_version(id,plan_id,version_number,duration_days,monthly_token_quota,monthly_amount_limit,effective_from)"
+                    + " VALUES(?,?,1,30,100000,10,now())",
+                planVersion,
+                plan);
+        db.update(
+                "INSERT INTO"
+                    + " membership(id,user_id,plan_id,plan_version_id,starts_at,expires_at,created_by)"
+                    + " VALUES(?,?,?,?,now()-interval '1 minute',now()+interval '1 day',?)",
+                UUID.randomUUID(),
+                student,
+                plan,
+                planVersion,
+                adminId);
+        String runBody =
+                json.writeValueAsString(
+                        Map.of(
+                                "conversationId",
+                                conversation,
+                                "clientMessageId",
+                                UUID.randomUUID(),
+                                "text",
+                                "无项目答疑",
+                                "modelId",
+                                UUID.randomUUID(),
+                                "sourceVersionIds",
+                                List.of(),
+                                "maxOutputTokens",
+                                100));
+        String runId = null;
+        for (int n = 0; n < 2; n++) {
+            var result =
+                    mvc.perform(
+                                    post("/api/v1/student/runs")
+                                            .header("Authorization", "Bearer " + token)
+                                            .header("Idempotency-Key", UUID.randomUUID())
+                                            .contentType("application/json")
+                                            .content(runBody))
+                            .andExpect(status().isAccepted())
+                            .andExpect(jsonPath("$.modelId").value(model.toString()))
+                            .andReturn()
+                            .getResponse()
+                            .getContentAsString();
+            String id = json.readTree(result).get("id").asText();
+            if (runId != null) assertEquals(runId, id);
+            runId = id;
+        }
+        mvc.perform(
+                        delete("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONVERSATION_BUSY"));
+        mvc.perform(
+                        get("/api/v1/student/runs/" + runId)
+                                .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        org.mockito.Mockito.doAnswer(
+                invocation -> {
+                    java.util.function.Consumer<String> delta = invocation.getArgument(1);
+                    delta.accept("普通答疑回答");
+                    return new cn.zhixiang.platform.chat.port.ModelGateway.Usage(
+                            10, 5, 0, "isolated-free");
+                })
+                .when(modelGateway)
+                .stream(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        assertTrue(runExecutor.runOne());
+        mvc.perform(get("/api/v1/student/runs/" + runId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("SUCCEEDED"));
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM quota_hold WHERE run_id=?",
+                        Integer.class,
+                        UUID.fromString(runId)));
+        mvc.perform(
+                        delete("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isPreconditionFailed());
+        mvc.perform(
+                        delete("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isNoContent());
+        mvc.perform(
+                        get("/api/v1/student/conversations/" + conversation)
+                                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+        UUID school = UUID.randomUUID(), major = UUID.randomUUID();
+        db.update(
+                "INSERT INTO school(id,name,code,region,status,created_by,updated_by)"
+                        + " VALUES(?,'新流程院校',?,'测试','ENABLED',?,?)",
+                school,
+                school.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO major(id,name,code,school_id,level,status,created_by,updated_by)"
+                        + " VALUES(?,'新流程专业',?,?,'BACHELOR','ENABLED',?,?)",
+                major,
+                major.toString(),
+                school,
+                adminId,
+                adminId);
+        String body =
+                json.writeValueAsString(
+                        Map.of(
+                                "title",
+                                "新流程订单",
+                                "studentPhone",
+                                "13900002222",
+                                "amount",
+                                "0",
+                                "packageCode",
+                                "STANDARD",
+                                "source",
+                                "MANUAL",
+                                "schoolId",
+                                school,
+                                "majorId",
+                                major));
+        key = UUID.randomUUID().toString();
+        String order = null;
+        for (int n = 0; n < 2; n++) {
+            var response =
+                    mvc.perform(
+                                    post("/api/v1/admin/orders")
+                                            .header("Authorization", "Bearer " + adminToken)
+                                            .header("Idempotency-Key", key)
+                                            .contentType("application/json")
+                                            .content(body))
+                            .andExpect(status().isCreated())
+                            .andExpect(jsonPath("$.status").value("ACTIVE"))
+                            .andExpect(jsonPath("$.receiptStatus").value("UNCONFIRMED"))
+                            .andReturn()
+                            .getResponse()
+                            .getContentAsString();
+            String id = json.readTree(response).get("id").asText();
+            if (order != null) assertEquals(order, id);
+            order = id;
+        }
+        UUID orderId = UUID.fromString(order);
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM software_project WHERE order_id=?",
+                        Integer.class,
+                        orderId));
+        assertEquals(
+                "REQUIREMENTS",
+                db.queryForObject(
+                        "SELECT stage FROM software_project WHERE order_id=?",
+                        String.class,
+                        orderId));
+        mvc.perform(
+                        post("/api/v1/admin/orders/" + order + "/transition")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content("{\"action\":\"COMPLETE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        mvc.perform(
+                        post("/api/v1/admin/orders/" + order + "/transition")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content("{\"action\":\"ARCHIVE\"}"))
+                .andExpect(status().isPreconditionFailed());
+        mvc.perform(
+                        post("/api/v1/admin/orders/" + order + "/transition")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"2\"")
+                                .contentType("application/json")
+                                .content("{\"action\":\"ARCHIVE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM software_project WHERE order_id=?",
+                        Integer.class,
+                        orderId));
     }
 }

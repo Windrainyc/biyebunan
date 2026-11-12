@@ -97,10 +97,13 @@ public class AssetValidation {
                 reject(job, row, "ASSET_INTEGRITY_FAILED");
                 return true;
             }
-            try (var input = storage.open(target, row.uploadKey(), meta)) {
-                if (!scanner.clean(input, meta.size())) {
-                    reject(job, row, "ASSET_MALWARE_FOUND");
-                    return true;
+            // 素材直传按已授权流程仅校验大小、类型和完整性；其他上传保留原扫描策略。
+            if (!"MATERIAL".equals(row.ownerType())) {
+                try (var input = storage.open(target, row.uploadKey(), meta)) {
+                    if (!scanner.clean(input, meta.size())) {
+                        reject(job, row, "ASSET_MALWARE_FOUND");
+                        return true;
+                    }
                 }
             }
             privateKey =

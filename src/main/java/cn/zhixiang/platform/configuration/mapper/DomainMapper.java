@@ -20,9 +20,10 @@ public interface DomainMapper {
     @Select(
             "<script>SELECT"
                 + " id,version,created_at,updated_at,name,hostname,platform,certificate_ref,status"
-                + " FROM domain_config WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\') <if"
-                + " test='q.status != null'>AND status=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT"
-                + " #{q.size} OFFSET #{q.offset}</script>")
+                + " FROM domain_config WHERE (name ILIKE #{q.pattern} ESCAPE E'\\\\' OR hostname"
+                + " ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='q.status != null'>AND"
+                + " status=#{q.status}</if> ORDER BY ${q.orderBy} LIMIT #{q.size} OFFSET"
+                + " #{q.offset}</script>")
     List<DomainEntity> list(@Param("q") PageQuery q);
 
     /**
@@ -33,7 +34,8 @@ public interface DomainMapper {
      */
     @Select(
             "<script>SELECT count(*) FROM domain_config WHERE (name ILIKE #{q.pattern} ESCAPE"
-                    + " E'\\\\') <if test='q.status != null'>AND status=#{q.status}</if></script>")
+                + " E'\\\\' OR hostname ILIKE #{q.pattern} ESCAPE E'\\\\') <if test='q.status !="
+                + " null'>AND status=#{q.status}</if></script>")
     long count(@Param("q") PageQuery q);
 
     /**

@@ -64,7 +64,8 @@ public class ReceiptService {
         if (order == null) throw new BusinessException(404, "RESOURCE_NOT_FOUND", "订单不存在");
         if (order.version() != version)
             throw new BusinessException(412, "VERSION_CONFLICT", "订单已更新");
-        if (!order.status().equals("CONFIRMED") || !order.receiptStatus().equals("UNCONFIRMED"))
+        if (!java.util.Set.of("CONFIRMED", "ACTIVE", "COMPLETED").contains(order.status())
+                || !order.receiptStatus().equals("UNCONFIRMED"))
             throw new BusinessException(422, "ORDER_RECEIPT_STATE", "仅已确认且未收款的订单可核验");
         if (w.amount() != null && new BigDecimal(w.amount()).signum() <= 0)
             throw new BusinessException(422, "RECEIPT_AMOUNT_INVALID", "支付金额应大于零");
