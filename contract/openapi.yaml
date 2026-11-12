@@ -20315,7 +20315,6 @@ components:
       - displayName
       - roleIds
       - status
-      - reason
     UserCreate:
       type: object
       additionalProperties: false

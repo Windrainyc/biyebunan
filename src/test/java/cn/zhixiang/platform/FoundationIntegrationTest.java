@@ -10651,6 +10651,21 @@ class FoundationIntegrationTest {
                 board.toString(),
                 adminId,
                 adminId);
+        UUID editedUser = UUID.randomUUID();
+        seed(editedUser, "student", UUID.randomUUID().toString());
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')",
+                editedUser);
+        db.update("UPDATE user_account SET activated_at=now() WHERE id=?", editedUser);
+        mvc.perform(
+                        put("/api/v1/admin/users/" + editedUser)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"displayName\":\"无需原因编辑\",\"roleIds\":[\"00000000-0000-4000-8000-000000000002\"],\"status\":\"ENABLED\"}"))
+                .andExpect(status().isOk());
         var profile =
                 mvc.perform(get("/api/v1/admin/me").header("Authorization", "Bearer " + adminToken))
                         .andExpect(status().isOk())

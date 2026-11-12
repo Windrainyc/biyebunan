@@ -31,7 +31,7 @@ public final class UserDtos {
      * @param majorId 专业，可省略
      * @param roleIds 同平台角色
      * @param status 目标状态
-     * @param reason 管理员变更理由，必填
+     * @param reason 管理员变更理由，兼容旧客户端，可省略
      */
     public record Write(
             @NotBlank @Size(max = 200) String displayName,
@@ -39,7 +39,7 @@ public final class UserDtos {
             UUID majorId,
             @NotNull @Size(max = 20) List<@NotNull UUID> roleIds,
             @NotNull @Pattern(regexp = "ENABLED|DISABLED") String status,
-            @NotBlank @Size(max = 200) String reason) {}
+            @Size(max = 200) String reason) {}
 
     /**
      * 模块数据记录，字段含义和取值约束见参数说明。
