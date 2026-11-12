@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
-/** 知识内容用例；已发布内容须先撤回才可修改，避免草稿泄漏给学生。 */
+/** 知识内容用例；草稿独立保存，更新发布在单一事务完成，避免中间内容泄漏。 */
 @Service
 public class ContentService {
     private final IndexMapper indexes;
@@ -172,6 +172,54 @@ public class ContentService {
     }
 
     /**
+     * 新建并直接发布；正文、快照、索引和事件同事务提交。
+     *
+     * @param w 输入
+     * @param actor 管理员
+     * @return 已发布内容
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ContentDtos.View createPublished(ContentDtos.Write w, Actor actor) {
+        requirePublish(actor);
+        var draft = create(w, actor);
+        return transition(draft.id(), draft.version(), "PUBLISH", "新增并发布", actor);
+    }
+
+    /**
+     * 保存并发布，已发布内容不需要先下架；校验失败整笔回滚，旧发布内容保持可用。
+     *
+     * @param id 内容
+     * @param version CAS版本
+     * @param w 输入
+     * @param actor 管理员
+     * @return 已发布内容
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ContentDtos.View updatePublished(
+            UUID id, long version, ContentDtos.Write w, Actor actor) {
+        requirePublish(actor);
+        categories.lockTree();
+        checked(id, version);
+        validate(id, w, actor, true);
+        mapper.update(id, w, actor.id());
+        replaceTags(id, w.tagIds());
+        event(id, actor.id(), "UPDATED", "保存并发布");
+        var updated = get(id, actor);
+        return transition(id, updated.version(), "PUBLISH", "保存并发布", actor);
+    }
+
+    private void requirePublish(Actor actor) {
+        admin(actor);
+        var authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext()
+                        .getAuthentication();
+        if (authentication == null
+                || authentication.getAuthorities().stream()
+                        .noneMatch(a -> a.getAuthority().equals("post_admin_knowledge_id_publish")))
+            throw new BusinessException(403, "FORBIDDEN", "缺少知识发布权限");
+    }
+
+    /**
      * 软删除非发布内容。
      *
      * @param id 内容
@@ -210,7 +258,7 @@ public class ContentService {
             validate(id, input(r), actor, true);
             mapper.state(id, "REVIEW", actor.id());
         } else if (action.equals("PUBLISH")) {
-            if (!r.state().equals("REVIEW")) invalid();
+            if (!Set.of("DRAFT", "REVIEW", "WITHDRAWN").contains(r.state())) invalid();
             validate(id, input(r), actor, true);
             UUID snapshot = UUID.randomUUID();
             mapper.snapshot(snapshot, id, actor.id());
@@ -248,8 +296,6 @@ public class ContentService {
             if (complete && (w.markdown() == null || w.markdown().isBlank()))
                 throw new BusinessException(422, "CONTENT_EMPTY", "正文不能为空");
         } else {
-            if (w.markdown() != null && !w.markdown().isBlank())
-                throw new BusinessException(422, "CONTENT_FORMAT_INVALID", "视频文档不得混用Markdown正文");
             if (complete && w.assetId() == null)
                 throw new BusinessException(422, "ASSET_REQUIRED", "发布须上传附件");
         }

@@ -186,6 +186,149 @@ class FoundationIntegrationTest {
     @Autowired cn.zhixiang.platform.asset.service.AssetService assetAccess;
 
     @Test
+    void knowledgeDirectPublishAndAtomicUpdate() throws Exception {
+        db.update(
+                "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"
+                    + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
+                adminId);
+        UUID category = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " knowledge_category(id,name,code,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'直接发布测试',?,0,'ENABLED',?,?)",
+                category,
+                category.toString(),
+                adminId,
+                adminId);
+        var body =
+                new HashMap<String, Object>(
+                        Map.of(
+                                "title",
+                                "直接发布原稿",
+                                "categoryId",
+                                category,
+                                "tagIds",
+                                List.of(),
+                                "type",
+                                "MARKDOWN",
+                                "markdown",
+                                "## 正文\n原内容",
+                                "audience",
+                                "PUBLIC"));
+        String key = UUID.randomUUID().toString();
+        var created =
+                json.readTree(
+                        mvc.perform(
+                                        post("/api/v1/admin/knowledge")
+                                                .param("publish", "true")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("Idempotency-Key", key)
+                                                .contentType("application/json")
+                                                .content(json.writeValueAsString(body)))
+                                .andExpect(status().isCreated())
+                                .andExpect(jsonPath("$.state").value("PUBLISHED"))
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        String id = created.get("id").asText();
+        long version = created.get("version").asLong();
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .param("publish", "true")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", key)
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id));
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .param("publish", "false")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", key)
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isConflict());
+        body.put("markdown", "");
+        mvc.perform(
+                        put("/api/v1/admin/knowledge/" + id)
+                                .param("publish", "true")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + version + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(
+                        get("/api/v1/admin/knowledge/" + id)
+                                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(jsonPath("$.state").value("PUBLISHED"))
+                .andExpect(jsonPath("$.markdown").value("## 正文\n原内容"))
+                .andExpect(jsonPath("$.version").value(version));
+        body.put("markdown", "## 更新说明\n新内容");
+        body.put("title", "更新后标题");
+        mvc.perform(
+                        put("/api/v1/admin/knowledge/" + id)
+                                .param("publish", "true")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + version + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("PUBLISHED"))
+                .andExpect(jsonPath("$.title").value("更新后标题"));
+        assertEquals(
+                2,
+                db.queryForObject(
+                        "SELECT count(*) FROM knowledge_version WHERE content_id=?",
+                        Integer.class,
+                        UUID.fromString(id)));
+        mvc.perform(
+                        put("/api/v1/admin/knowledge/" + id)
+                                .param("publish", "true")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"" + version + "\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isPreconditionFailed());
+        var draft =
+                json.readTree(
+                        mvc.perform(
+                                        post("/api/v1/admin/knowledge")
+                                                .header("Authorization", "Bearer " + adminToken)
+                                                .header("Idempotency-Key", UUID.randomUUID())
+                                                .contentType("application/json")
+                                                .content(json.writeValueAsString(body)))
+                                .andExpect(status().isCreated())
+                                .andReturn()
+                                .getResponse()
+                                .getContentAsString());
+        mvc.perform(
+                        post("/api/v1/admin/knowledge/" + draft.get("id").asText() + "/publish")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("If-Match", "\"1\"")
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content("{\"reason\":\"直接发布\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("PUBLISHED"));
+        db.update(
+                "DELETE FROM role_permission WHERE role_id IN(SELECT role_id FROM user_role WHERE"
+                    + " user_id=?) AND permission_code='post_admin_knowledge_id_publish'",
+                adminId);
+        mvc.perform(
+                        post("/api/v1/admin/knowledge")
+                                .param("publish", "true")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void sharedMaterialsRequireScanAndProtectKnowledgeCoverReferences() throws Exception {
         db.update(
                 "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"

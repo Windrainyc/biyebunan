@@ -127,9 +127,10 @@ public class ContentController {
     }
 
     /**
-     * 新建草稿。
+     * 新建草稿或直接发布。
      *
      * @param w 输入
+     * @param publish 是否同时发布，需要额外发布权限
      * @param key 幂等键
      * @param actor 管理员
      * @return 201
@@ -138,6 +139,7 @@ public class ContentController {
     @PreAuthorize("hasAuthority('post_admin_knowledge')")
     public ResponseEntity<String> create(
             @Valid @RequestBody ContentDtos.Write w,
+            @RequestParam(defaultValue = "false") boolean publish,
             @RequestHeader("Idempotency-Key") String key,
             @AuthenticationPrincipal Actor actor) {
         return writes.execute(
@@ -145,18 +147,19 @@ public class ContentController {
                 "POST",
                 "/api/v1/admin/knowledge",
                 key,
-                w,
+                List.of(w, publish),
                 () -> {
-                    var r = service.create(w, actor);
+                    var r = publish ? service.createPublished(w, actor) : service.create(w, actor);
                     return ResponseEntity.status(201).eTag(Versions.etag(r.version())).body(r);
                 });
     }
 
     /**
-     * 编辑草稿。
+     * 编辑草稿或原子更新发布。
      *
      * @param id 内容
      * @param w 输入
+     * @param publish 是否同时发布，需要额外发布权限
      * @param match 版本
      * @param key 幂等键
      * @param actor 管理员
@@ -167,6 +170,7 @@ public class ContentController {
     public ResponseEntity<String> update(
             @PathVariable UUID id,
             @Valid @RequestBody ContentDtos.Write w,
+            @RequestParam(defaultValue = "false") boolean publish,
             @RequestHeader("If-Match") String match,
             @RequestHeader("Idempotency-Key") String key,
             @AuthenticationPrincipal Actor actor) {
@@ -176,9 +180,12 @@ public class ContentController {
                 "PUT",
                 "/api/v1/admin/knowledge/" + id,
                 key,
-                List.of(v, w),
+                List.of(v, w, publish),
                 () -> {
-                    var r = service.update(id, v, w, actor);
+                    var r =
+                            publish
+                                    ? service.updatePublished(id, v, w, actor)
+                                    : service.update(id, v, w, actor);
                     return ResponseEntity.ok().eTag(Versions.etag(r.version())).body(r);
                 });
     }
