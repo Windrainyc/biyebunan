@@ -51,7 +51,7 @@ public class ForumFileAccess {
             permission("put_student_posts_id");
         }
         if (b.status() != BoardDtos.Status.ENABLED
-                || !Set.of("PENDING", "PUBLISHED").contains(p.state()))
+                || !Set.of("DRAFT", "PENDING", "PUBLISHED").contains(p.state()))
             throw new BusinessException(422, "POST_STATE_INVALID", "当前帖子不接受文件写入");
     }
 

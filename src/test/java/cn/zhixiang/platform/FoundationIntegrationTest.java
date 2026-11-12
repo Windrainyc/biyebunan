@@ -10632,4 +10632,159 @@ class FoundationIntegrationTest {
                         Integer.class,
                         orderId));
     }
+
+    @Test
+    void communityDraftPublicationAndAdminProfile() throws Exception {
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')", adminId);
+        UUID student = UUID.randomUUID(), other = UUID.randomUUID(), board = UUID.randomUUID();
+        String token = UUID.randomUUID().toString(), otherToken = UUID.randomUUID().toString();
+        seed(student, "student", token);
+        seed(other, "student", otherToken);
+        for (UUID u : List.of(student, other))
+            db.update("INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')", u);
+        db.update(
+                "INSERT INTO"
+                    + " forum_board(id,name,code,requires_review,sort_order,status,created_by,updated_by)"
+                    + " VALUES(?,'社区新版专项',?,true,0,'ENABLED',?,?)",
+                board,
+                board.toString(),
+                adminId,
+                adminId);
+        var profile =
+                mvc.perform(get("/api/v1/admin/me").header("Authorization", "Bearer " + adminToken))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse();
+        String version = profile.getHeader("ETag");
+        String data = "{\"displayName\":\"新版管理员\",\"avatarIndex\":9}";
+        mvc.perform(
+                        put("/api/v1/admin/me")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", version)
+                                .contentType("application/json")
+                                .content(data))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.avatarIndex").value(9));
+        mvc.perform(
+                        put("/api/v1/admin/me")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", version)
+                                .contentType("application/json")
+                                .content(data))
+                .andExpect(status().isPreconditionFailed());
+        mvc.perform(get("/api/v1/admin/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        UUID store = UUID.randomUUID(), asset = UUID.randomUUID(), upload = UUID.randomUUID();
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'取消专项','ALIYUN_OSS','isolated-cancel','cn-beijing','https://oss-cn-beijing.aliyuncs.com','test','PRIVATE','ENABLED',?,?)",
+                store,
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,profile_user_id,storage_id,filename,size,sha256,mime_type,upload_key,state,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'PROFILE',?,?,'avatar.png',10,?,'image/png',?,'UPLOADING',now()+interval"
+                    + " '5 minutes',?,?)",
+                asset,
+                upload,
+                adminId,
+                store,
+                "0".repeat(64),
+                "test/" + asset,
+                adminId,
+                adminId);
+        mvc.perform(
+                        post("/api/v1/student/uploads/" + upload + "/cancel")
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+        for (int i = 0; i < 2; i++)
+            mvc.perform(
+                            post("/api/v1/admin/uploads/" + upload + "/cancel")
+                                    .header("Authorization", "Bearer " + adminToken)
+                                    .header("Idempotency-Key", UUID.randomUUID()))
+                    .andExpect(status().isNoContent());
+        assertNotNull(
+                db.queryForObject(
+                        "SELECT deleted_at FROM asset WHERE id=?",
+                        java.sql.Timestamp.class,
+                        asset));
+        mvc.perform(
+                        post("/api/v1/admin/uploads/" + upload + "/complete")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+        var payload = new java.util.HashMap<String, Object>();
+        payload.put("boardId", board);
+        payload.put("title", "草稿测试");
+        payload.put("body", "正文");
+        payload.put("tagIds", List.of());
+        payload.put("assetIds", List.of());
+        payload.put("tagNames", List.of("新增标签", "新增标签"));
+        payload.put("draft", true);
+        String draft =
+                mvc.perform(
+                                post("/api/v1/student/posts")
+                                        .header("Authorization", "Bearer " + token)
+                                        .header("Idempotency-Key", UUID.randomUUID())
+                                        .contentType("application/json")
+                                        .content(json.writeValueAsString(payload)))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.state").value("DRAFT"))
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        String id = json.readTree(draft).get("id").asText();
+        assertEquals(1, json.readTree(draft).get("tagIds").size());
+        mvc.perform(
+                        get("/api/v1/student/posts/" + id)
+                                .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        payload.put("draft", false);
+        mvc.perform(
+                        put("/api/v1/student/posts/" + id)
+                                .header("Authorization", "Bearer " + otherToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(payload)))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        put("/api/v1/student/posts/" + id)
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(payload)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("PUBLISHED"));
+        mvc.perform(
+                        get("/api/v1/student/posts/" + id)
+                                .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isOk());
+        String comments = "/api/v1/student/posts/" + id + "/comments";
+        String comment =
+                forumComment(comments, otherToken, "另一位同学的评论", null)
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+        forumComment(comments, token, "作者回复", json.readTree(comment).get("id").asText())
+                .andExpect(status().isCreated());
+        payload.put("body", "[[asset:" + UUID.randomUUID() + "]]");
+        mvc.perform(
+                        put("/api/v1/student/posts/" + id)
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"2\"")
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(payload)))
+                .andExpect(status().isUnprocessableEntity());
+    }
 }

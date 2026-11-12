@@ -18,10 +18,10 @@ import org.springframework.transaction.support.*;
 
 import java.util.UUID;
 
-/** 素材跳过扫描仍保留完整性校验；其他类型不得继承跳过策略。 */
+/** 上传后不回读摘要；元信息不符仍拒绝，非素材仍保留扫描。 */
 class AssetValidationPolicyTest {
     @Test
-    void materialReadyWithoutScannerButRejectsCorruption() {
+    void uploadsSkipDigestReadbackButStillRejectMetadataMismatch() {
         check("MATERIAL", true);
         check("MATERIAL", false);
         check("PROJECT", true);
@@ -65,9 +65,9 @@ class AssetValidationPolicyTest {
         when(config.status()).thenReturn(StorageDtos.Status.ENABLED);
         when(config.provider()).thenReturn(StorageDtos.Provider.ALIYUN_OSS);
         when(stores.get(store)).thenReturn(config);
-        var meta = new ObjectStorage.Metadata(4, "etag", "v1", "video/mp4");
+        var meta = new ObjectStorage.Metadata(intact ? 4 : 3, "etag", "v1", "video/mp4");
         when(storage.stat(any(), any())).thenReturn(meta);
-        when(storage.sha256(any(), any(), any())).thenReturn(intact ? "digest" : "corrupt");
+
         when(storage.promote(any(), any(), any(), any())).thenReturn(meta);
         when(storage.open(any(), any(), any()))
                 .thenReturn(new java.io.ByteArrayInputStream(new byte[4]));
@@ -83,6 +83,7 @@ class AssetValidationPolicyTest {
                         tx,
                         mock(WriteMapper.class));
         assertTrue(service.runOne());
+        verify(storage, never()).sha256(any(), any(), any());
         if (owner.equals("MATERIAL")) verifyNoInteractions(scanner);
         else verify(scanner).clean(any(), eq(4L));
         if (intact) verify(tasks).ready(eq(id), anyString(), eq("v1"));

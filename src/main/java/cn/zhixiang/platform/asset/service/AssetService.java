@@ -209,6 +209,24 @@ public class AssetService {
         audit(id, actor.id(), "DELETED");
     }
 
+    /**
+     * 取消本人上传；锁资产阻止完成回调或验证任务复活，已关联的资产拒绝取消。
+     *
+     * @param uploadId 上传会话
+     * @param actor 当前身份
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void cancel(UUID uploadId, Actor actor) {
+        var found = mapper.upload(uploadId);
+        if (found == null || !actor.id().equals(found.createdBy())) missing();
+        var row = mapper.lock(found.id());
+        if (row.deletedAt() != null) return;
+        if (mapper.referenced(row.id()))
+            throw new BusinessException(409, "RESOURCE_REFERENCED", "文件已关联业务，不能取消上传");
+        mapper.delete(row.id(), actor.id());
+        audit(row.id(), actor.id(), "UPLOAD_CANCELLED");
+    }
+
     private AssetEntity visible(UUID id, Actor actor) {
         var r = mapper.get(id);
         live(r);
@@ -238,7 +256,8 @@ public class AssetService {
 
     private void authorize(String type, UUID id, Actor actor, boolean write) {
         if (type.equals("PROFILE")) {
-            if (!actor.platform().equals("student") || !actor.id().equals(id)) missing();
+            if (!java.util.Set.of("student", "admin").contains(actor.platform())
+                    || !actor.id().equals(id)) missing();
             return;
         }
         if (type.equals("FORUM")) {

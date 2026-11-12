@@ -12,6 +12,17 @@ import java.util.*;
 @Mapper
 public interface TagMapper {
     /**
+     * 在标签树互斥锁内按名称去重。
+     *
+     * @param name 规范化名称
+     * @return 同名标签或空
+     */
+    @Select(
+            "SELECT id,version,created_at,updated_at,name,code,status FROM knowledge_tag WHERE"
+                    + " lower(trim(name))=lower(#{name}) ORDER BY created_at LIMIT 1")
+    TagEntity byName(String name);
+
+    /**
      * 返回当前页持久化投影。
      *
      * @param q 已校验分页条件

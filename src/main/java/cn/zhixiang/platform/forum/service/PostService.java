@@ -71,7 +71,8 @@ public class PostService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PageResult<PostDtos.View> list(PageQuery q, String state, UUID board, Actor actor) {
         checkPlatform(actor);
-        if (state != null && !Set.of("PENDING", "PUBLISHED", "HIDDEN", "LOCKED").contains(state))
+        if (state != null
+                && !Set.of("DRAFT", "PENDING", "PUBLISHED", "HIDDEN", "LOCKED").contains(state))
             throw new BusinessException(400, "INVALID_FILTER", "帖子状态无效");
         return new PageResult<>(
                 posts.list(q, state, board, isAdmin(actor), actor.id()).stream()
@@ -115,7 +116,7 @@ public class PostService {
         if (posts.recent(actor.id()) >= 5)
             throw new BusinessException(429, "FORUM_RATE_LIMITED", "发帖过于频繁，请稍后重试");
         UUID id = UUID.randomUUID();
-        posts.insert(id, w, actor.id(), b.requiresReview() ? "PENDING" : "PUBLISHED");
+        posts.insert(id, w, actor.id(), Boolean.TRUE.equals(w.draft()) ? "DRAFT" : "PUBLISHED");
         replaceTags(id, w);
         replaceAssets(id, w.assetIds());
         audit(id, actor, "CREATED", null);
@@ -142,9 +143,10 @@ public class PostService {
         owned(row, actor, version);
         if (!row.boardId().equals(old.boardId())) conflict();
         writable(row);
+        if (Boolean.TRUE.equals(w.draft()) && !row.state().equals("DRAFT")) invalid();
         validate(w);
         var b = boards.get(w.boardId());
-        posts.update(id, w, b.requiresReview() ? "PENDING" : "PUBLISHED");
+        posts.update(id, w, Boolean.TRUE.equals(w.draft()) ? "DRAFT" : "PUBLISHED");
         replaceTags(id, w);
         replaceAssets(id, w.assetIds());
         audit(id, actor, "UPDATED", null);
@@ -231,6 +233,20 @@ public class PostService {
     }
 
     private void validate(PostDtos.Write w) {
+        var media =
+                java.util.regex.Pattern.compile("\\[\\[asset:([0-9a-fA-F-]{36})\\]\\]")
+                        .matcher(w.body());
+        while (media.find()) {
+            UUID asset;
+            try {
+                asset = UUID.fromString(media.group(1));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException(422, "INVALID_MEDIA", "正文媒体标识无效");
+            }
+            if (!w.assetIds().contains(asset))
+                throw new BusinessException(422, "INVALID_MEDIA", "正文媒体必须关联当前帖子");
+        }
+
         if (new HashSet<>(w.assetIds()).size() != w.assetIds().size())
             throw new BusinessException(422, "DUPLICATE_ASSET", "附件不能重复");
         if (new HashSet<>(w.tagIds()).size() != w.tagIds().size())
@@ -261,7 +277,30 @@ public class PostService {
 
     private void replaceTags(UUID id, PostDtos.Write w) {
         posts.clearTags(id);
-        w.tagIds().forEach(tag -> posts.tag(id, tag));
+        var ids = new LinkedHashSet<>(w.tagIds());
+        for (String input : w.tagNames() == null ? List.<String>of() : w.tagNames()) {
+            String name =
+                    java.text.Normalizer.normalize(input.strip(), java.text.Normalizer.Form.NFKC);
+            if (name.isBlank()
+                    || name.length() > 30
+                    || name.chars().anyMatch(Character::isISOControl))
+                throw new BusinessException(422, "INVALID_TAG", "标签须为1至30字");
+            var existing = tags.byName(name);
+            if (existing != null) {
+                if (existing.status() != TagDtos.Status.ENABLED)
+                    throw new BusinessException(422, "TAG_UNAVAILABLE", "同名标签已停用");
+                ids.add(existing.id());
+            } else {
+                UUID tag = UUID.randomUUID();
+                tags.insert(
+                        tag,
+                        new TagDtos.Write(name, "forum-" + tag, TagDtos.Status.ENABLED),
+                        posts.get(id).authorId());
+                ids.add(tag);
+            }
+        }
+        if (ids.size() > 20) throw new BusinessException(422, "TOO_MANY_TAGS", "最多20个标签");
+        ids.forEach(tag -> posts.tag(id, tag));
     }
 
     private void visible(PostEntity r, Actor actor) {
@@ -271,8 +310,8 @@ public class PostService {
         if (b == null
                 || b.status() != BoardDtos.Status.ENABLED
                 || !(Set.of("PUBLISHED", "LOCKED").contains(r.state())
-                        || (r.state().equals("PENDING") && r.authorId().equals(actor.id()))))
-            missing();
+                        || (Set.of("DRAFT", "PENDING").contains(r.state())
+                                && r.authorId().equals(actor.id())))) missing();
     }
 
     private void owned(PostEntity r, Actor a, long v) {
@@ -282,7 +321,7 @@ public class PostService {
     }
 
     private void writable(PostEntity r) {
-        if (!Set.of("PENDING", "PUBLISHED").contains(r.state())) invalid();
+        if (!Set.of("DRAFT", "PENDING", "PUBLISHED").contains(r.state())) invalid();
     }
 
     private void live(PostEntity r) {

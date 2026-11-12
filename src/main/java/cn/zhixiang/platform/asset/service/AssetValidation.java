@@ -91,13 +91,11 @@ public class AssetValidation {
                             config.bucket(),
                             config.credentialRef());
             var meta = storage.stat(target, row.uploadKey());
-            if (meta.size() != row.size()
-                    || !row.mimeType().equals(meta.contentType())
-                    || !row.sha256().equals(storage.sha256(target, row.uploadKey(), meta))) {
-                reject(job, row, "ASSET_INTEGRITY_FAILED");
+            if (meta.size() != row.size() || !row.mimeType().equals(meta.contentType())) {
+                reject(job, row, "ASSET_METADATA_MISMATCH");
                 return true;
             }
-            // 素材直传按已授权流程仅校验大小、类型和完整性；其他上传保留原扫描策略。
+            // 用户授权取消上传后摘要回读比对；仍检查对象元信息，非素材保留原扫描策略。
             if (!"MATERIAL".equals(row.ownerType())) {
                 try (var input = storage.open(target, row.uploadKey(), meta)) {
                     if (!scanner.clean(input, meta.size())) {

@@ -81,4 +81,30 @@ public class StudentUploadController {
                     return ResponseEntity.status(202).eTag(Versions.etag(r.version())).body(r);
                 });
     }
+
+    /**
+     * 取消本人尚未关联的上传。
+     *
+     * @param id 上传会话
+     * @param key 幂等键
+     * @param actor 当前身份
+     * @return 无内容
+     */
+    @PostMapping("/uploads/{id}/cancel")
+    @PreAuthorize("hasAuthority('post_student_uploads')")
+    public ResponseEntity<String> cancel(
+            @PathVariable UUID id,
+            @RequestHeader("Idempotency-Key") String key,
+            @AuthenticationPrincipal Actor actor) {
+        return writes.execute(
+                actor.id(),
+                "POST",
+                "/api/v1/student/uploads/" + id + "/cancel",
+                key,
+                id,
+                () -> {
+                    service.cancel(id, actor);
+                    return ResponseEntity.noContent().build();
+                });
+    }
 }

@@ -12,6 +12,8 @@ public final class PostDtos {
     /**
      * 新增或替换正文。
      *
+     * @param draft true保存仅本人可见草稿，缺省发布
+     * @param tagNames 最多五个新标签名称，发布时去重建立
      * @param boardId 板块
      * @param title 非空标题
      * @param body Markdown或纯文本，不超过20000字
@@ -23,7 +25,23 @@ public final class PostDtos {
             @NotBlank @Size(max = 200) String title,
             @NotBlank @Size(max = 20000) String body,
             @NotNull @Size(max = 20) List<@NotNull UUID> tagIds,
-            @NotNull @Size(max = 20) List<@NotNull UUID> assetIds) {}
+            @NotNull @Size(max = 20) List<@NotNull UUID> assetIds,
+            Boolean draft,
+            @Size(max = 5) List<@NotBlank @Size(max = 30) String> tagNames) {
+        /**
+         * 兼容旧调用，默认直接发布。
+         *
+         * @param boardId 板块
+         * @param title 标题
+         * @param body 正文
+         * @param tagIds 标签
+         * @param assetIds 附件
+         */
+        public Write(
+                UUID boardId, String title, String body, List<UUID> tagIds, List<UUID> assetIds) {
+            this(boardId, title, body, tagIds, assetIds, false, List.of());
+        }
+    }
 
     /**
      * 审核动作保留审计，处理原因可选。

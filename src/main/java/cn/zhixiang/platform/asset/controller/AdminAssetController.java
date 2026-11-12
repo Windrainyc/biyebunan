@@ -182,4 +182,30 @@ public class AdminAssetController {
                     return ResponseEntity.noContent().build();
                 });
     }
+
+    /**
+     * 取消本人尚未关联的上传。
+     *
+     * @param id 上传会话
+     * @param key 幂等键
+     * @param actor 当前身份
+     * @return 无内容
+     */
+    @PostMapping("/uploads/{id}/cancel")
+    @PreAuthorize("hasAuthority('post_admin_uploads')")
+    public ResponseEntity<String> cancel(
+            @PathVariable UUID id,
+            @RequestHeader("Idempotency-Key") String key,
+            @AuthenticationPrincipal Actor actor) {
+        return writes.execute(
+                actor.id(),
+                "POST",
+                "/api/v1/admin/uploads/" + id + "/cancel",
+                key,
+                id,
+                () -> {
+                    service.cancel(id, actor);
+                    return ResponseEntity.noContent().build();
+                });
+    }
 }

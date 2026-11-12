@@ -15,10 +15,11 @@ public interface PostMapper {
     String FILTER =
             " FROM forum_post p WHERE p.deleted_at IS NULL <if test='!admin'>AND EXISTS(SELECT 1"
                 + " FROM forum_board b WHERE b.id=p.board_id AND b.status='ENABLED') AND (p.state"
-                + " IN ('PUBLISHED','LOCKED') OR (p.state='PENDING' AND p.author_id=#{user}))</if>"
-                + " <if test='board != null'>AND p.board_id=#{board}</if> <if test='state !="
-                + " null'>AND p.state=#{state}</if> AND (p.title ILIKE #{q.pattern} ESCAPE E'\\\\'"
-                + " OR p.body ILIKE #{q.pattern} ESCAPE E'\\\\')";
+                + " IN ('PUBLISHED','LOCKED') OR (p.state IN ('DRAFT','PENDING') AND"
+                + " p.author_id=#{user}))</if> <if test='board != null'>AND"
+                + " p.board_id=#{board}</if> <if test='state != null'>AND p.state=#{state}</if> AND"
+                + " (p.title ILIKE #{q.pattern} ESCAPE E'\\\\' OR p.body ILIKE #{q.pattern} ESCAPE"
+                + " E'\\\\')";
 
     /**
      * 当前页。

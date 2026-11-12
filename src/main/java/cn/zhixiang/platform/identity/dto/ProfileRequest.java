@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 public record ProfileRequest(
         @NotBlank @Size(max = 200) String displayName,
-        @NotNull UUID schoolId,
-        @NotNull UUID majorId,
+        UUID schoolId,
+        UUID majorId,
         @Min(0) @Max(9) Integer avatarIndex,
         UUID avatarAssetId) {}

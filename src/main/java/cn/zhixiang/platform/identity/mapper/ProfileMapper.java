@@ -53,7 +53,7 @@ public interface ProfileMapper {
      */
     @Update(
             "UPDATE user_account SET"
-                + " display_name=#{w.displayName},school_id=#{w.schoolId},major_id=#{w.majorId},avatar_index=coalesce(#{w.avatarIndex},avatar_index),avatar_asset_id=#{w.avatarAssetId},version=version+1,updated_at=now()"
+                + " display_name=#{w.displayName},school_id=coalesce(#{w.schoolId},school_id),major_id=coalesce(#{w.majorId},major_id),avatar_index=coalesce(#{w.avatarIndex},avatar_index),avatar_asset_id=#{w.avatarAssetId},version=version+1,updated_at=now()"
                 + " WHERE id=#{id} AND version=#{version}")
     int update(UUID id, long version, @Param("w") ProfileRequest w);
 }
