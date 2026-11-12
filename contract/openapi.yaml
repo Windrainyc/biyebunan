@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 知项平台后端接口契约
-  version: 1.0.37
+  version: 1.0.38
   description: '工程实现契约。三端独立登录；服务端强制平台和对象权限。金额用十进制字符串。
 
     路由映射与字段校验不代表全部业务验收或生产部署；实际验证及外部配置边界见docs/开发进度.md。'
@@ -8385,7 +8385,7 @@ paths:
         in: query
         required: false
         description: ''
-        schema: &id060
+        schema: &id061
           type: string
           enum:
           - PENDING
@@ -10144,7 +10144,7 @@ paths:
               properties:
                 bucket: *id011
                 object: *id011
-                size: &id029
+                size: &id030
                   type: integer
                   minimum: 0
                   maximum: 9223372036854775807
@@ -19234,6 +19234,659 @@ paths:
           type: string
           description: ''
           maxLength: 128
+  /api/v1/admin/banners:
+    get:
+      operationId: get_admin_banners
+      parameters:
+      - description: ''
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+      - description: ''
+        in: query
+        name: size
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+      - description: ''
+        in: query
+        name: q
+        required: false
+        schema:
+          description: ''
+          maxLength: 100
+          type: string
+      - description: 状态取值遵循返回资源定义；未知状态 400
+        in: query
+        name: status
+        required: false
+        schema:
+          description: ''
+          maxLength: 200
+          type: string
+      - description: 稳定排序附加 id 同序
+        in: query
+        name: sort
+        required: false
+        schema:
+          enum:
+          - createdAt:desc
+          - createdAt:asc
+          - updatedAt:desc
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BannerPage'
+          description: 成功
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 分页查询首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-filter-policy: q 匹配名称/标题/代码；status 按资源枚举；大小写及模糊匹配见接口设计。额外字段只有显式列出的可用。
+      x-permission: banners:read
+    post:
+      operationId: post_admin_banners
+      parameters:
+      - description: ''
+        in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          description: ''
+          maxLength: 128
+          minLength: 16
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BannerWrite'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Banner'
+          description: 成功
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                description: ''
+                type: string
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 新增首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-permission: banners:write
+  /api/v1/admin/banners/{id}:
+    delete:
+      description: 被引用返回 409；内置对象禁止；已使用价格版本不可改内容只能停用。删除规则见数据库文档。
+      operationId: delete_admin_banners_id
+      parameters:
+      - description: ''
+        in: path
+        name: id
+        required: true
+        schema:
+          description: 资源标识
+          format: uuid
+          type: string
+      - description: ''
+        in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          description: ''
+          maxLength: 128
+          minLength: 16
+          type: string
+      - description: GET 返回的强 ETag，如 "3"
+        in: header
+        name: If-Match
+        required: true
+        schema:
+          description: ''
+          pattern: ^"[0-9]+"$
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      responses:
+        '204':
+          description: 成功
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 删除首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-permission: banners:write
+    get:
+      operationId: get_admin_banners_id
+      parameters:
+      - description: ''
+        in: path
+        name: id
+        required: true
+        schema:
+          description: 资源标识
+          format: uuid
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: &id023
+                $ref: '#/components/schemas/Banner'
+          description: 成功
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                description: ''
+                type: string
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 读取首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-permission: banners:read
+    put:
+      operationId: put_admin_banners_id
+      parameters:
+      - description: ''
+        in: path
+        name: id
+        required: true
+        schema:
+          description: 资源标识
+          format: uuid
+          type: string
+      - description: ''
+        in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          description: ''
+          maxLength: 128
+          minLength: 16
+          type: string
+      - description: GET 返回的强 ETag，如 "3"
+        in: header
+        name: If-Match
+        required: true
+        schema:
+          description: ''
+          pattern: ^"[0-9]+"$
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BannerWrite'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Banner'
+          description: 成功
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                description: ''
+                type: string
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 编辑首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-permission: banners:write
+  /api/v1/admin/banners/{id}/status:
+    post:
+      operationId: post_admin_banners_id_status
+      parameters:
+      - description: ''
+        in: path
+        name: id
+        required: true
+        schema:
+          description: 资源标识
+          format: uuid
+          type: string
+      - description: ''
+        in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          description: ''
+          maxLength: 128
+          minLength: 16
+          type: string
+      - description: GET 返回的强 ETag，如 "3"
+        in: header
+        name: If-Match
+        required: true
+        schema:
+          description: ''
+          pattern: ^"[0-9]+"$
+          type: string
+      - description: 可选关联 ID；服务端生成可信 traceId
+        in: header
+        name: X-Request-ID
+        required: false
+        schema:
+          description: ''
+          maxLength: 128
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StateChange'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Banner'
+          description: 成功
+          headers:
+            ETag:
+              description: 资源版本；只对可更新资源有业务意义
+              schema:
+                description: ''
+                type: string
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 参数或格式错误
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 会话无效
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 缺少平台/操作权限
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 不存在或不可见
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 业务冲突/幂等键内容不一致
+        '412':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ETag 版本冲突
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 状态或引用规则不满足
+        '429':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 限流
+        '503':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 依赖服务不可用
+      summary: 启停首页横幅
+      tags:
+      - admin
+      x-data-scope: 按操作权限；私聊另需 chat:audit
+      x-permission: banners:write
+  /api/v1/student/banners:
+    get:
+      operationId: get_student_banners
+      summary: 学生首页启用横幅，最多十条
+      x-permission: get_student_banners
+      responses:
+        '200':
+          description: 按顺序返回已启用内容
+          content:
+            application/json:
+              schema:
+                type: array
+                items: *id023
 components:
   securitySchemes:
     bearerAuth:
@@ -19547,7 +20200,7 @@ components:
         name: *id011
         code: *id011
         region: *id011
-        status: &id024
+        status: &id025
           type: string
           enum:
           - ENABLED
@@ -19562,18 +20215,18 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: &id025
+        version: &id026
           type: integer
           minimum: 1
-        createdAt: &id023
+        createdAt: &id024
           type: string
           description: UTC 时间
           format: date-time
-        updatedAt: *id023
+        updatedAt: *id024
         name: *id011
         code: *id011
         region: *id011
-        status: *id024
+        status: *id025
       required:
       - id
       - version
@@ -19595,13 +20248,13 @@ components:
           - 'null'
           format: uuid
           description: 历史院校关联；全国独立专业为空
-        level: &id026
+        level: &id027
           type: string
           enum:
           - COLLEGE
           - BACHELOR
           - MASTER
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -19612,9 +20265,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
         schoolId:
@@ -19623,8 +20276,8 @@ components:
           - 'null'
           format: uuid
           description: 历史院校关联；全国独立专业为空
-        level: *id026
-        status: *id024
+        level: *id027
+        status: *id025
       required:
       - id
       - version
@@ -19647,16 +20300,16 @@ components:
           minLength: 2
           pattern: ^[A-Z][A-Z0-9_]{1,63}$
         platform: *id012
-        dataScope: &id027
+        dataScope: &id028
           type: string
           enum:
           - SELF
           - OWNED
           - ALL
-        permissionCodes: &id028
+        permissionCodes: &id029
           type: array
           items: *id011
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -19669,15 +20322,15 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
         platform: *id012
-        dataScope: *id027
-        permissionCodes: *id028
-        status: *id024
+        dataScope: *id028
+        permissionCodes: *id029
+        status: *id025
       required:
       - id
       - version
@@ -19695,16 +20348,16 @@ components:
       properties:
         name: *id011
         code: *id011
-        durationDays: &id030
+        durationDays: &id031
           type: integer
           minimum: 1
           maximum: 36500
-        monthlyTokenQuota: *id029
-        monthlyAmountLimit: &id031
+        monthlyTokenQuota: *id030
+        monthlyAmountLimit: &id032
           type: string
           description: 十进制字符串，人民币元；禁止浮点运算
           pattern: ^[0-9]{1,14}(\.[0-9]{1,6})?$
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -19717,15 +20370,15 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
-        durationDays: *id030
-        monthlyTokenQuota: *id029
-        monthlyAmountLimit: *id031
-        status: *id024
+        durationDays: *id031
+        monthlyTokenQuota: *id030
+        monthlyAmountLimit: *id032
+        status: *id025
       required:
       - id
       - version
@@ -19744,12 +20397,12 @@ components:
         name: *id011
         code: *id011
         platform: *id012
-        parentId: &id032
+        parentId: &id033
           type:
           - string
           - 'null'
           format: uuid
-        path: &id033
+        path: &id034
           type: string
           description: ''
           pattern: ^/(?!/)[A-Za-z0-9/_-]*$
@@ -19759,7 +20412,7 @@ components:
           type: integer
           minimum: 0
           maximum: 2147483647
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -19774,17 +20427,17 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
         platform: *id012
-        parentId: *id032
-        path: *id033
+        parentId: *id033
+        path: *id034
         permissionCode: *id011
-        sortOrder: *id029
-        status: *id024
+        sortOrder: *id030
+        status: *id025
       required:
       - id
       - version
@@ -19820,7 +20473,7 @@ components:
           minimum: 1
           maximum: 2147483647
           description: 最大输出不得超过上下文。
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -19835,9 +20488,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
         provider: *id011
@@ -19856,7 +20509,7 @@ components:
           minimum: 1
           maximum: 2147483647
           description: 最大输出不得超过上下文。
-        status: *id024
+        status: *id025
       required:
       - id
       - version
@@ -19875,15 +20528,15 @@ components:
       additionalProperties: false
       properties:
         modelId: *id010
-        currency: &id034
+        currency: &id035
           type: string
           enum:
           - CNY
-        inputPerMillion: *id031
-        outputPerMillion: *id031
-        cachedInputPerMillion: *id031
-        effectiveFrom: *id023
-        status: *id024
+        inputPerMillion: *id032
+        outputPerMillion: *id032
+        cachedInputPerMillion: *id032
+        effectiveFrom: *id024
+        status: *id025
       required:
       - modelId
       - currency
@@ -19898,16 +20551,16 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         modelId: *id010
-        currency: *id034
-        inputPerMillion: *id031
-        outputPerMillion: *id031
-        cachedInputPerMillion: *id031
-        effectiveFrom: *id023
-        status: *id024
+        currency: *id035
+        inputPerMillion: *id032
+        outputPerMillion: *id032
+        cachedInputPerMillion: *id032
+        effectiveFrom: *id024
+        status: *id025
       required:
       - id
       - version
@@ -19926,7 +20579,7 @@ components:
       additionalProperties: false
       properties:
         name: *id011
-        provider: &id035
+        provider: &id036
           type: string
           enum:
           - ALIYUN_OSS
@@ -19946,11 +20599,11 @@ components:
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
           description: 运行配置凭证别名，不接受明文或文件路径；使用适配器前须配置解析。
-        access: &id036
+        access: &id037
           type: string
           enum:
           - PRIVATE
-        status: *id024
+        status: *id025
       required:
       - name
       - provider
@@ -19966,11 +20619,11 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
-        provider: *id035
+        provider: *id036
         bucket:
           type: string
           pattern: ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$
@@ -19986,8 +20639,8 @@ components:
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
           description: 运行配置凭证别名，不接受明文或文件路径；使用适配器前须配置解析。
-        access: *id036
-        status: *id024
+        access: *id037
+        status: *id025
       required:
       - id
       - version
@@ -20011,7 +20664,7 @@ components:
           type: string
           maxLength: 253
           pattern: ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$
-        platform: &id037
+        platform: &id038
           type: string
           enum:
           - student
@@ -20022,7 +20675,7 @@ components:
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
           description: 部署层证书别名，不包含私钥。
-        status: *id024
+        status: *id025
       required:
       - name
       - hostname
@@ -20035,20 +20688,20 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         hostname:
           type: string
           maxLength: 253
           pattern: ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$
-        platform: *id037
+        platform: *id038
         certificateRef:
           type: string
           pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$
           description: 部署层证书别名，不包含私钥。
-        status: *id024
+        status: *id025
       required:
       - id
       - version
@@ -20066,13 +20719,13 @@ components:
       properties:
         name: *id011
         code: *id011
-        parentId: &id038
+        parentId: &id039
           type:
           - string
           - 'null'
           format: uuid
-        sortOrder: *id029
-        status: *id024
+        sortOrder: *id030
+        status: *id025
       required:
       - name
       - code
@@ -20084,14 +20737,14 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
-        parentId: *id038
-        sortOrder: *id029
-        status: *id024
+        parentId: *id039
+        sortOrder: *id030
+        status: *id025
       required:
       - id
       - version
@@ -20108,7 +20761,7 @@ components:
       properties:
         name: *id011
         code: *id011
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -20118,12 +20771,12 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
-        status: *id024
+        status: *id025
       required:
       - id
       - version
@@ -20138,10 +20791,10 @@ components:
       properties:
         name: *id011
         code: *id011
-        requiresReview: &id039
+        requiresReview: &id040
           type: boolean
-        sortOrder: *id029
-        status: *id024
+        sortOrder: *id030
+        status: *id025
       required:
       - name
       - code
@@ -20153,14 +20806,14 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
-        requiresReview: *id039
-        sortOrder: *id029
-        status: *id024
+        requiresReview: *id040
+        sortOrder: *id030
+        status: *id025
       required:
       - id
       - version
@@ -20177,13 +20830,13 @@ components:
       properties:
         name: *id011
         code: *id011
-        channel: &id040
+        channel: &id041
           type: string
           enum:
           - SMS
           - IN_APP
         providerTemplateId: *id011
-        status: *id024
+        status: *id025
       required:
       - name
       - code
@@ -20195,14 +20848,14 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         code: *id011
-        channel: *id040
+        channel: *id041
         providerTemplateId: *id011
-        status: *id024
+        status: *id025
       required:
       - id
       - version
@@ -20218,13 +20871,13 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         displayName: *id011
         phoneMasked: *id011
         platform: *id012
-        status: *id024
+        status: *id025
         schoolId:
           type:
           - string
@@ -20271,7 +20924,7 @@ components:
           - string
           - 'null'
           description: 学生个人资料院校名，尚未设置时为null
-        activeOrderCount: *id029
+        activeOrderCount: *id030
       required:
       - id
       - displayName
@@ -20309,7 +20962,7 @@ components:
         roleIds:
           type: array
           items: *id010
-        status: *id024
+        status: *id025
         reason: *id011
       required:
       - displayName
@@ -20352,7 +21005,7 @@ components:
           - string
           - 'null'
           format: uuid
-        amount: *id031
+        amount: *id032
         currency:
           default: CNY
           type: string
@@ -20384,9 +21037,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         orderNo: *id011
         title: *id011
         studentId:
@@ -20399,7 +21052,7 @@ components:
           - string
           - 'null'
           format: uuid
-        amount: *id031
+        amount: *id032
         currency:
           type: string
           enum:
@@ -20500,7 +21153,7 @@ components:
           type: string
           description: ''
           maxLength: 200
-        requirements: &id043
+        requirements: &id044
           type: string
           description: ''
           maxLength: 20000
@@ -20594,7 +21247,7 @@ components:
         id: *id010
         title: *id011
         stage: *id011
-        progress: *id029
+        progress: *id030
         deliveryDate: *id013
         milestones:
           type: array
@@ -20613,11 +21266,11 @@ components:
       properties:
         name: *id011
         dueDate: *id013
-        weight: &id041
+        weight: &id042
           type: integer
           minimum: 1
           maximum: 100
-        completed: &id042
+        completed: &id043
           type: boolean
       required:
       - name
@@ -20630,13 +21283,13 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         dueDate: *id013
-        weight: *id041
-        completed: *id042
+        weight: *id042
+        completed: *id043
         projectId: *id010
       required:
       - id
@@ -20744,28 +21397,28 @@ components:
       properties:
         title: *id011
         categoryId: *id010
-        tagIds: &id044
+        tagIds: &id045
           type: array
           items: *id010
-        type: &id045
+        type: &id046
           type: string
           enum:
           - VIDEO
           - DOCUMENT
           - MARKDOWN
-        assetId: &id046
+        assetId: &id047
           type:
           - string
           - 'null'
           format: uuid
-        markdown: *id043
-        audience: &id047
+        markdown: *id044
+        audience: &id048
           type: string
           enum:
           - PUBLIC
           - MEMBER
           - PROJECT
-        projectId: &id048
+        projectId: &id049
           type:
           - string
           - 'null'
@@ -20787,17 +21440,17 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         title: *id011
         categoryId: *id010
-        tagIds: *id044
-        type: *id045
-        assetId: *id046
-        markdown: *id043
-        audience: *id047
-        projectId: *id048
+        tagIds: *id045
+        type: *id046
+        assetId: *id047
+        markdown: *id044
+        audience: *id048
+        projectId: *id049
         state:
           type: string
           enum:
@@ -20847,7 +21500,7 @@ components:
           - DELIVERY
         versionId: *id010
         chunkId: *id010
-        page: *id029
+        page: *id030
         quote:
           type: string
           description: ''
@@ -20900,9 +21553,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         projectId:
           type:
           - string
@@ -20944,7 +21597,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Citation'
-        createdAt: *id023
+        createdAt: *id024
       required:
       - id
       - conversationId
@@ -20990,9 +21643,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         conversationId: *id010
         state:
           type: string
@@ -21011,7 +21664,7 @@ components:
           - RELEASED
           - RECONCILING
         modelId: *id010
-        lastSequence: *id029
+        lastSequence: *id030
         errorCode:
           type:
           - string
@@ -21041,19 +21694,19 @@ components:
         id: *id010
         runId: *id010
         inputTokens:
-          type: &id049
-          - integer
-          - 'null'
-          minimum: 0
-          description: 未确认实际用量时为null，不以0推断无消耗
-        outputTokens:
           type: &id050
           - integer
           - 'null'
           minimum: 0
           description: 未确认实际用量时为null，不以0推断无消耗
-        cachedTokens:
+        outputTokens:
           type: &id051
+          - integer
+          - 'null'
+          minimum: 0
+          description: 未确认实际用量时为null，不以0推断无消耗
+        cachedTokens:
+          type: &id052
           - integer
           - 'null'
           minimum: 0
@@ -21086,17 +21739,17 @@ components:
           - SETTLED
           - RELEASED
           - RECONCILING
-        createdAt: *id023
+        createdAt: *id024
         effectiveInputTokens:
-          type: *id049
-          minimum: 0
-          description: 更正后有效词元，未知仍null，原始值保持不变
-        effectiveOutputTokens:
           type: *id050
           minimum: 0
           description: 更正后有效词元，未知仍null，原始值保持不变
-        effectiveCachedTokens:
+        effectiveOutputTokens:
           type: *id051
+          minimum: 0
+          description: 更正后有效词元，未知仍null，原始值保持不变
+        effectiveCachedTokens:
+          type: *id052
           minimum: 0
           description: 更正后有效词元，未知仍null，原始值保持不变
         correctionAmount:
@@ -21124,15 +21777,15 @@ components:
       type: object
       additionalProperties: false
       properties:
-        availableTokens: *id029
-        reservedTokens: *id029
-        availableAmount: *id031
-        reservedAmount: *id031
+        availableTokens: *id030
+        reservedTokens: *id030
+        availableAmount: *id032
+        reservedAmount: *id032
         currency:
           type: string
           enum:
           - CNY
-        periodEnd: *id023
+        periodEnd: *id024
       required:
       - availableTokens
       - reservedTokens
@@ -21145,7 +21798,7 @@ components:
       additionalProperties: false
       properties:
         boardId: *id010
-        title: &id052
+        title: &id053
           type: string
           description: ''
           minLength: 1
@@ -21155,12 +21808,12 @@ components:
           minLength: 1
           maxLength: 20000
           description: 纯文本或Markdown，前端必须安全渲染。
-        tagIds: &id053
+        tagIds: &id054
           type: array
           maxItems: 20
           uniqueItems: true
           items: *id010
-        assetIds: &id054
+        assetIds: &id055
           type: array
           maxItems: 20
           uniqueItems: true
@@ -21187,14 +21840,14 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         boardId: *id010
-        title: *id052
-        body: *id043
-        tagIds: *id053
-        assetIds: *id054
+        title: *id053
+        body: *id044
+        tagIds: *id054
+        assetIds: *id055
         authorId: *id010
         state:
           type: string
@@ -21223,12 +21876,12 @@ components:
       type: object
       additionalProperties: false
       properties:
-        body: &id055
+        body: &id056
           type: string
           description: ''
           minLength: 1
           maxLength: 5000
-        parentId: &id056
+        parentId: &id057
           type:
           - string
           - 'null'
@@ -21242,11 +21895,11 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
-        body: *id055
-        parentId: *id056
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
+        body: *id056
+        parentId: *id057
         postId: *id010
         authorId: *id010
         state:
@@ -21269,9 +21922,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         postId: *id010
         reporterId: *id010
         reason: *id011
@@ -21295,14 +21948,14 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         name: *id011
         modelId: *id010
         maskedSuffix: *id011
-        status: *id024
-        rotatedAt: *id023
+        status: *id025
+        rotatedAt: *id024
       required:
       - id
       - version
@@ -21351,11 +22004,11 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         filename: *id011
-        size: *id029
+        size: *id030
         sha256:
           type: string
           description: ''
@@ -21439,8 +22092,8 @@ components:
           additionalProperties:
             type: string
         objectKey: *id011
-        expiresAt: *id023
-        maxSize: *id029
+        expiresAt: *id024
+        maxSize: *id030
       required:
       - uploadId
       - assetId
@@ -21458,7 +22111,7 @@ components:
           type: string
           description: ''
           format: uri
-        expiresAt: *id023
+        expiresAt: *id024
       required:
       - url
       - expiresAt
@@ -21467,9 +22120,9 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         kind: *id011
         state:
           type: string
@@ -21479,7 +22132,7 @@ components:
           - SUCCEEDED
           - FAILED
           - DEAD
-        progress: *id029
+        progress: *id030
         resultAssetId:
           type:
           - string
@@ -21517,7 +22170,7 @@ components:
           - string
           - 'null'
           description: 不存在时为null，不伪造历史记录
-        createdAt: *id023
+        createdAt: *id024
         resourceType:
           type: string
           description: 资源类型，不返回通用detail原文
@@ -21536,8 +22189,8 @@ components:
       properties:
         from: *id013
         to: *id013
-        generatedAt: *id023
-        lagSeconds: *id029
+        generatedAt: *id024
+        lagSeconds: *id030
         items:
           type: array
           items:
@@ -21585,7 +22238,7 @@ components:
         body: *id011
         read:
           type: boolean
-        createdAt: *id023
+        createdAt: *id024
         projectId:
           type:
           - string
@@ -21624,13 +22277,13 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         userId: *id010
         planId: *id010
-        startsAt: *id023
-        expiresAt: *id023
+        startsAt: *id024
+        expiresAt: *id024
         state:
           type: string
           enum:
@@ -21695,11 +22348,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: &id057
+        phone: &id058
           type: string
           description: ''
           pattern: ^1\d{10}$
-        password: &id058
+        password: &id059
           type: string
           description: ''
           minLength: 10
@@ -21707,7 +22360,7 @@ components:
           writeOnly: true
         displayName: *id011
         challengeId: *id010
-        code: &id059
+        code: &id060
           type: string
           description: ''
           pattern: ^\d{6}$
@@ -21723,11 +22376,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        phone: *id057
-        password: *id058
+        phone: *id058
+        password: *id059
         displayName: *id011
         challengeId: *id010
-        code: *id059
+        code: *id060
         termsVersion: *id011
         invitationToken:
           type: string
@@ -21763,7 +22416,7 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        expiresAt: *id023
+        expiresAt: *id024
         activationUrl:
           type: string
           description: ''
@@ -21805,8 +22458,8 @@ components:
       additionalProperties: false
       properties:
         challengeId: *id010
-        expiresAt: *id023
-        retryAfterSeconds: *id029
+        expiresAt: *id024
+        retryAfterSeconds: *id030
       required:
       - challengeId
       - expiresAt
@@ -21861,7 +22514,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        status: *id024
+        status: *id025
       required:
       - status
     StageChange:
@@ -21869,7 +22522,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        stage: *id060
+        stage: *id061
         reason:
           type: string
           maxLength: 200
@@ -21992,7 +22645,7 @@ components:
           enum:
           - DEBIT
           - CREDIT
-        amount: *id031
+        amount: *id032
         currency:
           type: string
           enum:
@@ -22006,7 +22659,7 @@ components:
           minLength: 1
           maxLength: 1000
         createdBy: *id010
-        createdAt: *id023
+        createdAt: *id024
       required:
       - id
       - runId
@@ -22027,7 +22680,7 @@ components:
           enum:
           - DEBIT
           - CREDIT
-        amount: *id031
+        amount: *id032
         reason:
           type: string
           minLength: 1
@@ -22113,7 +22766,7 @@ components:
       additionalProperties: false
       properties:
         runId: *id010
-        sequence: *id029
+        sequence: *id030
         type:
           type: string
           enum:
@@ -22223,9 +22876,9 @@ components:
       type: object
       additionalProperties: false
       properties:
-        inputTokens: *id029
-        outputTokens: *id029
-        amount: *id031
+        inputTokens: *id030
+        outputTokens: *id030
+        amount: *id032
         billingState: *id011
       required:
       - inputTokens
@@ -22258,9 +22911,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/School'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22274,9 +22927,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Major'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22290,9 +22943,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Role'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22306,9 +22959,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MembershipPlan'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22322,9 +22975,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Menu'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22338,9 +22991,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Model'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22354,9 +23007,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModelPrice'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22370,9 +23023,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Storage'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22386,9 +23039,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Domain'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22402,9 +23055,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22418,9 +23071,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tag'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22434,9 +23087,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ForumBoard'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22450,9 +23103,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NotificationTemplate'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22466,9 +23119,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/User'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22482,9 +23135,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Membership'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22495,7 +23148,7 @@ components:
       additionalProperties: false
       properties:
         planId: *id010
-        startsAt: *id023
+        startsAt: *id024
         reason: *id011
       required:
       - planId
@@ -22509,9 +23162,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SecretMetadata'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22525,9 +23178,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Order'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22541,9 +23194,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StudentSummary'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22557,9 +23210,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22573,9 +23226,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryVersion'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22589,9 +23242,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Milestone'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22605,9 +23258,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectProgress'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22621,9 +23274,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Content'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22637,9 +23290,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SearchHit'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22653,9 +23306,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Conversation'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22669,9 +23322,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Message'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22685,9 +23338,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UsageEntry'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22701,9 +23354,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Post'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22717,9 +23370,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Comment'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22733,9 +23386,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Report'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22749,9 +23402,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Notification'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22765,9 +23418,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Job'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22781,9 +23434,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Audit'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22795,7 +23448,7 @@ components:
       properties:
         id: *id010
         name: *id011
-        maxOutputTokens: *id029
+        maxOutputTokens: *id030
       required:
       - id
       - name
@@ -22808,9 +23461,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AvailableModel'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22835,9 +23488,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Permission'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22886,7 +23539,7 @@ components:
           type: string
           description: ''
           format: uri
-        expiresAt: *id023
+        expiresAt: *id024
       required:
       - enrollmentId
       - otpAuthUri
@@ -22909,13 +23562,13 @@ components:
       type: object
       additionalProperties: false
       properties:
-        durationDays: &id061
+        durationDays: &id062
           type: integer
           minimum: 1
           maximum: 36500
-        monthlyTokenQuota: *id029
-        monthlyAmountLimit: *id031
-        effectiveFrom: *id023
+        monthlyTokenQuota: *id030
+        monthlyAmountLimit: *id032
+        effectiveFrom: *id024
       required:
       - durationDays
       - monthlyTokenQuota
@@ -22926,13 +23579,13 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
-        durationDays: *id061
-        monthlyTokenQuota: *id029
-        monthlyAmountLimit: *id031
-        effectiveFrom: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
+        durationDays: *id062
+        monthlyTokenQuota: *id030
+        monthlyAmountLimit: *id032
+        effectiveFrom: *id024
         planId: *id010
       required:
       - id
@@ -22952,9 +23605,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MembershipPlanVersion'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -22965,17 +23618,17 @@ components:
       additionalProperties: false
       properties:
         id: *id010
-        version: *id025
-        createdAt: *id023
-        updatedAt: *id023
+        version: *id026
+        createdAt: *id024
+        updatedAt: *id024
         contentId: *id010
-        versionNumber: *id029
+        versionNumber: *id030
         assetId:
           type:
           - string
           - 'null'
           format: uuid
-        markdown: *id043
+        markdown: *id044
         state:
           type: string
           enum:
@@ -22999,9 +23652,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KnowledgeVersion'
-        page: *id029
-        size: *id029
-        total: *id029
+        page: *id030
+        size: *id030
+        total: *id030
       required:
       - items
       - page
@@ -23303,12 +23956,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Asset'
-        page: &id062
+        page: &id063
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id062
-        total: *id062
+        size: *id063
+        total: *id063
       required:
       - items
       - page
@@ -23328,7 +23981,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: &id063
+        id: &id064
           type: string
           format: uuid
         title:
@@ -23404,7 +24057,7 @@ components:
           type: array
           maxItems: 200
           uniqueItems: true
-          items: *id063
+          items: *id064
           description: ALL必须为空；SELECTED必须包含1至200个启用用户
       required:
       - title
@@ -23416,7 +24069,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id: *id063
+        id: *id064
         displayName:
           type: string
         platform:
@@ -23440,12 +24093,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Announcement'
-        page: &id064
+        page: &id065
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id064
-        total: *id064
+        size: *id065
+        total: *id065
       required:
       - items
       - page
@@ -23459,12 +24112,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnnouncementRecipient'
-        page: &id065
+        page: &id066
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id065
-        total: *id065
+        size: *id066
+        total: *id066
       required:
       - items
       - page
@@ -23496,12 +24149,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryRelease'
-        page: &id066
+        page: &id067
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id066
-        total: *id066
+        size: *id067
+        total: *id067
       required:
       - items
       - page
@@ -23523,25 +24176,25 @@ components:
       - replyCount
       - heat
       properties:
-        id: &id067
+        id: &id068
           type: string
           format: uuid
-        boardId: *id067
-        authorId: *id067
-        title: &id068
+        boardId: *id068
+        authorId: *id068
+        title: &id069
           type: string
-        body: *id068
-        boardName: *id068
-        authorName: *id068
-        state: *id068
+        body: *id069
+        boardName: *id069
+        authorName: *id069
+        state: *id069
         createdAt:
           type: string
           format: date-time
-        avatarIndex: &id069
+        avatarIndex: &id070
           type: integer
           format: int64
-        replyCount: *id069
-        heat: *id069
+        replyCount: *id070
+        heat: *id070
     ForumFeedPage:
       type: object
       additionalProperties: false
@@ -23550,12 +24203,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ForumFeed'
-        page: &id070
+        page: &id071
           type: integer
           minimum: 0
           maximum: 9223372036854775807
-        size: *id070
-        total: *id070
+        size: *id071
+        total: *id071
       required:
       - items
       - page
@@ -23569,18 +24222,18 @@ components:
       - avatarIndex
       - contributions
       properties:
-        id: *id067
-        displayName: *id068
-        avatarIndex: *id069
-        contributions: *id069
+        id: *id068
+        displayName: *id069
+        avatarIndex: *id070
+        contributions: *id070
     ForumKeyword:
       type: object
       required:
       - name
       - count
       properties:
-        name: *id068
-        count: *id069
+        name: *id069
+        count: *id070
     ForumCommunity:
       type: object
       required:
@@ -23666,3 +24319,109 @@ components:
           type: string
         priceCheckedAt:
           type: string
+    Banner:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 资源标识
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        updatedAt:
+          type: string
+          description: UTC 时间
+          format: date-time
+        status:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+        title:
+          type: string
+          maxLength: 80
+          minLength: 1
+        subtitle:
+          type: string
+          maxLength: 160
+        coverAssetId:
+          type: string
+          format: uuid
+        posterAssetId:
+          type: string
+          format: uuid
+        body:
+          type: string
+          maxLength: 20000
+        sortOrder:
+          type: integer
+          minimum: 0
+          maximum: 9999
+      required:
+      - title
+      - sortOrder
+      - status
+    BannerWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+        title:
+          type: string
+          maxLength: 80
+          minLength: 1
+        subtitle:
+          type: string
+          maxLength: 160
+        coverAssetId:
+          type: string
+          format: uuid
+        posterAssetId:
+          type: string
+          format: uuid
+        body:
+          type: string
+          maxLength: 20000
+        sortOrder:
+          type: integer
+          minimum: 0
+          maximum: 9999
+      required:
+      - title
+      - sortOrder
+      - status
+    BannerPage:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Banner'
+          type: array
+        page:
+          maximum: 9223372036854775807
+          minimum: 0
+          type: integer
+        size:
+          maximum: 9223372036854775807
+          minimum: 0
+          type: integer
+        total:
+          maximum: 9223372036854775807
+          minimum: 0
+          type: integer
+      required:
+      - items
+      - page
+      - size
+      - total
+      type: object

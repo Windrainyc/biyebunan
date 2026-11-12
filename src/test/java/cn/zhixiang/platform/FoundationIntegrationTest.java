@@ -10634,6 +10634,143 @@ class FoundationIntegrationTest {
     }
 
     @Test
+    void homepageBannerLifecycleAndVisibility() throws Exception {
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')", adminId);
+        UUID student = UUID.randomUUID();
+        String token = UUID.randomUUID().toString();
+        seed(student, "student", token);
+        db.update(
+                "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000002')", student);
+        UUID image = UUID.randomUUID(), category = UUID.randomUUID(), store = UUID.randomUUID();
+        db.update(
+                "INSERT INTO material_category(id,name,code,status,created_by,updated_by)"
+                        + " VALUES(?,'横幅素材',?,'ENABLED',?,?)",
+                category,
+                category.toString(),
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " storage_config(id,name,provider,bucket,region,endpoint,credential_ref,access,status,created_by,updated_by)"
+                    + " VALUES(?,'横幅隔离','S3_COMPATIBLE','banner-test','cn-test','http://127.0.0.1:19000','local-minio','PRIVATE','ENABLED',?,?)",
+                store,
+                adminId,
+                adminId);
+        db.update(
+                "INSERT INTO"
+                    + " asset(id,upload_id,owner_type,material_category_id,storage_id,filename,size,sha256,mime_type,upload_key,private_key,state,upload_expires_at,created_by,updated_by)"
+                    + " VALUES(?,?,'MATERIAL',?,?,'banner.png',10,?,'image/png',?,'banner-private','READY',now(),?,?)",
+                image,
+                UUID.randomUUID(),
+                category,
+                store,
+                "0".repeat(64),
+                "banner-test/" + image,
+                adminId,
+                adminId);
+        String body =
+                "{\"title\":\"首页横幅专项\",\"subtitle\":\"活动说明\",\"body\":\"##"
+                        + " 活动细节\",\"sortOrder\":2,\"status\":\"DISABLED\"}";
+        mvc.perform(
+                        post("/api/v1/admin/banners")
+                                .header("Authorization", "Bearer " + token)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isForbidden());
+        body =
+                body.replace(
+                        "\"sortOrder\":2", "\"coverAssetId\":\"" + image + "\",\"sortOrder\":2");
+        String key = UUID.randomUUID().toString();
+        var created =
+                mvc.perform(
+                                post("/api/v1/admin/banners")
+                                        .header("Authorization", "Bearer " + adminToken)
+                                        .header("Idempotency-Key", key)
+                                        .contentType("application/json")
+                                        .content(body))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse();
+        String id = json.readTree(created.getContentAsString()).get("id").asText();
+        mvc.perform(
+                        post("/api/v1/admin/banners")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", key)
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id));
+        mvc.perform(get("/api/v1/student/banners").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(
+                        get("/api/v1/admin/banners?q=首页横幅专项&size=1")
+                                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(
+                        get("/api/v1/student/assets/" + image)
+                                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        delete("/api/v1/admin/assets/" + image)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\""))
+                .andExpect(status().isConflict());
+        mvc.perform(
+                        post("/api/v1/admin/banners/" + id + "/status")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content("{\"status\":\"ENABLED\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/v1/student/banners").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].body").value("## 活动细节"));
+        mvc.perform(
+                        get("/api/v1/student/assets/" + image)
+                                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+        mvc.perform(
+                        put("/api/v1/admin/banners/" + id)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"1\"")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(status().isPreconditionFailed());
+        mvc.perform(
+                        post("/api/v1/admin/banners")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(body.replace("## 活动细节", "")))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(
+                        post("/api/v1/admin/banners")
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .contentType("application/json")
+                                .content(
+                                        body.replace(
+                                                image.toString(), UUID.randomUUID().toString())))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(
+                        delete("/api/v1/admin/banners/" + id)
+                                .header("Authorization", "Bearer " + adminToken)
+                                .header("Idempotency-Key", UUID.randomUUID())
+                                .header("If-Match", "\"2\""))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/student/banners").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
     void communityDraftPublicationAndAdminProfile() throws Exception {
         db.update(
                 "INSERT INTO user_role VALUES(?,'00000000-0000-4000-8000-000000000001')", adminId);

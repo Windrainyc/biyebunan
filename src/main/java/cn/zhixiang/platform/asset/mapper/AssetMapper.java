@@ -153,14 +153,16 @@ public interface AssetMapper {
      * @return 是否被引用
      */
     @Select(
-            "SELECT EXISTS(SELECT 1 FROM user_account WHERE avatar_asset_id=#{id}) OR EXISTS(SELECT"
-                + " 1 FROM service_package WHERE cover_asset_id=#{id}) OR EXISTS(SELECT 1 FROM"
-                + " project_requirement_asset WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM"
-                + " forum_post_asset WHERE asset_id=#{id}) OR EXISTS(SELECT 1 FROM order_receipt"
-                + " WHERE proof_asset_id=#{id}) OR EXISTS(SELECT 1 FROM project_delivery WHERE"
-                + " asset_id=#{id}) OR EXISTS(SELECT 1 FROM knowledge_content WHERE asset_id=#{id}"
-                + " OR cover_asset_id=#{id}) OR EXISTS(SELECT 1 FROM knowledge_version WHERE"
-                + " asset_id=#{id} OR cover_asset_id=#{id})")
+            "SELECT EXISTS(SELECT 1 FROM homepage_banner WHERE cover_asset_id=#{id} OR"
+                + " poster_asset_id=#{id}) OR EXISTS(SELECT 1 FROM user_account WHERE"
+                + " avatar_asset_id=#{id}) OR EXISTS(SELECT 1 FROM service_package WHERE"
+                + " cover_asset_id=#{id}) OR EXISTS(SELECT 1 FROM project_requirement_asset WHERE"
+                + " asset_id=#{id}) OR EXISTS(SELECT 1 FROM forum_post_asset WHERE asset_id=#{id})"
+                + " OR EXISTS(SELECT 1 FROM order_receipt WHERE proof_asset_id=#{id}) OR"
+                + " EXISTS(SELECT 1 FROM project_delivery WHERE asset_id=#{id}) OR EXISTS(SELECT 1"
+                + " FROM knowledge_content WHERE asset_id=#{id} OR cover_asset_id=#{id}) OR"
+                + " EXISTS(SELECT 1 FROM knowledge_version WHERE asset_id=#{id} OR"
+                + " cover_asset_id=#{id})")
     boolean referenced(UUID id);
 
     /**
@@ -171,16 +173,18 @@ public interface AssetMapper {
      * @return 是否允许下载
      */
     @Select(
-            "SELECT EXISTS(SELECT 1 FROM project_requirement_asset r JOIN software_project rp ON"
-                    + " rp.id=r.project_id JOIN software_order ro ON ro.id=rp.order_id WHERE"
-                    + " r.asset_id=#{id} AND ro.student_id=#{student} AND ro.status IN"
-                    + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1 FROM"
-                    + " project_delivery d JOIN software_project p ON p.id=d.project_id JOIN"
-                    + " software_order o ON o.id=p.order_id WHERE d.asset_id=#{id} AND"
-                    + " d.state='PUBLISHED' AND o.student_id=#{student} AND o.status IN"
-                    + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1 FROM"
-                    + " knowledge_content c WHERE (c.asset_id=#{id} OR c.cover_asset_id=#{id}) AND"
-                    + " c.state='PUBLISHED' AND c.deleted_at IS NULL AND "
+            "SELECT EXISTS(SELECT 1 FROM homepage_banner WHERE status='ENABLED' AND"
+                + " (cover_asset_id=#{id} OR poster_asset_id=#{id})) OR EXISTS(SELECT 1 FROM"
+                + " project_requirement_asset r JOIN software_project rp ON rp.id=r.project_id JOIN"
+                + " software_order ro ON ro.id=rp.order_id WHERE r.asset_id=#{id} AND"
+                + " ro.student_id=#{student} AND ro.status IN"
+                + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1 FROM"
+                + " project_delivery d JOIN software_project p ON p.id=d.project_id JOIN"
+                + " software_order o ON o.id=p.order_id WHERE d.asset_id=#{id} AND"
+                + " d.state='PUBLISHED' AND o.student_id=#{student} AND o.status IN"
+                + " ('CONFIRMED','ACTIVE','COMPLETED','ARCHIVED')) OR EXISTS(SELECT 1 FROM"
+                + " knowledge_content c WHERE (c.asset_id=#{id} OR c.cover_asset_id=#{id}) AND"
+                + " c.state='PUBLISHED' AND c.deleted_at IS NULL AND "
                     + cn.zhixiang.platform.knowledge.mapper.ContentMapper.ACCESS
                     + ")")
     boolean studentVisible(UUID id, UUID student);
