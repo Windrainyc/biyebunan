@@ -132,7 +132,7 @@ public class AdminAssetController {
     /**
      * 下载签名是短时授权，不允许缓存。
      *
-     * @param variant ORIGINAL原件，PLAYBACK独立转码副本
+     * @param variant ORIGINAL原件，PLAYBACK独立转码副本，COVER_240/800/1600封面
      * @param id 资产
      * @param actor 身份
      * @return 下载授权
@@ -143,7 +143,8 @@ public class AdminAssetController {
             @PathVariable UUID id,
             @RequestParam(defaultValue = "ORIGINAL") String variant,
             @AuthenticationPrincipal Actor actor) {
-        if (!java.util.Set.of("ORIGINAL", "PLAYBACK").contains(variant))
+        if (!java.util.Set.of("ORIGINAL", "PLAYBACK", "COVER_240", "COVER_800", "COVER_1600")
+                .contains(variant))
             throw new cn.zhixiang.platform.shared.exception.BusinessException(
                     400, "INVALID_FILTER", "文件版本类型非法");
         return ResponseEntity.ok()
@@ -151,7 +152,10 @@ public class AdminAssetController {
                 .body(
                         variant.equals("PLAYBACK")
                                 ? videos.playback(id, actor)
-                                : service.download(id, actor));
+                                : variant.startsWith("COVER_")
+                                        ? service.thumbnail(
+                                                id, actor, Integer.parseInt(variant.substring(6)))
+                                        : service.download(id, actor));
     }
 
     /**

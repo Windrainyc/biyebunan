@@ -189,7 +189,7 @@ class FoundationIntegrationTest {
     void knowledgeDirectPublishAndAtomicUpdate() throws Exception {
         db.update(
                 "INSERT INTO role_permission(role_id,permission_code) SELECT role_id,code FROM"
-                    + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
+                        + " user_role CROSS JOIN permission WHERE user_id=? ON CONFLICT DO NOTHING",
                 adminId);
         UUID category = UUID.randomUUID();
         db.update(
@@ -316,7 +316,7 @@ class FoundationIntegrationTest {
                 .andExpect(jsonPath("$.state").value("PUBLISHED"));
         db.update(
                 "DELETE FROM role_permission WHERE role_id IN(SELECT role_id FROM user_role WHERE"
-                    + " user_id=?) AND permission_code='post_admin_knowledge_id_publish'",
+                        + " user_id=?) AND permission_code='post_admin_knowledge_id_publish'",
                 adminId);
         mvc.perform(
                         post("/api/v1/admin/knowledge")

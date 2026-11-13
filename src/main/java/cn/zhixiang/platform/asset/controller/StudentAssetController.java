@@ -55,7 +55,7 @@ public class StudentAssetController {
      * 每次重新授权签发一分钟下载。
      *
      * @param request 请求来源
-     * @param variant ORIGINAL原件，PLAYBACK独立转码副本
+     * @param variant ORIGINAL原件，PLAYBACK独立转码副本，COVER_240/800/1600封面
      * @param id 资产
      * @param actor 学生
      * @return 下载授权
@@ -67,13 +67,17 @@ public class StudentAssetController {
             @RequestParam(defaultValue = "ORIGINAL") String variant,
             jakarta.servlet.http.HttpServletRequest request,
             @AuthenticationPrincipal Actor actor) {
-        if (!java.util.Set.of("ORIGINAL", "PLAYBACK").contains(variant))
+        if (!java.util.Set.of("ORIGINAL", "PLAYBACK", "COVER_240", "COVER_800", "COVER_1600")
+                .contains(variant))
             throw new cn.zhixiang.platform.shared.exception.BusinessException(
                     400, "INVALID_FILTER", "文件版本类型非法");
         var grant =
                 variant.equals("PLAYBACK")
                         ? videos.playback(id, actor)
-                        : service.download(id, actor);
+                        : variant.startsWith("COVER_")
+                                ? service.thumbnail(
+                                        id, actor, Integer.parseInt(variant.substring(6)))
+                                : service.download(id, actor);
         guard.acquire(actor.id(), request.getRemoteAddr());
         return ResponseEntity.ok()
                 .cacheControl(org.springframework.http.CacheControl.noStore())

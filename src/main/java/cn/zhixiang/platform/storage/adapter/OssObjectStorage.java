@@ -267,6 +267,28 @@ public class OssObjectStorage implements ObjectStorage {
 
     /** {@inheritDoc} */
     @Override
+    public Grant thumbnail(Target t, String k, String version, int width) {
+        key(k);
+        if (!Set.of(240, 800, 1600).contains(width) || !k.contains("/verified/") || version == null)
+            throw new BusinessException(422, "THUMBNAIL_UNSUPPORTED", "该文件不支持缩略图");
+        return call(
+                t,
+                c -> {
+                    // OSS图片处理忽略versionId；仅允许服务端唯一且不再覆盖的验证键，并核对当前版本。
+                    var latest = c.getObjectMetadata(t.bucket(), k);
+                    if (!version.equals(latest.getVersionId()))
+                        throw new BusinessException(409, "ASSET_VERSION_CHANGED", "源文件版本已变化");
+                    var r = new GeneratePresignedUrlRequest(t.bucket(), k, HttpMethod.GET);
+                    var until = OffsetDateTime.now().plusSeconds(60);
+                    r.setExpiration(Date.from(until.toInstant()));
+                    r.setProcess(
+                            "image/resize,m_lfit,w_" + width + ",limit_1/format,webp/quality,q_80");
+                    return new Grant(c.generatePresignedUrl(r).toString(), Map.of(), until);
+                });
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public void remove(Target t, String k, String version) {
         key(k);
         call(

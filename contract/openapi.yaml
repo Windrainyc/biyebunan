@@ -9859,12 +9859,15 @@ paths:
       - name: variant
         in: query
         required: false
-        description: ORIGINAL为不可变原件；PLAYBACK为已扫描视频的独立转码副本，未就绪503。
+        description: ORIGINAL为不可变原件；PLAYBACK为独立转码副本；COVER_240、COVER_800、COVER_1600为私有WebP封面缩略图。
         schema:
           type: string
           enum:
           - ORIGINAL
           - PLAYBACK
+          - COVER_240
+          - COVER_800
+          - COVER_1600
           default: ORIGINAL
       - name: id
         in: path
@@ -10066,12 +10069,15 @@ paths:
       - name: variant
         in: query
         required: false
-        description: ORIGINAL为不可变原件；PLAYBACK为已扫描视频的独立转码副本，未就绪503。
+        description: ORIGINAL为不可变原件；PLAYBACK为独立转码副本；COVER_240、COVER_800、COVER_1600为私有WebP封面缩略图。
         schema:
           type: string
           enum:
           - ORIGINAL
           - PLAYBACK
+          - COVER_240
+          - COVER_800
+          - COVER_1600
           default: ORIGINAL
       - name: id
         in: path

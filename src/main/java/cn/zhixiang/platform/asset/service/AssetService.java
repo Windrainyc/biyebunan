@@ -190,6 +190,28 @@ public class AssetService {
     }
 
     /**
+     * 按现有可见性和就绪状态签发封面缩略图；拒绝脚本及非图片媒体。
+     *
+     * @param id 资产标识
+     * @param actor 当前身份
+     * @param width 固定缩略图宽度
+     * @return 私有图片授权
+     */
+    public AssetDtos.Download thumbnail(UUID id, Actor actor, int width) {
+        var r = visible(id, actor);
+        if (!"READY".equals(r.state()))
+            throw new BusinessException(422, "ASSET_NOT_READY", "文件尚未就绪");
+        if (!java.util.Set.of("image/jpeg", "image/png", "image/webp", "image/gif")
+                .contains(r.mimeType()))
+            throw new BusinessException(422, "THUMBNAIL_UNSUPPORTED", "该图片格式不支持缩略图");
+        var store = stores.get(r.storageId());
+        if (store == null || store.status() != StorageDtos.Status.ENABLED)
+            throw new BusinessException(503, "STORAGE_UNAVAILABLE", "存储已停用");
+        var grant = storage.thumbnail(target(store), r.privateKey(), r.objectVersion(), width);
+        return new AssetDtos.Download(grant.url(), grant.expiresAt());
+    }
+
+    /**
      * 删除未引用资产的业务可见性，保留对象待保留期清理。
      *
      * @param id ID

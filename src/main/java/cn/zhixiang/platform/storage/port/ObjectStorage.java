@@ -130,6 +130,20 @@ public interface ObjectStorage {
     Grant download(Target target, String key, String versionId);
 
     /**
+     * 对不可变已验证图片签发固定规格的私有缩略图。
+     *
+     * @param target 存储配置
+     * @param key 已验证且不再覆盖的对象键
+     * @param versionId 数据库登记的源版本
+     * @param width 固定宽度，仅240、800或1600像素
+     * @return 一分钟有效的WebP图片授权
+     */
+    default Grant thumbnail(Target target, String key, String versionId, int width) {
+        throw new cn.zhixiang.platform.shared.exception.BusinessException(
+                422, "THUMBNAIL_UNSUPPORTED", "当前存储不支持缩略图");
+    }
+
+    /**
      * 删除业务已批准清理的指定对象或版本。
      *
      * @param target 配置
